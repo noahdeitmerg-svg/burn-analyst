@@ -38,13 +38,16 @@ textarea.inp{min-height:50px;resize:vertical}
 .big{font-size:26px;font-weight:700;color:var(--br);font-family:inherit}
 .hid{display:none}
 .nt{padding:8px;border-radius:6px;font-size:9px;line-height:1.5;color:var(--mt);margin-top:8px}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+.ld{display:flex;align-items:center;gap:6px;padding:16px;color:var(--dm);font-size:10px}
+.ld::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--b);animation:pulse 1.2s infinite}
 </style>
 </head>
 <body>
 <div class="w">
 <div class="hdr"><h1><em>◆</em> BURN Terminal</h1><div style="display:flex;align-items:center;gap:10px"><span id="sts" style="font-size:9px;color:var(--mt)"></span><button class="btn" id="rbtn" onclick="go(true)">⟳</button></div></div>
 <div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span> <span style="font-size:10px;color:var(--mt)">Use ✎ Manual input</span></div>
-<div class="c hid" id="lbox" style="text-align:center;padding:40px">◆ Loading...</div>
+<div class="c hid" id="lbox" style="text-align:center;padding:40px"><div class="ld" style="justify-content:center">Connecting to DexScreener + Arbitrum RPC</div></div>
 <div class="c c0"><div class="tabs"><button class="tab on" data-t="auto" onclick="tab('auto')">⟳ Auto</button><button class="tab" data-t="manual" onclick="tab('manual')">✎ Manual</button></div>
 <div style="padding:10px">
 <div id="t-auto"><span style="font-size:10px" id="astat">Connecting...</span></div>
@@ -66,7 +69,7 @@ textarea.inp{min-height:50px;resize:vertical}
 <div class="c"><div class="lb">Sell Impact</div><div class="ov"><table><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div></div>
 <div class="c"><div class="lb">Supply Dynamics</div><div class="mg" id="dynGrid"></div></div>
 <div class="c"><div class="lb">Liquidity Walls</div><div class="ov"><table><thead><tr><th>Price Level</th><th>BURN Liquidity</th><th>USDC to Pass</th><th>Type</th></tr></thead><tbody id="wallB"></tbody></table></div></div>
-<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">Open full ↗</a></div><iframe id="chartFrame" src="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60" style="width:100%;height:350px;border:none;border-radius:8px" loading="lazy" allow="clipboard-write"></iframe></div>
+<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div id="chartWrap" style="position:relative;min-height:350px"><div class="ld" id="chartLd" style="position:absolute;inset:0;display:flex;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
 <div class="c"><div class="lb">Pool State</div><div class="mg" id="poolG"></div></div>
 <div class="c"><div class="lb">Whale Activity <button class="btn" style="margin-left:8px;font-size:8px" onclick="reqNotif()">🔔 Enable Alerts</button></div><div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div></div>
 </div>
@@ -274,7 +277,7 @@ function render(){
     $("supplyGrid").innerHTML=[MB("Total Supply",F(sup.total,0),"var(--br)"),MB("Burned",F(sup.burned,0)+" ("+bP.toFixed(1)+")","var(--r)"),
       MB("Locked",F(sup.locked,0),"var(--dm)"),MB("Circulating",F(sup.circ,0),"var(--o)"),
       MB("stBURN Supply",F(sup.stSup,0),"var(--p)"),MB("Circ MCap","$"+F(sup.circ*P,0),"var(--g)")].join("");
-  }else{$("supplyGrid").innerHTML='<span style="font-size:10px;color:var(--dm)">Fetching on-chain...</span>';}
+  }else{$("supplyGrid").innerHTML='<div class="ld">Loading on-chain supply data</div>';}
 
   // P&L ACTIVE
   var pD=0,pL=0,pU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;}
@@ -347,7 +350,7 @@ function render(){
       MB("DEX/Circ Ratio",liqRatio.toFixed(1)+"%","var(--cy)"),
       MB("Free Float",F(freeFloat,0),"var(--dm)")
     ].join("");
-  }else{$("dynGrid").innerHTML='<span style="font-size:10px;color:var(--dm)">Waiting for on-chain data...</span>';}
+  }else{$("dynGrid").innerHTML='<div class="ld">Loading supply dynamics</div>';}
 
   // LIQUIDITY WALLS
   var walls=[];
