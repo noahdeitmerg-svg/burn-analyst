@@ -3,748 +3,560 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BURN / USDC — Live Pool Analyst</title>
-<meta name="description" content="Real-time AMM analytics for BURN/USDC on Uniswap V3 Arbitrum">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>BURN Terminal</title>
 <style>
-:root {
-  --bg:#05080f; --card:#0c1220; --bdr:#1e293b; --dim:#334155;
-  --mut:#64748b; --txt:#94a3b8; --bri:#e2e8f0;
-  --g:#34d399; --r:#f87171; --b:#60a5fa; --o:#fb923c; --p:#c084fc; --cy:#22d3ee;
-}
-*, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
-html { -webkit-font-smoothing:antialiased; }
-body { background:var(--bg); color:var(--txt); font-family:'DM Mono',monospace; font-size:13px; line-height:1.5; }
-a { color:var(--b); text-decoration:none; }
-a:hover { text-decoration:underline; }
-
-.wrap { max-width:840px; margin:0 auto; padding:20px 16px; }
-
-/* Header */
-.hdr { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:24px; }
-.hdr h1 { font-family:'Outfit',sans-serif; font-size:24px; font-weight:800; color:var(--bri); letter-spacing:-0.5px; }
-.hdr h1 em { color:var(--o); font-style:normal; }
-.hdr-sub { font-size:11px; color:var(--mut); margin-top:3px; }
-
-/* Status dot */
-.dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:middle; }
-
-/* Button */
-.btn { font-family:inherit; font-size:11px; font-weight:500; padding:6px 16px; border-radius:8px;
-  border:1px solid rgba(96,165,250,.25); background:rgba(96,165,250,.07); color:var(--b); cursor:pointer; transition:background .15s; }
-.btn:hover { background:rgba(96,165,250,.15); }
-.btn:disabled { opacity:.5; cursor:wait; }
-
-/* Card */
-.card { background:linear-gradient(135deg,var(--card),#0a0f1a); border:1px solid var(--bdr); border-radius:14px; padding:20px; margin-bottom:14px; }
-.card-flush { padding:0; overflow:hidden; }
-
-/* Section label */
-.lbl { font-size:10px; color:var(--mut); text-transform:uppercase; letter-spacing:1.2px; font-weight:600; margin-bottom:10px; }
-
-/* Metrics grid */
-.mgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
-.mbox { background:#080c16; border-radius:10px; padding:12px; }
-.mbox-l { font-size:9px; color:var(--mut); text-transform:uppercase; letter-spacing:1px; margin-bottom:4px; }
-.mbox-v { font-size:15px; font-weight:600; }
-
-/* Tags */
-.tag { display:inline-block; padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; }
-
-/* Tables */
-table { width:100%; border-collapse:collapse; font-size:12px; }
-th { text-align:left; color:var(--mut); font-size:10px; text-transform:uppercase; letter-spacing:1px;
-  padding:6px 8px; border-bottom:1px solid var(--bdr); font-weight:600; }
-td { padding:7px 8px; border-bottom:1px solid #0f172a; }
-tr:hover td { background:rgba(96,165,250,.03); }
-.td-b { font-weight:600; color:var(--bri); }
-
-/* Overflow wrapper */
-.ov { overflow-x:auto; }
-
-/* Tabs */
-.tabs { display:flex; border-bottom:1px solid var(--bdr); }
-.tab-btn { flex:1; padding:10px 0; border:none; font-family:inherit; font-size:11px; font-weight:600;
-  cursor:pointer; background:transparent; color:var(--mut); border-bottom:2px solid transparent; transition:all .15s; }
-.tab-btn.active { background:rgba(96,165,250,.07); color:var(--b); border-bottom-color:var(--b); }
-.tab-body { padding:14px; }
-
-/* Inputs */
-.inp { width:100%; background:#0a0f1a; border:1px solid var(--bdr); border-radius:8px;
-  color:var(--txt); padding:7px 10px; font-family:inherit; font-size:12px; outline:none; }
-.inp:focus { border-color:rgba(96,165,250,.5); }
-textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
-
-/* Warning boxes */
-.note { padding:10px; border-radius:8px; font-size:10px; line-height:1.6; margin-top:10px; color:var(--mut); }
-
-/* AMM explainer grid */
-.amm-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:14px; }
-.amm-box { background:#080c16; border-radius:10px; padding:14px; }
-.amm-box h4 { font-size:11px; font-weight:600; margin-bottom:6px; }
-.amm-box p { font-size:11px; color:var(--mut); line-height:1.6; }
-
-/* Price display */
-.price-big { font-family:'Outfit',sans-serif; font-size:28px; font-weight:700; color:var(--bri); }
-
-/* Hidden */
-.hidden { display:none; }
-
-/* Footer */
-.foot { text-align:center; padding:20px 0 10px; font-size:10px; color:var(--bdr); line-height:1.8; }
+:root{--bg:#05080f;--cd:#0c1220;--bd:#1e293b;--dm:#334155;--mt:#64748b;--tx:#94a3b8;--br:#e2e8f0;
+--g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--p:#c084fc;--cy:#22d3ee}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'Courier New',monospace;font-size:13px;line-height:1.5}
+a{color:var(--b);text-decoration:none}
+.w{max-width:860px;margin:0 auto;padding:16px}
+.hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.hdr h1{font-size:18px;font-weight:700;color:var(--br);letter-spacing:-.5px}
+.hdr h1 em{color:var(--o);font-style:normal}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.btn{font-family:inherit;font-size:10px;padding:4px 12px;border-radius:6px;border:1px solid #60a5fa30;background:#60a5fa08;color:var(--b);cursor:pointer}
+.btn:disabled{opacity:.4}
+.c{background:var(--cd);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:10px}
+.c0{padding:0;overflow:hidden}
+.lb{font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;margin-bottom:8px}
+.mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.mb{background:#080c16;border-radius:8px;padding:10px}
+.mb small{font-size:8px;color:var(--mt);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:3px}
+.mb b{font-size:14px;font-weight:600;display:block}
+.tg{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;color:var(--mt);font-size:9px;text-transform:uppercase;letter-spacing:.8px;padding:5px 6px;border-bottom:1px solid var(--bd);font-weight:600}
+td{padding:5px 6px;border-bottom:1px solid #0f172a}
+.bld{font-weight:600;color:var(--br)}
+.ov{overflow-x:auto}
+.tabs{display:flex;border-bottom:1px solid var(--bd)}
+.tab{flex:1;padding:8px 0;border:none;font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;background:0;color:var(--mt);border-bottom:2px solid transparent}
+.tab.on{background:#60a5fa08;color:var(--b);border-bottom-color:var(--b)}
+.inp{width:100%;background:#0a0f1a;border:1px solid var(--bd);border-radius:6px;color:var(--tx);padding:5px 8px;font-family:inherit;font-size:11px;outline:0}
+textarea.inp{min-height:50px;resize:vertical}
+.big{font-size:26px;font-weight:700;color:var(--br);font-family:inherit}
+.hid{display:none}
+.nt{padding:8px;border-radius:6px;font-size:9px;line-height:1.5;color:var(--mt);margin-top:8px}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="w">
 
-  <!-- ═══ HEADER ═══ -->
-  <header class="hdr">
-    <div>
-      <h1><em>◆</em> BURN / USDC</h1>
-      <div class="hdr-sub">
-        Uniswap V3 · Arbitrum · 0.3% fee ·
-        <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener noreferrer">GeckoTerminal ↗</a> ·
-        <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener noreferrer">DexScreener ↗</a>
-      </div>
-    </div>
-    <div style="text-align:right">
-      <div id="statusLine" style="font-size:10px;color:var(--mut);margin-bottom:4px"></div>
-      <button class="btn" id="refreshBtn" onclick="fetchPool(true)">⟳ Refresh</button>
-    </div>
-  </header>
+<!-- HEADER -->
+<div class="hdr">
+  <h1><em>◆</em> BURN Terminal</h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="sts" style="font-size:9px;color:var(--mt)"></span>
+    <button class="btn" id="rbtn" onclick="go(true)">⟳</button>
+  </div>
+</div>
 
-  <!-- ═══ ERROR BOX (hidden by default) ═══ -->
-  <div class="card hidden" id="errorBox" style="border-color:rgba(248,113,113,.25)">
-    <div style="color:var(--r);font-size:12px;font-weight:600" id="errorMsg"></div>
-    <div style="font-size:11px;color:var(--mut);margin-top:4px">
-      Nutze <strong style="color:var(--g);cursor:pointer" onclick="switchTab('paste')">📋 Paste</strong> als Fallback.
+<!-- ERROR -->
+<div class="c hid" id="ebox" style="border-color:#f8717130">
+  <span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span>
+  <span style="font-size:10px;color:var(--mt);margin-left:8px;cursor:pointer" onclick="tab('paste')">Use 📋 Paste</span>
+</div>
+
+<!-- LOADING -->
+<div class="c hid" id="lbox" style="text-align:center;padding:40px">◆ Loading...</div>
+
+<!-- TABS -->
+<div class="c c0">
+<div class="tabs">
+  <button class="tab on" data-t="auto" onclick="tab('auto')">⟳ Auto</button>
+  <button class="tab" data-t="paste" onclick="tab('paste')">📋 Paste</button>
+  <button class="tab" data-t="manual" onclick="tab('manual')">✎ Manual</button>
+</div>
+<div style="padding:10px">
+  <div id="t-auto"><span style="font-size:10px" id="astat">Connecting...</span></div>
+  <div id="t-paste" class="hid">
+    <div style="font-size:10px;color:var(--mt);margin-bottom:4px"><a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener">GeckoTerminal ↗</a> → copy pooled values → paste here</div>
+    <textarea class="inp" id="ptxt" oninput="doPaste()" placeholder='"pooled BURN is 500,000 ... pooled USDC is 50,000"'></textarea>
+    <div id="pres" style="margin-top:4px;font-size:10px"></div>
+  </div>
+  <div id="t-manual" class="hid">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt);margin-bottom:2px">BURN</div><input class="inp" type="number" id="mx" oninput="doMan()"></div>
+      <div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt);margin-bottom:2px">USDC</div><input class="inp" type="number" id="my" oninput="doMan()"></div>
+      <div style="flex:1;min-width:100px;display:flex;align-items:flex-end" id="mp"></div>
     </div>
   </div>
+</div>
+</div>
 
-  <!-- ═══ LOADING (visible on first load) ═══ -->
-  <div class="card" id="loadingBox" style="text-align:center;padding:50px">
-    <div style="font-size:24px;margin-bottom:10px">◆</div>
-    Lade Pool-Daten via DexScreener...
+<!-- ═══ MAIN ═══ -->
+<div id="main" class="hid">
+
+<!-- PRICE -->
+<div class="c">
+  <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <span class="big" id="dPrice"></span><span id="dPct"></span><span id="dSrc"></span><span id="spark" style="margin-left:auto"></span>
   </div>
+</div>
 
-  <!-- ═══ INPUT TABS ═══ -->
-  <div class="card card-flush">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="auto" onclick="switchTab('auto')">⟳ Auto</button>
-      <button class="tab-btn" data-tab="paste" onclick="switchTab('paste')">📋 Paste</button>
-      <button class="tab-btn" data-tab="manual" onclick="switchTab('manual')">✎ Manual</button>
-    </div>
-    <div class="tab-body">
-      <!-- Auto tab -->
-      <div id="panel-auto">
-        <span style="font-size:11px" id="autoStatus">Verbinde mit DexScreener API...</span>
-      </div>
-      <!-- Paste tab -->
-      <div id="panel-paste" class="hidden">
-        <div style="font-size:11px;color:var(--mut);margin-bottom:6px">
-          <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener noreferrer">GeckoTerminal ↗</a>
-          → Pooled-Werte kopieren → hier einfügen.
-        </div>
-        <textarea class="inp" id="pasteInput" oninput="handlePaste()" placeholder='"pooled BURN is 500,000 ... pooled USDC is 50,000"'></textarea>
-        <div id="pasteResult" style="margin-top:6px;font-size:11px"></div>
-      </div>
-      <!-- Manual tab -->
-      <div id="panel-manual" class="hidden">
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <div style="font-size:9px;color:var(--mut);margin-bottom:3px">Pooled BURN (x)</div>
-            <input class="inp" type="number" min="0" step="any" id="manualBurn" placeholder="500000" oninput="handleManual()">
-          </div>
-          <div style="flex:1;min-width:120px">
-            <div style="font-size:9px;color:var(--mut);margin-bottom:3px">Pooled USDC (y)</div>
-            <input class="inp" type="number" min="0" step="any" id="manualUsdc" placeholder="50000" oninput="handleManual()">
-          </div>
-          <div style="flex:1;min-width:120px;display:flex;align-items:flex-end" id="manualPriceBox"></div>
-        </div>
-      </div>
-    </div>
-  </div>
+<!-- PORTFOLIO -->
+<div class="c" style="border-color:#fb923c20">
+  <div class="lb">My Portfolio</div>
+  <div class="mg" id="portGrid"></div>
+</div>
 
-  <!-- ═══ ANALYSIS (hidden until data available) ═══ -->
-  <div id="analysisSection" class="hidden">
+<!-- stBURN YIELD -->
+<div class="c">
+  <div class="lb">stBURN Yield</div>
+  <div class="mg" id="stGrid"></div>
+</div>
 
-    <!-- PRICE -->
-    <div class="card">
-      <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
-        <span class="price-big" id="displayPrice"></span>
-        <span id="displayPct"></span>
-        <span id="displaySrc"></span>
-        <span id="sparkline" style="margin-left:auto"></span>
-      </div>
-    </div>
+<!-- P&L ACTIVE -->
+<div class="c" style="border-color:#34d39920">
+  <div class="lb">P&L — Active LPs</div>
+  <div class="mg" id="pnlGrid"></div>
+</div>
 
-    <!-- P&L HERO -->
-    <div class="card" style="border-color:rgba(251,146,60,.2)">
-      <div class="lbl">P&L Overview</div>
-      <div class="mgrid" id="pnlGrid"></div>
-    </div>
+<!-- PORTFOLIO TOTAL -->
+<div class="c" style="border-color:#60a5fa20">
+  <div class="lb">Portfolio — Lifetime</div>
+  <div class="mg" id="totalGrid"></div>
+</div>
 
-    <!-- LP RANGE BAR -->
-    <div class="card">
-      <div class="lbl">LP Ranges vs. Price</div>
-      <div id="rangeBar"></div>
-    </div>
+<!-- HISTORY -->
+<div class="c">
+  <div class="lb">Closed Positions + Sells</div>
+  <div class="ov"><table><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø Price</th></tr></thead><tbody id="histB"></tbody></table></div>
+</div>
 
-    <!-- POOL -->
-    <div class="card">
-      <div class="lbl">Pool</div>
-      <div class="mgrid" id="poolGrid"></div>
-    </div>
+<!-- LP RANGE BAR -->
+<div class="c">
+  <div class="lb">LP Ranges</div>
+  <div id="rangeBar"></div>
+</div>
 
-    <!-- ② BUYFLOW -->
-    <div class="card">
-      <div class="lbl">② Buyflow to Price Targets</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">AMM estimate (constant-product). Your LP earnings at each target shown.</div>
-      <div class="ov">
-        <table>
-          <thead><tr><th>Target</th><th>USDC Needed</th><th>BURN Bought</th><th>Your BURN Sold</th><th>Your USDC Earned</th><th>×</th></tr></thead>
-          <tbody id="buyflowBody"></tbody>
-        </table>
-      </div>
-    </div>
+<!-- LP TABLE -->
+<div class="c">
+  <div class="lb">LP Positions</div>
+  <div class="ov"><table><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
+  <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o);font-weight:600">⚡</span> <span id="lpS"></span></div>
+</div>
 
-    <!-- ③ SELL IMPACT -->
-    <div class="card">
-      <div class="lbl">④ Sell Impact Simulation</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">x_new = x + Δ · y_new = k / x_new · price_new = y_new / x_new</div>
-      <div class="ov">
-        <table>
-          <thead><tr><th>Sell Size</th><th>USDC Received</th><th>New Price</th><th>Impact</th></tr></thead>
-          <tbody id="sellBody"></tbody>
-        </table>
-      </div>
-      <div class="note" style="background:rgba(248,113,113,.03);border:1px solid rgba(248,113,113,.08)">
-        ⚠ Large sells may cause significantly more slippage than shown if liquidity is concentrated in certain ranges.
-      </div>
-    </div>
+<!-- BUYFLOW -->
+<div class="c">
+  <div class="lb">Buyflow to Targets</div>
+  <div class="ov"><table><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>Your Sold</th><th>Your USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div>
+</div>
 
-    <!-- ⑤ LP POSITIONS -->
-    <div class="card">
-      <div class="lbl">⑤ LP Positions</div>
-      <div class="ov">
-        <table>
-          <thead><tr><th>Range</th><th>BURN In</th><th>BURN Left</th><th>USDC Earned</th><th>Status</th></tr></thead>
-          <tbody id="lpBody"></tbody>
-        </table>
-      </div>
-      <div style="margin-top:14px;padding:12px;border-radius:10px;background:rgba(251,146,60,.03);border:1px solid rgba(251,146,60,.12)">
-        <div style="font-size:11px;color:var(--o);font-weight:600;margin-bottom:4px">⚡ Strategy</div>
-        <div style="font-size:11px;color:var(--mut);line-height:1.6" id="lpStrategy"></div>
-      </div>
-    </div>
+<!-- DEX SUPPLY -->
+<div class="c">
+  <div class="lb">DEX Supply at Targets</div>
+  <div class="ov"><table><thead><tr><th>Price</th><th>BURN Left</th><th>USDC Pool</th><th>Removed</th></tr></thead><tbody id="dsB"></tbody></table></div>
+</div>
 
-  </div><!-- /analysisSection -->
+<!-- SELL IMPACT -->
+<div class="c">
+  <div class="lb">Sell Impact</div>
+  <div class="ov"><table><thead><tr><th>Sell</th><th>USDC Out</th><th>New Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
+</div>
 
-  <!-- ═══ FOOTER ═══ -->
-  <div class="foot" id="footer">
-    price = USDC_reserve / BURN_reserve · k = x × y<br>
-    All estimates use constant-product AMM model. Actual V3 behavior may differ due to concentrated liquidity.
-  </div>
+<!-- POOL STATE -->
+<div class="c">
+  <div class="lb">Pool State</div>
+  <div class="mg" id="poolG"></div>
+</div>
 
-</div><!-- /wrap -->
+<!-- WHALE DETECTION -->
+<div class="c">
+  <div class="lb">Whale Activity</div>
+  <div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div>
+</div>
 
+</div><!-- /main -->
+
+<div style="text-align:center;padding:12px 0;font-size:9px;color:var(--bd);line-height:1.6" id="foot">
+  BURN Terminal · DexScreener API · V3 estimates
+</div>
+
+</div>
 <script>
 /* ═══════════════════════════════════════════════════════
-   BURN / USDC LIVE POOL ANALYST
-   Data: DexScreener API (CORS enabled ✓)
-   Pool: 0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37
+   BURN TERMINAL — FINAL VERSION
    ═══════════════════════════════════════════════════════ */
 
-const POOL_ADDR = "0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37";
-const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/pairs/arbitrum/" + POOL_ADDR;
+// ── Constants ──
+var POOL = "0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37";
+var BURN_TOKEN = "0xbfc6620459762a6e485ebf1cf7e532e06253B62f";
+var DS = "https://api.dexscreener.com/latest/dex/pairs/arbitrum/" + POOL;
+var DS_TOKEN = "https://api.dexscreener.com/latest/dex/tokens/" + BURN_TOKEN;
 
-const TARGETS = [0.20, 0.30, 0.50, 1.00, 2.00, 5.00];
-const SELL_SIZES = [10000, 50000, 100000, 180000];
-const USER_LP = [
-  { burn: 20300, lo: 0.149, hi: 0.20, label: "Sell Range" },
-  { burn: 5000,  lo: 0.14,  hi: 0.50, label: "Sell Range" },
-  { burn: 5000,  lo: 0.50,  hi: 1.00, label: "Sell Range" },
-  { burn: 5000,  lo: 1.00,  hi: 1.50, label: "Sell Range" },
-  { burn: 5000,  lo: 1.50,  hi: 2.00, label: "Sell Range" },
-  { burn: 0,     lo: 0,     hi: 0,    label: "DAOcademy Full Range", fullRange: true },
+var TGT = [0.20, 0.30, 0.50, 1.00, 2.00, 5.00];
+var SEL = [10000, 50000, 100000, 180000];
+
+// ── My Portfolio ──
+var MY_BURN = 450000;
+var MY_STBURN = 350000;
+var INVESTED = 3350;
+var AVG_ENTRY = 0.003682;
+var TOTAL_BOUGHT = 912000;
+
+// ── Active LP Positions ──
+var LP = [
+  {b:20300, lo:0.149, hi:0.20, label:"Sell"},
+  {b:5000, lo:0.14, hi:0.50, label:"Sell"},
+  {b:5000, lo:0.50, hi:1.00, label:"Sell"},
+  {b:5000, lo:1.00, hi:1.50, label:"Sell"},
+  {b:5000, lo:1.50, hi:2.00, label:"Sell"},
+  {b:0, lo:0, hi:0, label:"DAOcademy Full Range", fr:true},
 ];
 
-// ── V3 Position State Calculator ──
-// Calculates remaining BURN and earned USDC for a concentrated liquidity position
-// Assumes position was opened with 100% BURN (one-sided sell range)
-function calcV3Position(burnDeposited, lo, hi, currentPrice) {
-  if (burnDeposited <= 0 || lo <= 0 || hi <= lo) return { burnLeft: 0, usdc: 0, pct: 0 };
+var ACTIVE_LP_BURN = 0;
+for (var ai = 0; ai < LP.length; ai++) { if (!LP[ai].fr) ACTIVE_LP_BURN += LP[ai].b; }
 
-  if (currentPrice <= lo) {
-    // Price below range: 100% BURN, 0 USDC
-    return { burnLeft: burnDeposited, usdc: 0, pct: 0 };
-  }
+// ── History ──
+var CLOSED = [
+  {d:"Sep 2025",   b:11600, lo:0, hi:0, u:565.00, n:"First LP"},
+  {d:"25.09.2025", b:21209, lo:0.0686, hi:0.08, u:1577.09, n:"Filled 28-29.09"},
+  {d:"09.10.2025", b:566,   lo:0.1005, hi:0.14, u:59.00, n:"Closed"},
+  {d:"14.10.2025", b:6806,  lo:0, hi:0, u:725.00, n:"6806 of 9498 sold"},
+  {d:"16.10.2025", b:2677,  lo:0.11086, hi:0.1122, u:299.00, n:"Filled 26.10"},
+  {d:"21.10.2025", b:1915,  lo:0.1122, hi:0.12203, u:217.00, n:"Partial 14.11"},
+  {d:"01.12.2025", b:8264,  lo:0.114, hi:0.115, u:949.80, n:"Filled 01.12"},
+];
+var SELLS = [{d:"05.12.2025", b:10500, u:1196.00, n:"Market sell"}];
 
-  var sqrtLo = Math.sqrt(lo);
-  var sqrtHi = Math.sqrt(hi);
-  // Liquidity from initial BURN deposit (price was below lo when deposited)
-  var L = burnDeposited * sqrtLo * sqrtHi / (sqrtHi - sqrtLo);
+var TOT_SOLD = 0, TOT_REAL = 0;
+for (var ci = 0; ci < CLOSED.length; ci++) { TOT_SOLD += CLOSED[ci].b; TOT_REAL += CLOSED[ci].u; }
+for (var si = 0; si < SELLS.length; si++) { TOT_SOLD += SELLS[si].b; TOT_REAL += SELLS[si].u; }
 
-  if (currentPrice >= hi) {
-    // Price above range: 0 BURN, all converted to USDC
-    var totalUsdc = L * (sqrtHi - sqrtLo);
-    return { burnLeft: 0, usdc: totalUsdc, pct: 100 };
-  }
-
-  // Price within range: partial conversion
-  var sqrtP = Math.sqrt(currentPrice);
-  var burnLeft = L * (sqrtHi - sqrtP) / (sqrtP * sqrtHi);
-  var usdc = L * (sqrtP - sqrtLo);
-  var pct = ((currentPrice - lo) / (hi - lo) * 100);
-
-  return { burnLeft: burnLeft, usdc: usdc, pct: pct };
+// ── V3 Position Calculator ──
+function calcV3(B, lo, hi, P) {
+  if (B <= 0 || lo <= 0 || hi <= lo) return {left:0, usdc:0, pct:0};
+  if (P <= lo) return {left:B, usdc:0, pct:0};
+  var sL = Math.sqrt(lo), sH = Math.sqrt(hi);
+  var L = B * sL * sH / (sH - sL);
+  if (P >= hi) return {left:0, usdc: L*(sH-sL), pct:100};
+  var sP = Math.sqrt(P);
+  return {left: L*(sH-sP)/(sP*sH), usdc: L*(sP-sL), pct:(P-lo)/(hi-lo)*100};
 }
 
-// ── Global state ──
-let poolX = 0;           // Virtual BURN reserve (for AMM calc)
-let poolY = 0;           // Virtual USDC reserve (for AMM calc)
-let poolK = 0;           // k = x * y
-let poolPrice = 0;       // price = y / x
-let actualBurn = 0;      // Actual BURN in pool (all LP ranges)
-let actualUsdc = 0;      // Actual USDC in pool (all LP ranges)
-let poolTvl = 0;         // Total value locked
-let dataSource = "none"; // "api" | "est" | "manual"
-let activeTab = "auto";
-let apiRawData = null;
-let isFirstLoad = true;
-let refreshTimer = null;
-let priceHistory = [];  // collected on each refresh for sparkline
+// ── State ──
+var X=0, Y=0, K=0, P=0, SRC="none", TAB="auto", RAW=null;
+var actBurn=0, actUsdc=0, tvlUsd=0;
+var stRatio=1, stFound=false;
+var hist=[], whales=[], prevM5={vol:0,sells:0,buys:0};
+var first=true, IV;
 
 // ── Helpers ──
-function el(id) { return document.getElementById(id); }
+function $(id){return document.getElementById(id)}
+function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(2)+"M";if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
+function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
+function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
+function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
 
-function fmt(n, d) {
-  if (d === undefined) d = 2;
-  if (n == null || !isFinite(n)) return "—";
-  var a = Math.abs(n);
-  if (a >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (a >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (a >= 1e3) return (n / 1e3).toFixed(d) + "K";
-  return n.toFixed(d);
-}
-
-function fmtPrice(n) {
-  if (n == null || !isFinite(n) || n <= 0) return "—";
-  if (n >= 1000) return "$" + fmt(n);
-  if (n >= 1) return "$" + n.toFixed(4);
-  if (n >= 0.0001) return "$" + n.toFixed(6);
-  return "$" + n.toExponential(4);
-}
-
-function tag(text, color) {
-  return '<span class="tag" style="background:' + color + '18;color:' + color + '">' + text + '</span>';
-}
-
-function metricBox(label, value, color) {
-  return '<div class="mbox"><div class="mbox-l">' + label + '</div><div class="mbox-v" style="color:' + color + '">' + value + '</div></div>';
-}
-
-// ═══════════════════════════════════════════════════════
-// FETCH FROM DEXSCREENER (CORS works from any browser!)
-// ═══════════════════════════════════════════════════════
-
-async function fetchPool(isManualRefresh) {
-  var btn = el("refreshBtn");
-  if (isManualRefresh) btn.disabled = true;
-
-  // Only show loading spinner on first load, not on refreshes
-  if (isFirstLoad) {
-    el("loadingBox").classList.remove("hidden");
-  }
+// ── Fetch BURN/USDC Pool ──
+async function go(manual) {
+  var btn=$("rbtn"); if(manual)btn.disabled=true;
+  if(first) $("lbox").classList.remove("hid");
 
   try {
-    var response = await fetch(DEXSCREENER_URL);
-    if (!response.ok) throw new Error("DexScreener API returned " + response.status);
+    var r = await fetch(DS);
+    if (!r.ok) throw new Error("API " + r.status);
+    var j = await r.json();
+    var p = j.pairs && j.pairs[0];
+    if (!p) throw new Error("Pool not found");
+    RAW = p;
 
-    var json = await response.json();
-    var pair = null;
+    var poolB = parseFloat(p.liquidity && p.liquidity.base) || 0;
+    var poolU = parseFloat(p.liquidity && p.liquidity.quote) || 0;
+    var poolT = parseFloat(p.liquidity && p.liquidity.usd) || 0;
+    var apiP = parseFloat(p.priceUsd) || 0;
 
-    // DexScreener may return multiple pairs — find the right one
-    if (json.pairs && json.pairs.length > 0) {
-      pair = json.pairs[0];
-    }
-    if (!pair) throw new Error("Pool not found on DexScreener");
+    actBurn = poolB; actUsdc = poolU; tvlUsd = poolT;
 
-    apiRawData = pair;
-
-    // Extract data from DexScreener response
-    var pooledBurn = parseFloat(pair.liquidity && pair.liquidity.base) || 0;
-    var pooledUsdc = parseFloat(pair.liquidity && pair.liquidity.quote) || 0;
-    var tvlUsd = parseFloat(pair.liquidity && pair.liquidity.usd) || 0;
-    var apiPriceUsd = parseFloat(pair.priceUsd) || 0;
-
-    // ═══ CRITICAL: For Uniswap V3, priceUsd IS the correct price ═══
-    // liquidity.base/quote are TOTAL tokens across ALL LP ranges,
-    // NOT the virtual reserves at the current tick.
-    // We must use priceUsd as the anchor and derive virtual reserves.
-
-    if (activeTab === "auto" && apiPriceUsd > 0) {
-      // Use actual USDC in pool as y (not TVL/2 which overestimates)
-      // For USDC, 1 token ≈ $1, so pooledUsdc IS the dollar amount
-      var useY = pooledUsdc > 0 ? pooledUsdc : (tvlUsd > 0 ? tvlUsd / 2 : 0);
-      var useX = useY / apiPriceUsd;
-      if (useX > 0 && useY > 0) {
-        applyReserves(useX, useY, pooledBurn, pooledUsdc, tvlUsd, "api");
+    // Whale detection: track 5m volume spikes
+    var m5v = parseFloat(p.volume && p.volume.m5) || 0;
+    var m5b = (p.txns && p.txns.m5 && p.txns.m5.buys) || 0;
+    var m5s = (p.txns && p.txns.m5 && p.txns.m5.sells) || 0;
+    if (prevM5.vol > 0) {
+      var dv = m5v - prevM5.vol;
+      var ds = m5s - prevM5.sells;
+      var db = m5b - prevM5.buys;
+      if (Math.abs(dv) > 500 && (ds > 0 || db > 0)) {
+        whales.unshift({t:new Date(), type: ds>db?"SELL":"BUY", vol:Math.abs(dv), sells:ds, buys:db});
+        if (whales.length > 15) whales.pop();
       }
-    } else if (activeTab === "auto" && pooledBurn > 0 && pooledUsdc > 0) {
-      applyReserves(pooledBurn, pooledUsdc, pooledBurn, pooledUsdc, tvlUsd, "est");
+    }
+    prevM5 = {vol:m5v, sells:m5s, buys:m5b};
+
+    if (TAB === "auto" && apiP > 0) {
+      var vy = poolU > 0 ? poolU : (poolT > 0 ? poolT / 2 : 0);
+      var vx = vy / apiP;
+      if (vx > 0 && vy > 0) set(vx, vy, "api");
     }
 
-    // Success UI
-    el("errorBox").classList.add("hidden");
-    el("autoStatus").innerHTML = '<span style="color:var(--g)">✓ Live via DexScreener API. Auto-refresh 15s.</span>';
-    updateStatusDot("ok");
-
-  } catch (err) {
-    el("errorBox").classList.remove("hidden");
-    el("errorMsg").textContent = "⚠ " + err.message;
-    el("autoStatus").innerHTML = '<span style="color:var(--mut)">API Fehler. Nutze 📋 Paste.</span>';
-    updateStatusDot("err");
-    if (activeTab === "auto") switchTab("paste");
+    $("ebox").classList.add("hid");
+    $("astat").innerHTML = '<span style="color:var(--g)">✓ Live · 15s</span>';
+    sts("ok");
+  } catch(e) {
+    $("ebox").classList.remove("hid");
+    $("emsg").textContent = "⚠ " + e.message;
+    $("astat").innerHTML = '<span style="color:var(--mt)">Error</span>';
+    sts("err");
+    if (TAB==="auto") tab("paste");
   }
 
-  // Cleanup
-  el("loadingBox").classList.add("hidden");
-  isFirstLoad = false;
-  btn.disabled = false;
+  $("lbox").classList.add("hid"); first=false; btn.disabled=false;
 }
 
-function updateStatusDot(state) {
-  var time = new Date().toLocaleTimeString();
-  if (state === "err") {
-    el("statusLine").innerHTML = '<span class="dot" style="background:var(--r);box-shadow:0 0 6px var(--r)"></span>' + time + ' · offline';
-  } else {
-    el("statusLine").innerHTML = '<span class="dot" style="background:var(--g);box-shadow:0 0 6px var(--g)"></span>' + time + ' · DexScreener · 15s';
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// SET RESERVES + TRIGGER RENDER
-// ═══════════════════════════════════════════════════════
-
-function applyReserves(x, y, actBurn, actUsdc, tvl, source) {
-  if (x <= 0 || y <= 0 || !isFinite(x) || !isFinite(y)) return;
-  poolX = x;
-  poolY = y;
-  poolK = x * y;
-  poolPrice = y / x;
-  actualBurn = actBurn || x;
-  actualUsdc = actUsdc || y;
-  poolTvl = tvl || (x * poolPrice + y);
-  dataSource = source;
-  priceHistory.push(poolPrice);
-  if (priceHistory.length > 120) priceHistory.shift();
-  el("analysisSection").classList.remove("hidden");
-  renderAll();
-}
-
-// ═══════════════════════════════════════════════════════
-// TAB SWITCHING
-// ═══════════════════════════════════════════════════════
-
-function switchTab(tabId) {
-  activeTab = tabId;
-  var tabs = document.querySelectorAll(".tab-btn");
-  for (var i = 0; i < tabs.length; i++) {
-    tabs[i].classList.toggle("active", tabs[i].getAttribute("data-tab") === tabId);
-  }
-  var panels = ["auto", "paste", "manual"];
-  for (var j = 0; j < panels.length; j++) {
-    el("panel-" + panels[j]).classList.toggle("hidden", panels[j] !== tabId);
-  }
-  if (tabId === "auto") fetchPool();
-}
-
-// ═══════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════
-// MANUAL INPUT
-// ═══════════════════════════════════════════════════════
-
-function handleManual() {
-  var x = parseFloat(el("manualBurn").value);
-  var y = parseFloat(el("manualUsdc").value);
-  var box = el("manualPriceBox");
-  if (x > 0 && y > 0) {
-    box.innerHTML = metricBox("Calculated Price", fmtPrice(y / x), "var(--bri)");
-    applyReserves(x, y, x, y, 0, "manual");
-  } else {
-    box.innerHTML = "";
-  }
-}
-
-function handlePaste() {
-  var raw = el("pasteInput").value;
-  var text = raw.replace(/,/g, "");
-  var regex = /pooled\s+(\w+)\s+is\s+([\d.]+)\s*([KMB]?)/gi;
-  var found = {};
-  var match;
-  while ((match = regex.exec(text)) !== null) {
-    var val = parseFloat(match[2]);
-    var suffix = match[3] ? match[3].toUpperCase() : "";
-    if (suffix === "K") val *= 1000;
-    else if (suffix === "M") val *= 1000000;
-    else if (suffix === "B") val *= 1000000000;
-    if (val > 0) found[match[1].toUpperCase()] = val;
-  }
-  var out = el("pasteResult");
-  if (found.BURN && found.USDC) {
-    var cp = found.USDC / found.BURN;
-    out.innerHTML = tag("✓", "#34d399") +
-      ' <span style="color:var(--o);margin-left:6px">BURN: ' + fmt(found.BURN, 0) + '</span>' +
-      ' <span style="color:var(--g);margin-left:6px">USDC: $' + fmt(found.USDC, 2) + '</span>' +
-      ' <span style="color:var(--bri);margin-left:6px">= ' + fmtPrice(cp) + '</span>';
-    applyReserves(found.BURN, found.USDC, found.BURN, found.USDC, 0, "paste");
-  } else if (text.trim().length > 15) {
-    out.innerHTML = '<span style="color:var(--o)">⚠ No "pooled BURN/USDC" found.</span>';
-  } else {
-    out.innerHTML = "";
-  }
-}
-
-// ═══════════════════════════════════════════════════════
-// RENDER ALL ANALYSIS SECTIONS
-// ═══════════════════════════════════════════════════════
-
-function renderAll() {
-  var x = poolX, y = poolY, k = poolK, price = poolPrice;
-  var d = apiRawData || {};
-
-  // API metadata (may be empty if manual)
-  var vol24 = parseFloat(d.volume && d.volume.h24) || 0;
-  var pct24 = parseFloat(d.priceChange && d.priceChange.h24) || 0;
-  var buys24 = (d.txns && d.txns.h24 && d.txns.h24.buys) || 0;
-  var sells24 = (d.txns && d.txns.h24 && d.txns.h24.sells) || 0;
-  var apiTvl = parseFloat(d.liquidity && d.liquidity.usd) || 0;
-
-  // ── Price + Source ──
-  el("displayPrice").textContent = fmtPrice(price);
-  el("displayPct").innerHTML = pct24 !== 0
-    ? tag((pct24 >= 0 ? "▲ " : "▼ ") + Math.abs(pct24).toFixed(2) + "% 24h", pct24 >= 0 ? "#34d399" : "#f87171")
-    : "";
-  var srcLabels = { api: "✓ LIVE", est: "≈ EST", paste: "📋", manual: "✎" };
-  var srcColors = { api: "#34d399", est: "#f87171", paste: "#fb923c", manual: "#fb923c" };
-  el("displaySrc").innerHTML = tag(srcLabels[dataSource] || dataSource, srcColors[dataSource] || "#60a5fa");
-
-  // ── Sparkline ──
-  if (priceHistory.length >= 2) {
-    var pts = priceHistory;
-    var pMin = Math.min.apply(null, pts), pMax = Math.max.apply(null, pts);
-    var pRng = pMax - pMin; if (pRng === 0) pRng = pMin * 0.01;
-    var sw = 140, sh = 28, coords = [];
-    for (var si = 0; si < pts.length; si++) {
-      coords.push(((si / (pts.length - 1)) * sw).toFixed(1) + "," + (sh - ((pts[si] - pMin) / pRng) * (sh - 4) - 2).toFixed(1));
+// ── Fetch stBURN ratio ──
+async function fetchSt() {
+  try {
+    var r = await fetch(DS_TOKEN);
+    if (!r.ok) return;
+    var j = await r.json();
+    if (!j.pairs) return;
+    for (var i = 0; i < j.pairs.length; i++) {
+      var pr = j.pairs[i];
+      var bs = (pr.baseToken && pr.baseToken.symbol) || "";
+      var qs = (pr.quoteToken && pr.quoteToken.symbol) || "";
+      if (bs.indexOf("stBURN") >= 0 || qs.indexOf("stBURN") >= 0) {
+        if (bs.indexOf("stBURN") >= 0) {
+          // stBURN is base → priceNative = BURN per stBURN
+          stRatio = parseFloat(pr.priceNative) || 1;
+        } else {
+          // BURN is base → priceNative = stBURN per BURN → invert
+          stRatio = 1 / (parseFloat(pr.priceNative) || 1);
+        }
+        stFound = true;
+        return;
+      }
     }
-    var sUp = pts[pts.length - 1] >= pts[0];
-    el("sparkline").innerHTML = '<svg viewBox="0 0 ' + sw + ' ' + sh + '" style="width:140px;height:28px;opacity:.7"><polyline points="' + coords.join(" ") + '" fill="none" stroke="' + (sUp ? "var(--g)" : "var(--r)") + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-  } else {
-    el("sparkline").innerHTML = '<span style="font-size:9px;color:var(--dim)">collecting...</span>';
+  } catch(e) { /* silent */ }
+}
+
+function sts(s) {
+  var t = new Date().toLocaleTimeString();
+  $("sts").innerHTML = s==="err"
+    ? '<span class="dot" style="background:var(--r)"></span>'+t+' · offline'
+    : '<span class="dot" style="background:var(--g)"></span>'+t;
+}
+
+function set(x, y, src) {
+  X=x; Y=y; K=x*y; P=y/x; SRC=src;
+  hist.push(P); if(hist.length>120) hist.shift();
+  if(K>0&&P>0){$("main").classList.remove("hid"); render();}
+}
+
+// ── Tabs ──
+function tab(id) {
+  TAB=id;
+  document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.dataset.t===id)});
+  ["auto","paste","manual"].forEach(function(t){$("t-"+t).classList.toggle("hid",t!==id)});
+  if(id==="auto") go();
+}
+
+function doPaste() {
+  var txt=$("ptxt").value.replace(/,/g,"");
+  var rx=/pooled\s+(\w+)\s+is\s+([\d.]+)\s*([KMB]?)/gi, o={}, m;
+  while((m=rx.exec(txt))!==null){var v=parseFloat(m[2]);var s={K:1e3,M:1e6,B:1e9}[m[3]&&m[3].toUpperCase()];if(s)v*=s;if(v>0)o[m[1].toUpperCase()]=v;}
+  if(o.BURN&&o.USDC){$("pres").innerHTML=TG("✓","#34d399")+' BURN:'+F(o.BURN,0)+' USDC:$'+F(o.USDC,2);set(o.BURN,o.USDC,"paste");}
+  else if(txt.trim().length>10){$("pres").innerHTML='<span style="color:var(--o)">⚠ Not found</span>';}else $("pres").innerHTML="";
+}
+
+function doMan() {
+  var x=parseFloat($("mx").value), y=parseFloat($("my").value);
+  if(x>0&&y>0){$("mp").innerHTML=MB("Price",FP(y/x),"var(--br)");set(x,y,"manual");}else $("mp").innerHTML="";
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function render() {
+  var d=RAW||{};
+  var vol24=parseFloat(d.volume&&d.volume.h24)||0;
+  var pct24=parseFloat(d.priceChange&&d.priceChange.h24)||0;
+  var b24=(d.txns&&d.txns.h24&&d.txns.h24.buys)||0;
+  var s24=(d.txns&&d.txns.h24&&d.txns.h24.sells)||0;
+  var m5v=parseFloat(d.volume&&d.volume.m5)||0;
+
+  // ── PRICE ──
+  $("dPrice").textContent = FP(P);
+  $("dPct").innerHTML = pct24!==0 ? TG((pct24>=0?"▲ ":"▼ ")+Math.abs(pct24).toFixed(2)+"%", pct24>=0?"#34d399":"#f87171") : "";
+  var srcL={api:"✓ LIVE",est:"≈ EST",paste:"📋",manual:"✎"};
+  $("dSrc").innerHTML = TG(srcL[SRC]||SRC, SRC==="api"?"#34d399":"#fb923c");
+
+  // Sparkline
+  if(hist.length>=2){var mn=Math.min.apply(null,hist),mx=Math.max.apply(null,hist),rg=mx-mn||mn*.01,sw=130,sh=24,co=[];
+  for(var si=0;si<hist.length;si++){co.push(((si/(hist.length-1))*sw).toFixed(1)+","+(sh-((hist[si]-mn)/rg)*(sh-4)-2).toFixed(1));}
+  var up=hist[hist.length-1]>=hist[0];
+  $("spark").innerHTML='<svg viewBox="0 0 '+sw+' '+sh+'" style="width:130px;height:24px;opacity:.6"><polyline points="'+co.join(" ")+'" fill="none" stroke="'+(up?"var(--g)":"var(--r)")+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';
   }
 
-  // ── P&L ──
-  var pnlDep = 0, pnlLeft = 0, pnlUsdc = 0;
-  for (var pi = 0; pi < USER_LP.length; pi++) {
-    if (USER_LP[pi].fullRange) continue;
-    var pv = calcV3Position(USER_LP[pi].burn, USER_LP[pi].lo, USER_LP[pi].hi, price);
-    pnlDep += USER_LP[pi].burn;
-    pnlLeft += pv.burnLeft;
-    pnlUsdc += pv.usdc;
-  }
-  var lpVal = pnlLeft * price + pnlUsdc;
-  var hodlVal = pnlDep * price;
-  var il = lpVal - hodlVal;
-  var ilP = hodlVal > 0 ? (il / hodlVal * 100) : 0;
-  el("pnlGrid").innerHTML = [
-    metricBox("Deposited", fmt(pnlDep, 0) + " BURN", "var(--o)"),
-    metricBox("Remaining", fmt(pnlLeft, 0) + " BURN", "var(--txt)"),
-    metricBox("USDC Earned", "$" + fmt(pnlUsdc, 2), "var(--g)"),
-    metricBox("LP Value", "$" + fmt(lpVal, 2), "var(--bri)"),
-    metricBox("HODL Value", "$" + fmt(hodlVal, 2), "var(--mut)"),
-    metricBox("IL", (il >= 0 ? "+$" : "-$") + fmt(Math.abs(il), 2) + " (" + ilP.toFixed(1) + "%)", il >= 0 ? "var(--g)" : "var(--r)")
+  // ── MY PORTFOLIO ──
+  var burnEq = MY_STBURN * stRatio;
+  var effBurn = MY_BURN + burnEq + ACTIVE_LP_BURN;
+  var portUsd = effBurn * P;
+  $("portGrid").innerHTML = [
+    MB("BURN Held", F(MY_BURN,0), "var(--o)"),
+    MB("stBURN Held", F(MY_STBURN,0), "var(--p)"),
+    MB("stBURN Ratio", stFound ? stRatio.toFixed(4) : "…", "var(--cy)"),
+    MB("Effective BURN", F(effBurn,0), "var(--br)"),
+    MB("In Active LPs", F(ACTIVE_LP_BURN,0), "var(--b)"),
+    MB("Portfolio USD", "$"+F(portUsd,0), "var(--g)")
   ].join("");
 
-  // ── LP Range Bar ──
-  var maxP = 2.50;
-  var bar = '<div style="position:relative;height:40px;background:#080c16;border-radius:8px;overflow:hidden;margin-bottom:6px">';
-  for (var ri = 0; ri < USER_LP.length; ri++) {
-    var rp = USER_LP[ri];
-    if (rp.fullRange) continue;
-    var rL = (rp.lo / maxP * 100), rW = ((rp.hi - rp.lo) / maxP * 100);
-    var rAct = price >= rp.lo && price <= rp.hi, rFill = price > rp.hi;
-    var rBg = rFill ? "rgba(52,211,153,.15)" : rAct ? "rgba(251,146,60,.2)" : "rgba(96,165,250,.06)";
-    var rBd = rFill ? "rgba(52,211,153,.4)" : rAct ? "rgba(251,146,60,.5)" : "rgba(96,165,250,.12)";
-    var rC = rFill ? "var(--g)" : rAct ? "var(--o)" : "var(--dim)";
-    bar += '<div style="position:absolute;left:' + rL + '%;width:' + rW + '%;height:100%;background:' + rBg +
-      ';border-left:1px solid ' + rBd + ';border-right:1px solid ' + rBd +
-      ';display:flex;align-items:center;padding:0 3px">' +
-      '<span style="font-size:7px;color:' + rC + ';white-space:nowrap">' + fmt(rp.burn, 0) + (rFill ? " ✓" : rAct ? " ●" : "") + '</span></div>';
-  }
-  var pLine = Math.min(price / maxP * 100, 99);
-  bar += '<div style="position:absolute;left:' + pLine + '%;width:2px;height:100%;background:var(--bri);z-index:10;box-shadow:0 0 6px rgba(226,232,240,.6)"></div>';
-  bar += '</div><div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dim);padding:0 2px">';
-  [0, 0.20, 0.50, 1.00, 1.50, 2.00, 2.50].forEach(function(t) { bar += "<span>$" + t.toFixed(2) + "</span>"; });
-  bar += "</div>";
-  el("rangeBar").innerHTML = bar;
-
-  // ── Pool (compact) ──
-  var displayTvl = poolTvl > 0 ? poolTvl : (apiTvl > 0 ? apiTvl : x * price + y);
-  el("poolGrid").innerHTML = [
-    metricBox("BURN Pooled", fmt(actualBurn, 0), "var(--o)"),
-    metricBox("USDC Pooled", "$" + fmt(actualUsdc, 2), "var(--g)"),
-    metricBox("TVL", "$" + fmt(displayTvl, 0), "var(--p)"),
-    metricBox("k (AMM)", fmt(k, 0), "var(--b)"),
-    metricBox("Vol 24h", vol24 > 0 ? "$" + fmt(vol24, 0) : "—", "var(--cy)"),
-    metricBox("Txns", buys24 + " buy / " + sells24 + " sell", buys24 > sells24 ? "var(--g)" : "var(--r)")
+  // ── stBURN YIELD ──
+  var stBurnVal = burnEq * P;
+  var stYield = burnEq - MY_STBURN;
+  var stYieldPct = MY_STBURN > 0 ? (stYield / MY_STBURN * 100) : 0;
+  $("stGrid").innerHTML = [
+    MB("stBURN Held", F(MY_STBURN,0), "var(--p)"),
+    MB("Ratio", stFound ? stRatio.toFixed(4) + " BURN/st" : "Searching…", "var(--cy)"),
+    MB("BURN Equivalent", F(burnEq,0), "var(--o)"),
+    MB("USD Value", "$"+F(stBurnVal,0), "var(--g)"),
+    MB("Yield (BURN)", (stYield>=0?"+":"")+F(stYield,0), stYield>=0?"var(--g)":"var(--r)"),
+    MB("Yield %", stYieldPct.toFixed(2)+"%", stYieldPct>=0?"var(--g)":"var(--r)")
   ].join("");
 
-  // ── ② Buyflow (LP-aware) ──
+  // ── P&L ACTIVE ──
+  var pDep=0, pLeft=0, pUsdc=0;
+  for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;
+    var pv=calcV3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);
+    pDep+=LP[pi].b; pLeft+=pv.left; pUsdc+=pv.usdc;}
+  var lpV=pLeft*P+pUsdc, hdV=pDep*P, il=lpV-hdV, ilP=hdV>0?(il/hdV*100):0;
+  $("pnlGrid").innerHTML = [
+    MB("Deposited", F(pDep,0)+" BURN", "var(--o)"),
+    MB("Remaining", F(pLeft,0)+" BURN", "var(--tx)"),
+    MB("USDC Earned", "$"+F(pUsdc,2), "var(--g)"),
+    MB("LP Value", "$"+F(lpV,2), "var(--br)"),
+    MB("HODL Value", "$"+F(hdV,2), "var(--mt)"),
+    MB("IL", (il>=0?"+$":"-$")+F(Math.abs(il),2)+" ("+ilP.toFixed(1)+"%)", il>=0?"var(--g)":"var(--r)")
+  ].join("");
 
-  // Calculate current LP state (baseline)
-  var currentLpBurnSold = 0, currentLpUsdc = 0;
-  for (var li = 0; li < USER_LP.length; li++) {
-    if (USER_LP[li].fullRange) continue;
-    var cv = calcV3Position(USER_LP[li].burn, USER_LP[li].lo, USER_LP[li].hi, price);
-    currentLpBurnSold += (USER_LP[li].burn - cv.burnLeft);
-    currentLpUsdc += cv.usdc;
+  // ── PORTFOLIO TOTAL ──
+  var walletVal = MY_BURN * P;
+  var stVal = burnEq * P;
+  var totalVal = TOT_REAL + walletVal + stVal + lpV;
+  var totalProfit = totalVal - INVESTED;
+  var roi = (totalProfit / INVESTED * 100);
+  $("totalGrid").innerHTML = [
+    MB("Invested", "$"+F(INVESTED,0), "var(--r)"),
+    MB("Realized", "$"+F(TOT_REAL,0), "var(--g)"),
+    MB("Wallet", "$"+F(walletVal,0), "var(--o)"),
+    MB("stBURN", "$"+F(stVal,0), "var(--p)"),
+    MB("Active LPs", "$"+F(lpV,0), "var(--cy)"),
+    MB("Total Value", "$"+F(totalVal,0), "var(--br)"),
+    MB("Profit", (totalProfit>=0?"+$":"-$")+F(Math.abs(totalProfit),0), totalProfit>=0?"var(--g)":"var(--r)"),
+    MB("ROI", roi.toFixed(0)+"%", roi>=0?"var(--g)":"var(--r)")
+  ].join("");
+
+  // ── HISTORY ──
+  var hR="";
+  for(var hi2=0;hi2<CLOSED.length;hi2++){var hp=CLOSED[hi2];
+    var hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"—";
+    hR+='<tr><td style="color:var(--mt)">'+hp.d+'</td><td style="color:var(--o)">'+F(hp.b,0)+'</td><td style="color:var(--dm);font-size:10px">'+hr+'</td><td style="color:var(--g)">$'+F(hp.u,2)+'</td><td style="color:var(--mt);font-size:9px">$'+(hp.u/hp.b).toFixed(4)+'</td></tr>';}
+  for(var mi2=0;mi2<SELLS.length;mi2++){var ms=SELLS[mi2];
+    hR+='<tr style="background:#60a5fa04"><td style="color:var(--mt)">'+ms.d+'</td><td style="color:var(--o)">'+F(ms.b,0)+'</td><td style="color:var(--dm)">Market</td><td style="color:var(--g)">$'+F(ms.u,2)+'</td><td style="color:var(--mt);font-size:9px">$'+(ms.u/ms.b).toFixed(4)+'</td></tr>';}
+  hR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TOT_SOLD,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TOT_REAL,0)+'</td><td style="color:var(--mt);font-size:9px">Ø $'+(TOT_REAL/TOT_SOLD).toFixed(4)+'</td></tr>';
+  $("histB").innerHTML = hR;
+
+  // ── LP RANGE BAR ──
+  var mxP=2.50, bar='<div style="position:relative;height:36px;background:#080c16;border-radius:6px;overflow:hidden;margin-bottom:4px">';
+  for(var ri=0;ri<LP.length;ri++){var rp=LP[ri];if(rp.fr)continue;
+    var rL=(rp.lo/mxP*100),rW=((rp.hi-rp.lo)/mxP*100);
+    var rA=P>=rp.lo&&P<=rp.hi, rF=P>rp.hi;
+    var rBg=rF?"rgba(52,211,153,.15)":rA?"rgba(251,146,60,.2)":"rgba(96,165,250,.06)";
+    var rBd=rF?"rgba(52,211,153,.4)":rA?"rgba(251,146,60,.5)":"rgba(96,165,250,.12)";
+    var rC=rF?"var(--g)":rA?"var(--o)":"var(--dm)";
+    bar+='<div style="position:absolute;left:'+rL+'%;width:'+rW+'%;height:100%;background:'+rBg+';border-left:1px solid '+rBd+';border-right:1px solid '+rBd+';display:flex;align-items:center;padding:0 2px"><span style="font-size:7px;color:'+rC+';white-space:nowrap">'+F(rp.b,0)+(rF?" ✓":rA?" ●":"")+'</span></div>';}
+  var pL=Math.min(P/mxP*100,99);
+  bar+='<div style="position:absolute;left:'+pL+'%;width:2px;height:100%;background:var(--br);z-index:10;box-shadow:0 0 6px rgba(226,232,240,.5)"></div>';
+  bar+='</div><div style="display:flex;justify-content:space-between;font-size:7px;color:var(--dm);padding:0 2px">';
+  [0,.20,.50,1,1.5,2,2.5].forEach(function(t){bar+="<span>$"+t.toFixed(2)+"</span>";});
+  bar+="</div>"; $("rangeBar").innerHTML=bar;
+
+  // ── LP TABLE ──
+  var curSold=0, curU=0;
+  for(var li2=0;li2<LP.length;li2++){if(LP[li2].fr)continue;var cv=calcV3(LP[li2].b,LP[li2].lo,LP[li2].hi,P);curSold+=(LP[li2].b-cv.left);curU+=cv.usdc;}
+
+  var lpR="", tBI=0, tBL=0, tU=0;
+  for(var lp=0;lp<LP.length;lp++){var pos=LP[lp];
+    var st,cl,bI,bL,uE,rng,pTxt;
+    if(pos.fr){rng="Full Range";bI=actBurn;bL=actBurn;uE=actUsdc;st="ACTIVE";cl="#c084fc";pTxt="Full range";}
+    else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+"–$"+pos.hi.toFixed(2);bI=pos.b;
+      var v3=calcV3(pos.b,pos.lo,pos.hi,P);bL=v3.left;uE=v3.usdc;
+      if(P<pos.lo){st="BELOW";cl="#60a5fa";pTxt="Waiting";}
+      else if(P>=pos.hi){st="FILLED";cl="#34d399";pTxt="100%";}
+      else{st="ACTIVE";cl="#fb923c";pTxt=v3.pct.toFixed(0)+"%";}}
+    tBI+=bI;tBL+=bL;tU+=uE;
+    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:8px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+TG(st+" · "+pTxt,cl)+'</td></tr>';}
+  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU,2)+'</td><td></td></tr>';
+  $("lpB").innerHTML=lpR;
+
+  var strat; if(P<.149)strat="All sell positions above. Free rise.";
+  else if(P<.20)strat="20.3K pos ($0.149–$0.20) ACTIVE. 20K above as walls.";
+  else if(P<.50)strat="First filled. 5K ($0.14–$0.50) active. 15K above.";
+  else if(P<1)strat="Narrow filled. ($0.50–$1.00) active. 10K above.";
+  else if(P<1.5)strat="Lower sold. ($1.00–$1.50) active.";
+  else if(P<2)strat="4 filled. Final ($1.50–$2.00) active.";
+  else strat="ALL sold. 40.3K BURN converted.";
+  $("lpS").textContent=strat;
+
+  // ── BUYFLOW ──
+  var bR="";
+  for(var i=0;i<TGT.length;i++){var tp=TGT[i],ok=tp>P;
+    var uN=ok?Math.sqrt(K*tp)-Y:0, bB=ok?X-Math.sqrt(K/tp):0, m=tp/P;
+    var lS=0,lU=0;if(ok){for(var lj=0;lj<LP.length;lj++){if(LP[lj].fr)continue;var tv=calcV3(LP[lj].b,LP[lj].lo,LP[lj].hi,tp);lS+=(LP[lj].b-tv.left);lU+=tv.usdc;}}
+    var dS=lS-curSold, dU=lU-curU;
+    bR+='<tr style="opacity:'+(ok?1:.3)+'"><td class="bld">$'+tp.toFixed(2)+'</td><td style="color:'+(ok?"var(--g)":"var(--mt)")+'">'+(ok?"$"+F(uN,0):"—")+'</td><td style="color:var(--o)">'+(ok?F(bB,0):"—")+'</td><td style="color:var(--cy)">'+(ok&&dS>0?F(dS,0):"—")+'</td><td style="color:var(--g)">'+(ok&&dU>0?"$"+F(dU,0):"—")+'</td><td>'+TG(m.toFixed(1)+"x",m>5?"#c084fc":m>2?"#fb923c":"#60a5fa")+'</td></tr>';}
+  $("bfB").innerHTML=bR;
+
+  // ── DEX SUPPLY ──
+  var dsR="";
+  for(var j=0;j<TGT.length;j++){var tp2=TGT[j];
+    var xl=Math.sqrt(K/tp2),yl=Math.sqrt(K*tp2),rm=((X-xl)/X)*100;
+    dsR+='<tr><td class="bld">$'+tp2.toFixed(2)+'</td><td style="color:var(--o)">'+F(xl,0)+'</td><td style="color:var(--g)">$'+F(yl,0)+'</td><td>'+TG(rm>0?rm.toFixed(1)+"%":"—",rm>70?"#f87171":rm>40?"#fb923c":"#60a5fa")+'</td></tr>';}
+  $("dsB").innerHTML=dsR;
+
+  // ── SELL IMPACT ──
+  var siR="";
+  for(var s=0;s<SEL.length;s++){var n=SEL[s];
+    var xn=X+n,yn=K/xn,np=yn/xn,imp=((np-P)/P)*100,uo=Math.max(0,Y-yn);
+    siR+='<tr><td class="bld">'+F(n,0)+'</td><td style="color:var(--g)">$'+F(uo,2)+'</td><td style="color:var(--o)">'+FP(np)+'</td><td>'+TG(imp.toFixed(1)+"%",imp<-50?"#f87171":imp<-20?"#fb923c":"#60a5fa")+'</td></tr>';}
+  $("siB").innerHTML=siR;
+
+  // ── POOL STATE ──
+  var dTvl = tvlUsd>0?tvlUsd:(X*P+Y);
+  $("poolG").innerHTML = [
+    MB("BURN Pooled", F(actBurn,0), "var(--o)"),
+    MB("USDC Pooled", "$"+F(actUsdc,2), "var(--g)"),
+    MB("TVL", "$"+F(dTvl,0), "var(--p)"),
+    MB("k (AMM)", F(K,0), "var(--b)"),
+    MB("Vol 24h", vol24>0?"$"+F(vol24,0):"—", "var(--cy)"),
+    MB("Vol 5m", m5v>0?"$"+F(m5v,0):"—", "var(--cy)"),
+    MB("Txns 24h", b24+" buy / "+s24+" sell", b24>s24?"var(--g)":"var(--r)")
+  ].join("");
+
+  // ── WHALE ──
+  if(whales.length>0){
+    var wH=whales.map(function(w){
+      var t=w.t.toLocaleTimeString();
+      var c=w.type==="SELL"?"var(--r)":"var(--g)";
+      return '<div style="padding:4px 0;border-bottom:1px solid #0f172a"><span style="color:var(--mt)">'+t+'</span> '+TG(w.type,w.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br);font-weight:600">$'+F(w.vol,0)+'</span></div>';
+    }).join("");
+    $("whaleBox").innerHTML=wH;
+  } else {
+    $("whaleBox").innerHTML='<span style="color:var(--dm)">No whale activity detected. Monitoring 5m volume spikes...</span>';
   }
 
-  var bfRows = "";
-  for (var i = 0; i < TARGETS.length; i++) {
-    var tp = TARGETS[i];
-    var reachable = tp > price;
-    var usdcNeeded = reachable ? Math.sqrt(k * tp) - y : 0;
-    var burnBought = reachable ? x - Math.sqrt(k / tp) : 0;
-    var mult = tp / price;
-
-    // Calculate LP state at this target price
-    var lpBurnSold = 0, lpUsdc = 0;
-    if (reachable) {
-      for (var lj = 0; lj < USER_LP.length; lj++) {
-        if (USER_LP[lj].fullRange) continue;
-        var tv = calcV3Position(USER_LP[lj].burn, USER_LP[lj].lo, USER_LP[lj].hi, tp);
-        lpBurnSold += (USER_LP[lj].burn - tv.burnLeft);
-        lpUsdc += tv.usdc;
-      }
-    }
-    // Delta from current state
-    var deltaLpBurn = lpBurnSold - currentLpBurnSold;
-    var deltaLpUsdc = lpUsdc - currentLpUsdc;
-
-    bfRows += '<tr style="opacity:' + (reachable ? 1 : 0.3) + '">' +
-      '<td class="td-b">$' + tp.toFixed(2) + '</td>' +
-      '<td style="color:' + (reachable ? "var(--g)" : "var(--mut)") + '">' + (reachable ? "$" + fmt(usdcNeeded, 0) : "Above") + '</td>' +
-      '<td style="color:var(--o)">' + (reachable ? fmt(burnBought, 0) : "—") + '</td>' +
-      '<td style="color:var(--cy)">' + (reachable && deltaLpBurn > 0 ? fmt(deltaLpBurn, 0) : "—") + '</td>' +
-      '<td style="color:var(--g)">' + (reachable && deltaLpUsdc > 0 ? "$" + fmt(deltaLpUsdc, 0) : "—") + '</td>' +
-      '<td>' + tag(mult.toFixed(1) + "x", mult > 5 ? "#c084fc" : mult > 2 ? "#fb923c" : "#60a5fa") + '</td></tr>';
-  }
-  el("buyflowBody").innerHTML = bfRows;
-
-  // ── ③ Sell Impact ──
-  var siRows = "";
-  for (var s = 0; s < SELL_SIZES.length; s++) {
-    var sellAmt = SELL_SIZES[s];
-    var xNew = x + sellAmt;
-    var yNew = k / xNew;
-    var newPrice = yNew / xNew;
-    var impact = ((newPrice - price) / price) * 100;
-    var usdcOut = Math.max(0, y - yNew);
-    siRows += '<tr>' +
-      '<td class="td-b">' + fmt(sellAmt, 0) + ' BURN</td>' +
-      '<td style="color:var(--g)">$' + fmt(usdcOut, 2) + '</td>' +
-      '<td style="color:var(--o)">' + fmtPrice(newPrice) + '</td>' +
-      '<td>' + tag(impact.toFixed(1) + "%", impact < -50 ? "#f87171" : impact < -20 ? "#fb923c" : "#60a5fa") + '</td></tr>';
-  }
-  el("sellBody").innerHTML = siRows;
-
-  // ── ⑤ LP ──
-  var lpRows = "";
-  var totalBurnIn = 0, totalBurnLeft = 0, totalUsdc = 0;
-
-  for (var lp = 0; lp < USER_LP.length; lp++) {
-    var pos = USER_LP[lp];
-    var status, color, burnIn, burnLeft, usdcEarned, rangeText, pctText;
-
-    if (pos.fullRange) {
-      // DAOcademy full-range position: uses actual pooled tokens
-      rangeText = "Full Range";
-      burnIn = actualBurn;
-      burnLeft = actualBurn;
-      usdcEarned = actualUsdc;
-      status = "ACTIVE"; color = "#c084fc";
-      pctText = "Full range LP";
-    } else {
-      rangeText = "$" + pos.lo.toFixed(pos.lo < 1 ? 3 : 2) + " – $" + pos.hi.toFixed(2);
-      burnIn = pos.burn;
-      var v3 = calcV3Position(pos.burn, pos.lo, pos.hi, price);
-      burnLeft = v3.burnLeft;
-      usdcEarned = v3.usdc;
-
-      if (price < pos.lo) {
-        status = "BELOW"; color = "#60a5fa";
-        pctText = "Waiting";
-      } else if (price >= pos.hi) {
-        status = "FILLED"; color = "#34d399";
-        pctText = "100% sold";
-      } else {
-        status = "ACTIVE"; color = "#fb923c";
-        pctText = v3.pct.toFixed(0) + "% filled";
-      }
-    }
-
-    totalBurnIn += burnIn;
-    totalBurnLeft += burnLeft;
-    totalUsdc += usdcEarned;
-
-    lpRows += '<tr>' +
-      '<td class="td-b">' + rangeText + (pos.label === "DAOcademy Full Range" ? ' <span style="font-size:9px;color:var(--p)">(DAOcademy)</span>' : '') + '</td>' +
-      '<td style="color:var(--o)">' + fmt(burnIn, 0) + '</td>' +
-      '<td style="color:var(--txt)">' + fmt(burnLeft, 0) + '</td>' +
-      '<td style="color:var(--g)">$' + fmt(usdcEarned, 2) + '</td>' +
-      '<td>' + tag(status + " · " + pctText, color) + '</td></tr>';
-  }
-
-  // Totals row
-  lpRows += '<tr style="border-top:1px solid var(--bdr)">' +
-    '<td class="td-b">TOTAL</td>' +
-    '<td style="color:var(--o)">' + fmt(totalBurnIn, 0) + '</td>' +
-    '<td style="color:var(--txt)">' + fmt(totalBurnLeft, 0) + '</td>' +
-    '<td style="color:var(--g);font-weight:600">$' + fmt(totalUsdc, 2) + '</td>' +
-    '<td></td></tr>';
-
-  el("lpBody").innerHTML = lpRows;
-
-  // LP Strategy text
-  var strat;
-  if (price < 0.149) strat = "All sell positions above price. Price can rise freely. DAOcademy full-range LP provides baseline liquidity.";
-  else if (price < 0.20) strat = "20.3K BURN position ($0.149–$0.20) is ACTIVE — absorbing buy pressure. 20K BURN in wider ranges above. DAOcademy full-range LP active.";
-  else if (price < 0.50) strat = "First position filled. 5K BURN position ($0.14–$0.50) active. 15K BURN in wider ranges above as sell walls.";
-  else if (price < 1.00) strat = "Narrow positions filled. Position ($0.50–$1.00) active. 10K BURN remaining in upper sell walls.";
-  else if (price < 1.50) strat = "Lower positions sold. Position ($1.00–$1.50) active. Significant profit secured.";
-  else if (price < 2.00) strat = "4 positions filled. Final position ($1.50–$2.00) active.";
-  else strat = "ALL sell positions converted. 40.3K BURN sold. Only DAOcademy full-range LP remains.";
-  el("lpStrategy").textContent = strat;
-
-  // Footer
-  el("footer").innerHTML = 'price = y/x · k = x×y · Source: ' + (srcLabels[dataSource] || dataSource) +
-    ' · Pool: ' + POOL_ADDR.slice(0, 10) + '…<br>All estimates use constant-product AMM. Actual V3 behavior may differ.';
+  // ── FOOTER ──
+  $("foot").innerHTML = 'BURN Terminal · '+SRC+' · Pool: '+POOL.slice(0,8)+'… · stBURN: '+(stFound?"✓":"…");
 }
 
-// ═══════════════════════════════════════════════════════
-// STARTUP
-// ═══════════════════════════════════════════════════════
-
-fetchPool();
-refreshTimer = setInterval(function() {
-  if (activeTab === "auto") fetchPool();
+// ── STARTUP ──
+go();
+fetchSt();
+IV = setInterval(function(){
+  if(TAB==="auto") go();
+  fetchSt(); // refresh stBURN ratio too
 }, 15000);
-
 </script>
 </body>
 </html>
