@@ -544,8 +544,9 @@ function render(){
 
 // ═══ START ═══
 go(); fetchSt(); fetchSup(); if(MY_WALLET)fetchWal();
-setInterval(function(){if(TAB==="auto")go();fetchSt();},15000);
-setInterval(function(){fetchSup();if(MY_WALLET)fetchWal();},60000);
+setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();},15000);
+setInterval(function(){if(document.hidden)return;fetchSup();if(MY_WALLET)fetchWal();},60000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();}});
 </script>
 </body>
 </html>
