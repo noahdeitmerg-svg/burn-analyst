@@ -265,11 +265,13 @@ function notify(title,body){if(notifOn&&Notification.permission==="granted"){try
 // ═══ FETCH: Pool ═══
 function extractPair(j){
   if(j.pairs&&j.pairs.length>0){
+    // 1st: exact pool address match
     for(var i=0;i<j.pairs.length;i++){if(j.pairs[i].pairAddress&&j.pairs[i].pairAddress.toLowerCase()===POOL)return j.pairs[i];}
-    return j.pairs[0];
+    // 2nd: any Arbitrum pair with BURN base token (avoid wrong chain!)
+    for(var i=0;i<j.pairs.length;i++){if(j.pairs[i].chainId==="arbitrum"&&j.pairs[i].baseToken&&j.pairs[i].baseToken.symbol==="BURN")return j.pairs[i];}
+    // NEVER fallback to pairs[0] — could be Solana/BSC/etc
   }
-  if(j.pair)return j.pair;
-  if(Array.isArray(j)&&j.length>0)return j[0];
+  if(j.pair&&j.pair.chainId==="arbitrum")return j.pair;
   return null;
 }
 
