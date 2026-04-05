@@ -133,7 +133,7 @@ function v3(B,lo,hi,P){
 // ═══ STATE ═══
 var X=0,Y=0,K=0,P=0,SRC="",TAB="auto",RAW=null;
 var aB=0,aU=0,tU=0;
-var stR=1,stOK=false;
+var stR=1,stOK=false,stSrc="";
 var sup={total:0,burned:0,locked:0,circ:0,stSup:0};
 var hst=[],whl=[],pm5={v:0,s:0,b:0};
 var first=true;
@@ -179,12 +179,21 @@ async function go(manual){
   $("lbox").classList.add("hid");first=false;btn.disabled=false;
 }
 
-// ═══ FETCH: stBURN (direct pool) ═══
+// ═══ FETCH: stBURN ratio (on-chain → DEX fallback) ═══
 async function fetchSt(){
+  // Primary: call convertToAssets(1e18) on stBURN contract (ERC-4626)
+  // This returns the ACTUAL staking pool conversion rate
+  try{
+    var callData="0x07a2d13a0000000000000000000000000000000000000000000000000de0b6b3a7640000";
+    var res=await rpc(STBURN_TK,callData);
+    var ratio=h2n(res);
+    if(ratio>0.9&&ratio<2){stR=ratio;stOK=true;stSrc="chain";return;}
+  }catch(e){}
+  // Fallback: DexScreener BURN/stBURN pool price
   try{var r=await fetch(DS_ST);if(!r.ok)return;var j=await r.json(),p=j.pairs&&j.pairs[0];if(!p)return;
     var bs=(p.baseToken&&p.baseToken.symbol)||"";
     if(bs.indexOf("stBURN")>=0){stR=parseFloat(p.priceNative)||1;}else{stR=1/(parseFloat(p.priceNative)||1);}
-    stOK=true;}catch(e){}}
+    stOK=true;stSrc="dex";}catch(e){}}
 
 // ═══ FETCH: On-chain supply ═══
 async function fetchSup(){
@@ -237,12 +246,12 @@ function render(){
   // PORTFOLIO
   var bEq=MY_STBURN*stR,eff=MY_BURN+bEq+ALP;
   $("portGrid").innerHTML=[MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),
-    MB("Ratio",stOK?stR.toFixed(4):"…","var(--cy)"),MB("Effective",F(eff,0)+" BURN","var(--br)"),
+    MB("Ratio",stOK?stR.toFixed(6):"…","var(--cy)"),MB("Effective",F(eff,0)+" BURN","var(--br)"),
     MB("In LPs",F(ALP,0),"var(--b)"),MB("USD","$"+F(eff*P,0),"var(--g)")].join("");
 
   // stBURN
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
-  $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio",stOK?stR.toFixed(4)+" BURN/st":"…","var(--cy)"),
+  $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):"…","var(--cy)"),
     MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("USD","$"+F(stV,0),"var(--g)"),
     MB("Yield",(stY>=0?"+":"")+F(stY,0)+" BURN",stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
 
@@ -362,7 +371,7 @@ function render(){
   if(whl.length>0){$("whaleBox").innerHTML=whl.map(function(w){return'<div style="padding:3px 0;border-bottom:1px solid #0f172a"><span style="color:var(--mt)">'+w.t.toLocaleTimeString()+"</span> "+TG(w.type,w.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br)">$'+F(w.vol,0)+"</span></div>";}).join("");}
   else $("whaleBox").innerHTML='<span style="color:var(--dm)">Monitoring 5m spikes...</span>';
 
-  $("foot").innerHTML="BURN Terminal · "+SRC+" · stBURN:"+(stOK?"✓"+stR.toFixed(3):"…")+" · Supply:"+(sup.total>0?"✓":"…")+(MY_WALLET?" · Wallet:✓":"");
+  $("foot").innerHTML="BURN Terminal · "+SRC+" · stBURN:"+(stOK?"✓"+stR.toFixed(6)+" ("+stSrc+")":"…")+" · Supply:"+(sup.total>0?"✓":"…")+(MY_WALLET?" · Wallet:✓":"");
 }
 
 // ═══ START ═══
