@@ -244,7 +244,7 @@ var aB=0,aU=0,tU=0;
 var stR=1,stOK=false,stSrc="";
 var sup={total:0,burned:0,locked:0,circ:0,stSup:0};
 var hst=[],whl=[],pm5={v:0,s:0,b:0};
-var first=true;
+var first=true,failCount=0;
 
 // ═══ HELPERS ═══
 function $(id){return document.getElementById(id)}
@@ -257,9 +257,10 @@ function tog(el,id){var b=$(id);b.classList.toggle("open");el.classList.toggle("
 
 // ═══ RPC ═══
 async function rpc(to,data){
-  try{var r=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:to,data:data},"latest"],id:1})});
-    var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
+  try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+    var r=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:to,data:data},"latest"],id:1}),signal:ac.signal});
+    clearTimeout(tm);var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
 function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e18;}
 function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e6;}
@@ -290,7 +291,8 @@ async function go(manual){
   var p=null,lastErr="";
   for(var ui=0;ui<urls.length&&!p;ui++){
     try{
-      var r=await fetch(urls[ui]);
+      var ac2=new AbortController();var tm2=setTimeout(function(){ac2.abort();},10000);
+      var r=await fetch(urls[ui],{signal:ac2.signal});clearTimeout(tm2);
       if(!r.ok){lastErr="API "+r.status+" ["+ui+"]";continue;}
       var j=await r.json();
       console.log("DS["+ui+"]:",JSON.stringify(j).slice(0,300));
@@ -306,7 +308,7 @@ async function go(manual){
       if(Math.abs(dv)>500&&(ds>0||db>0)){whl.unshift({t:new Date(),type:ds>db?"SELL":"BUY",vol:Math.abs(dv)});if(whl.length>15)whl.pop();}}
     pm5={v:mv,s:ms,b:mb};
     if(TAB==="auto"&&apiP>0){var vy=aU>0?aU:(tU>0?tU/2:0),vx=vy/apiP;if(vx>0&&vy>0)set(vx,vy,"api");}
-    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ DexScreener · 60s</span>';sts("ok");
+    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ DexScreener · 60s</span>';sts("ok");failCount=0;
   }else{
     // ON-CHAIN FALLBACK: Uniswap V3 slot0 + pool balances
     console.log("DexScreener failed ("+lastErr+"), trying on-chain...");
@@ -322,12 +324,24 @@ async function go(manual){
           var cP=Number(10n**30n*(2n**192n)/(sq*sq))/1e18;
           console.log("On-chain price: $"+cP.toFixed(6),"pool:",pB,"BURN /",pU,"USDC");
           if(cP>0.0001&&cP<100){var vy2=pU,vx2=vy2/cP;set(vx2,vy2,"chain");ok2=true;
-            $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--cy)">⛓ On-Chain · 60s</span>';sts("ok");}
+            $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--cy)">⛓ On-Chain · 60s</span>';sts("ok");failCount=0;}
         }
       }
     }catch(e){console.log("On-chain err:",e);}
-    if(!ok2){$("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+lastErr;
-      $("astat").innerHTML='<span style="color:var(--mt)">'+lastErr+'</span>';sts("err");}
+    if(!ok2){
+      failCount++;
+      if(P>0){
+        // Have data — stay silent, keep last known price
+        $("ebox").classList.add("hid");
+        $("astat").innerHTML='<span style="color:var(--mt)">Last update '+new Date().toLocaleTimeString()+' · retry '+(failCount)+'</span>';
+      }else if(failCount>=3){
+        // No data at all after 3 tries — show error
+        $("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+lastErr;
+        $("astat").innerHTML='<span style="color:var(--r)">Offline</span>';sts("err");
+      }else{
+        $("astat").innerHTML='<span style="color:var(--mt)">Connecting... ('+failCount+'/3)</span>';
+      }
+    }
   }
   $("main").classList.remove("hid");
   if(P>0||K===0)render();
