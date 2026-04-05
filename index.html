@@ -184,9 +184,10 @@ var DAO_VAULT="0x72aDe1298731f057796ECAb891F623Ae4C18E7c1";
 var ARB_RPC="https://arb1.arbitrum.io/rpc";
 
 var DS="https://api.dexscreener.com/latest/dex/pairs/arbitrum/"+POOL;
-var DS2="https://api.dexscreener.com/pairs/v1/arbitrum/"+POOL;
+var DS_TK="https://api.dexscreener.com/latest/dex/tokens/"+BURN_TK.toLowerCase();
+var DS_SEARCH="https://api.dexscreener.com/latest/dex/search?q=BURN+USDC+arbitrum";
 var DS_ST="https://api.dexscreener.com/latest/dex/pairs/arbitrum/"+STBURN_POOL;
-var DS_TK="https://api.dexscreener.com/latest/dex/tokens/"+BURN_TK;
+var USDC_TK="0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 
 // ═══ CONFIG ═══
 var MY_WALLET=""; // Set wallet address for auto-balance
@@ -253,6 +254,7 @@ async function rpc(to,data){
     var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
 function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e18;}
+function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e6;}
 
 // ═══ NOTIFICATIONS ═══
 var prevPrice=0, notifOn=false;
@@ -261,52 +263,64 @@ function reqNotif(){if(!("Notification" in window)){alert("Browser does not supp
 function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body});}catch(e){}}}
 
 // ═══ FETCH: Pool ═══
-// Extract pair from various DexScreener response formats
 function extractPair(j){
-  // Standard: { pairs: [...] }
   if(j.pairs&&j.pairs.length>0){
-    // If multiple pairs, find our specific pool
     for(var i=0;i<j.pairs.length;i++){if(j.pairs[i].pairAddress&&j.pairs[i].pairAddress.toLowerCase()===POOL)return j.pairs[i];}
-    return j.pairs[0]; // fallback to first
+    return j.pairs[0];
   }
-  if(j.pair)return j.pair; // singular: { pair: {...} }
-  if(Array.isArray(j)&&j.length>0)return j[0]; // raw array
+  if(j.pair)return j.pair;
+  if(Array.isArray(j)&&j.length>0)return j[0];
   return null;
 }
 
 async function go(manual){
   var btn=$("rbtn");if(manual)btn.disabled=true;
   if(first)$("lbox").classList.remove("hid");
-  var urls=[DS,DS2,DS_TK];
+  var urls=[DS,DS_TK,DS_SEARCH];
   var p=null,lastErr="";
   for(var ui=0;ui<urls.length&&!p;ui++){
     try{
       var r=await fetch(urls[ui]);
-      if(!r.ok){lastErr="API "+r.status;continue;}
+      if(!r.ok){lastErr="API "+r.status+" ["+ui+"]";continue;}
       var j=await r.json();
-      console.log("DexScreener["+ui+"]:",JSON.stringify(j).slice(0,200));
+      console.log("DS["+ui+"]:",JSON.stringify(j).slice(0,300));
       p=extractPair(j);
-      if(!p)lastErr="No pair in response (format "+ui+")";
-    }catch(e){lastErr=e.message;}
+      if(!p)lastErr="Empty ["+ui+"]";
+    }catch(e){lastErr=e.message;console.log("DS["+ui+"] err:",e.message);}
   }
   if(p){
     RAW=p;aB=parseFloat(p.liquidity&&p.liquidity.base)||0;aU=parseFloat(p.liquidity&&p.liquidity.quote)||0;
     tU=parseFloat(p.liquidity&&p.liquidity.usd)||0;var apiP=parseFloat(p.priceUsd)||0;
-    // whale
     var mv=parseFloat(p.volume&&p.volume.m5)||0,mb=(p.txns&&p.txns.m5&&p.txns.m5.buys)||0,ms=(p.txns&&p.txns.m5&&p.txns.m5.sells)||0;
     if(pm5.v>0){var dv=mv-pm5.v,ds=ms-pm5.s,db=mb-pm5.b;
       if(Math.abs(dv)>500&&(ds>0||db>0)){whl.unshift({t:new Date(),type:ds>db?"SELL":"BUY",vol:Math.abs(dv)});if(whl.length>15)whl.pop();}}
     pm5={v:mv,s:ms,b:mb};
     if(TAB==="auto"&&apiP>0){var vy=aU>0?aU:(tU>0?tU/2:0),vx=vy/apiP;if(vx>0&&vy>0)set(vx,vy,"api");}
-    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ Live · 15s</span>';sts("ok");
+    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ DexScreener · 15s</span>';sts("ok");
   }else{
-    $("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+lastErr;
-    $("astat").innerHTML='<span style="color:var(--mt)">'+lastErr+'</span>';sts("err");
+    // ON-CHAIN FALLBACK: Uniswap V3 slot0 + pool balances
+    console.log("DexScreener failed ("+lastErr+"), trying on-chain...");
+    var ok2=false;
+    try{
+      var bH2=await rpc(BURN_TK,bof(POOL)),uH2=await rpc(USDC_TK,bof(POOL));
+      var pB=h2n(bH2),pU=h2n6(uH2);
+      if(pB>0&&pU>0){
+        aB=pB;aU=pU;tU=pU*2;
+        var s0=await rpc(POOL,"0x3850c7bd");
+        if(s0&&s0.length>=66){
+          var sq=BigInt("0x"+s0.slice(2,66));
+          var cP=Number(10n**30n*(2n**192n)/(sq*sq))/1e18;
+          console.log("On-chain price: $"+cP.toFixed(6),"pool:",pB,"BURN /",pU,"USDC");
+          if(cP>0.0001&&cP<100){var vy2=pU,vx2=vy2/cP;set(vx2,vy2,"chain");ok2=true;
+            $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--cy)">⛓ On-Chain · 15s</span>';sts("ok");}
+        }
+      }
+    }catch(e){console.log("On-chain err:",e);}
+    if(!ok2){$("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+lastErr;
+      $("astat").innerHTML='<span style="color:var(--mt)">'+lastErr+'</span>';sts("err");}
   }
-  // ALWAYS show dashboard and render, even if API failed
   $("main").classList.remove("hid");
-  if(P>0)render(); // render with existing data if available
-  else if(K===0)render(); // render with defaults (shows — for price)
+  if(P>0||K===0)render();
   $("lbox").classList.add("hid");first=false;btn.disabled=false;
 }
 
