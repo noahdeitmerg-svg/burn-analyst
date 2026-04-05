@@ -415,8 +415,9 @@ function render(){
   $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
-  var pD=0,pL=0,pU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;}
+  var pD=0,pL=0,pU=0,maxU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;var pf=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,LP[pi].hi);maxU+=pf.usdc;}
   var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
+  var outU=maxU-pU,fillPct=maxU>0?(pU/maxU*100):0;
 
   // PORTFOLIO: Ledger (HODL)
   var bEq=MY_STBURN*stR,ledgerBurn=MY_BURN+bEq,ledgerUsd=ledgerBurn*P;
@@ -443,9 +444,9 @@ function render(){
   }else{$("supplyGrid").innerHTML='<div class="ld">Loading on-chain supply data</div>';}
 
   // P&L ACTIVE (display)
-  $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0),"var(--o)"),MB("Left",F(pL,0),"var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
-    MB("LP Value","$"+F(lpV,2),"var(--br)"),MB("HODL","$"+F(hdV,2),"var(--mt)"),
-    MB("IL",(il>=0?"+$":"-$")+F(Math.abs(il),2),il>=0?"var(--g)":"var(--r)")].join("");
+  $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0)+" BURN","var(--o)"),MB("Left",F(pL,0)+" BURN","var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
+    MB("Max USDC","$"+F(maxU,0),"var(--dm)"),MB("Outstanding","$"+F(outU,0),"var(--cy)"),
+    MB("Filled",fillPct.toFixed(1)+"%",fillPct>50?"var(--g)":fillPct>0?"var(--o)":"var(--mt)")].join("");
 
   // TOTAL (Ledger + DeFi + Realized)
   var eff=ledgerBurn+ALP;
