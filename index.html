@@ -179,18 +179,32 @@ async function go(manual){
   $("lbox").classList.add("hid");first=false;btn.disabled=false;
 }
 
-// ═══ FETCH: stBURN ratio (on-chain → DEX fallback) ═══
+// ═══ FETCH: stBURN ratio (on-chain calculation) ═══
+// ratio = BURN_held_by_staking / stBURN_totalSupply
+var STAKE_CANDIDATES=["0x521B33D8Bd645986E0d7F0Db01bDF8a166408Aa8","0xf42904ae1b58e8E1fdE7180E2F9EBAcdB9C06cD5",STBURN_TK];
 async function fetchSt(){
-  // Primary: call convertToAssets(1e18) on stBURN contract (ERC-4626)
-  // This returns the ACTUAL staking pool conversion rate
   try{
+    // Get stBURN total supply
+    var stSupHex=await rpc(STBURN_TK,"0x18160ddd");
+    var stSup=h2n(stSupHex);
+    if(stSup<=0)return;
+    // Try each candidate: find where the backing BURN is held
+    for(var ci=0;ci<STAKE_CANDIDATES.length;ci++){
+      var bHex=await rpc(BURN_TK,bof(STAKE_CANDIDATES[ci]));
+      var b=h2n(bHex);
+      if(b>0){
+        var r=b/stSup;
+        // Valid ratio should be between 1.0 and 1.5 (stBURN appreciates over BURN)
+        if(r>=1.0&&r<1.5){stR=r;stOK=true;stSrc="chain";return;}
+      }
+    }
+    // Also try convertToAssets as last on-chain attempt
     var callData="0x07a2d13a0000000000000000000000000000000000000000000000000de0b6b3a7640000";
-    var res=await rpc(STBURN_TK,callData);
-    var ratio=h2n(res);
-    if(ratio>0.9&&ratio<2){stR=ratio;stOK=true;stSrc="chain";return;}
+    var res=await rpc(STBURN_TK,callData);var rv=h2n(res);
+    if(rv>=1.0&&rv<1.5){stR=rv;stOK=true;stSrc="chain";return;}
   }catch(e){}
-  // Fallback: DexScreener BURN/stBURN pool price
-  try{var r=await fetch(DS_ST);if(!r.ok)return;var j=await r.json(),p=j.pairs&&j.pairs[0];if(!p)return;
+  // Fallback: DexScreener
+  try{var r2=await fetch(DS_ST);if(!r2.ok)return;var j=await r2.json(),p=j.pairs&&j.pairs[0];if(!p)return;
     var bs=(p.baseToken&&p.baseToken.symbol)||"";
     if(bs.indexOf("stBURN")>=0){stR=parseFloat(p.priceNative)||1;}else{stR=1/(parseFloat(p.priceNative)||1);}
     stOK=true;stSrc="dex";}catch(e){}}
