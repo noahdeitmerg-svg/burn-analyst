@@ -173,20 +173,21 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
 
     <!-- ① PRICE -->
     <div class="card">
-      <div class="lbl">① Real Pool Price (y / x)</div>
+      <div class="lbl">① Real Pool Price</div>
       <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
         <span class="price-big" id="displayPrice"></span>
         <span id="displayPct"></span>
         <span id="displaySrc"></span>
       </div>
       <div style="font-size:10px;color:var(--dim);margin-top:8px;line-height:1.5">
-        Calculated from pool reserves: <span style="color:var(--txt)">price = USDC_reserve / BURN_reserve</span>. This reflects the actual swap price on Uniswap.
+        Current Uniswap V3 pool price from DexScreener (derived from current tick).
+        Virtual AMM reserves are modeled as <span style="color:var(--txt)">y / x = price</span> for buyflow and sell impact calculations.
       </div>
     </div>
 
     <!-- ① POOL STATE -->
     <div class="card">
-      <div class="lbl">① Pool State (k = x × y)</div>
+      <div class="lbl">① Pool State</div>
       <div class="mgrid" id="poolGrid"></div>
     </div>
 
@@ -295,10 +296,13 @@ const USER_LP = [
 ];
 
 // ── Global state ──
-let poolX = 0;           // BURN in pool
-let poolY = 0;           // USDC in pool
+let poolX = 0;           // Virtual BURN reserve (for AMM calc)
+let poolY = 0;           // Virtual USDC reserve (for AMM calc)
 let poolK = 0;           // k = x * y
 let poolPrice = 0;       // price = y / x
+let actualBurn = 0;      // Actual BURN in pool (all LP ranges)
+let actualUsdc = 0;      // Actual USDC in pool (all LP ranges)
+let poolTvl = 0;         // Total value locked
 let dataSource = "none"; // "api" | "est" | "paste" | "manual"
 let activeTab = "auto";
 let apiRawData = null;
@@ -362,33 +366,26 @@ async function fetchPool(isManualRefresh) {
 
     apiRawData = pair;
 
-    // Extract reserves from liquidity object
-    var baseLiq = parseFloat(pair.liquidity && pair.liquidity.base) || 0;
-    var quoteLiq = parseFloat(pair.liquidity && pair.liquidity.quote) || 0;
-    var usdLiq = parseFloat(pair.liquidity && pair.liquidity.usd) || 0;
+    // Extract data from DexScreener response
+    var pooledBurn = parseFloat(pair.liquidity && pair.liquidity.base) || 0;
+    var pooledUsdc = parseFloat(pair.liquidity && pair.liquidity.quote) || 0;
+    var tvlUsd = parseFloat(pair.liquidity && pair.liquidity.usd) || 0;
     var apiPriceUsd = parseFloat(pair.priceUsd) || 0;
 
-    // Validate: check if liquidity.base/quote are token amounts (not USD)
-    // If base * priceUsd ≈ usd/2, they're token amounts. Otherwise derive from price+TVL.
-    var useDirectReserves = false;
-    if (baseLiq > 0 && quoteLiq > 0 && apiPriceUsd > 0 && usdLiq > 0) {
-      var baseValueUsd = baseLiq * apiPriceUsd;
-      var halfTvl = usdLiq / 2;
-      // If base*price is within 5x of halfTVL, reserves are token amounts
-      if (baseValueUsd > halfTvl * 0.2 && baseValueUsd < halfTvl * 5) {
-        useDirectReserves = true;
-      }
-    }
+    // ═══ CRITICAL: For Uniswap V3, priceUsd IS the correct price ═══
+    // liquidity.base/quote are TOTAL tokens across ALL LP ranges,
+    // NOT the virtual reserves at the current tick.
+    // We must use priceUsd as the anchor and derive virtual reserves.
 
-    if (activeTab === "auto") {
-      if (useDirectReserves) {
-        applyReserves(baseLiq, quoteLiq, "api");
-      } else if (apiPriceUsd > 0 && usdLiq > 0) {
-        // Fallback: estimate from price and TVL
-        var estY = usdLiq / 2;
-        var estX = estY / apiPriceUsd;
-        applyReserves(estX, estY, "est");
-      }
+    if (activeTab === "auto" && apiPriceUsd > 0 && tvlUsd > 0) {
+      // Virtual reserves: assume 50/50 split at current price
+      var virtY = tvlUsd / 2;          // USDC side (virtual)
+      var virtX = virtY / apiPriceUsd;  // BURN side (virtual)
+      // Now price = virtY / virtX = apiPriceUsd ✓
+      applyReserves(virtX, virtY, pooledBurn, pooledUsdc, tvlUsd, "api");
+    } else if (activeTab === "auto" && pooledBurn > 0 && pooledUsdc > 0) {
+      // Absolute fallback: raw reserves (less accurate for V3)
+      applyReserves(pooledBurn, pooledUsdc, pooledBurn, pooledUsdc, tvlUsd, "est");
     }
 
     // Success UI
@@ -423,12 +420,15 @@ function updateStatusDot(state) {
 // SET RESERVES + TRIGGER RENDER
 // ═══════════════════════════════════════════════════════
 
-function applyReserves(x, y, source) {
+function applyReserves(x, y, actBurn, actUsdc, tvl, source) {
   if (x <= 0 || y <= 0 || !isFinite(x) || !isFinite(y)) return;
   poolX = x;
   poolY = y;
   poolK = x * y;
   poolPrice = y / x;
+  actualBurn = actBurn || x;
+  actualUsdc = actUsdc || y;
+  poolTvl = tvl || (x * poolPrice + y);
   dataSource = source;
   el("analysisSection").classList.remove("hidden");
   renderAll();
@@ -477,7 +477,7 @@ function handlePaste() {
       ' <span style="color:var(--o);margin-left:8px">BURN: ' + fmt(found.BURN, 0) + '</span>' +
       ' <span style="color:var(--g);margin-left:8px">USDC: $' + fmt(found.USDC, 2) + '</span>' +
       ' <span style="color:var(--bri);margin-left:8px">Price: ' + fmtPrice(calcPrice) + '</span>';
-    applyReserves(found.BURN, found.USDC, "paste");
+    applyReserves(found.BURN, found.USDC, found.BURN, found.USDC, 0, "paste");
   } else if (text.trim().length > 15) {
     out.innerHTML = '<span style="color:var(--o)">⚠ Kein "pooled BURN" / "pooled USDC" gefunden. Kopiere den richtigen Text-Abschnitt.</span>';
   } else {
@@ -495,7 +495,7 @@ function handleManual() {
   var box = el("manualPriceBox");
   if (x > 0 && y > 0) {
     box.innerHTML = metricBox("Calculated Price", fmtPrice(y / x), "var(--bri)");
-    applyReserves(x, y, "manual");
+    applyReserves(x, y, x, y, 0, "manual");
   } else {
     box.innerHTML = "";
   }
@@ -514,7 +514,7 @@ function renderAll() {
   var pct24 = parseFloat(d.priceChange && d.priceChange.h24) || 0;
   var buys24 = (d.txns && d.txns.h24 && d.txns.h24.buys) || 0;
   var sells24 = (d.txns && d.txns.h24 && d.txns.h24.sells) || 0;
-  var tvl = parseFloat(d.liquidity && d.liquidity.usd) || (x * price + y);
+  var apiTvl = parseFloat(d.liquidity && d.liquidity.usd) || 0;
 
   // ── ① Price ──
   el("displayPrice").textContent = fmtPrice(price);
@@ -526,12 +526,15 @@ function renderAll() {
   el("displaySrc").innerHTML = tag(srcLabels[dataSource] || dataSource, srcColors[dataSource] || "#60a5fa");
 
   // ── ① Pool grid ──
+  var displayTvl = poolTvl > 0 ? poolTvl : (apiTvl > 0 ? apiTvl : x * price + y);
   el("poolGrid").innerHTML = [
-    metricBox("BURN in Pool (x)", fmt(x, 0), "var(--o)"),
-    metricBox("USDC in Pool (y)", "$" + fmt(y, 2), "var(--g)"),
+    metricBox("BURN Pooled (actual)", fmt(actualBurn, 0), "var(--o)"),
+    metricBox("USDC Pooled (actual)", "$" + fmt(actualUsdc, 2), "var(--g)"),
+    metricBox("Virtual x (AMM)", fmt(x, 0), "var(--cy)"),
+    metricBox("Virtual y (AMM)", "$" + fmt(y, 2), "var(--cy)"),
     metricBox("k = x × y", fmt(k, 0), "var(--b)"),
     metricBox("Price (y / x)", fmtPrice(price), "var(--bri)"),
-    metricBox("TVL", "$" + fmt(tvl, 0), "var(--p)"),
+    metricBox("TVL", "$" + fmt(displayTvl, 0), "var(--p)"),
     metricBox("Volume 24h", vol24 > 0 ? "$" + fmt(vol24, 0) : "—", "var(--cy)"),
     metricBox("Buys 24h", String(buys24), "var(--g)"),
     metricBox("Sells 24h", String(sells24), "var(--r)")
