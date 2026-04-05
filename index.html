@@ -109,13 +109,16 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <div class="c">
   <div class="col" onclick="tog(this,'sec-port')">Portfolio</div>
   <div id="sec-port" class="col-b">
-    <div class="lb" style="margin-top:4px">Holdings</div>
+    <div class="lb" style="margin-top:4px">🔒 Ledger — HODL</div>
     <div class="mg" id="portGrid"></div>
+    <div class="sep"></div>
+    <div class="lb">🔗 DeFi Wallet — LPs</div>
+    <div class="mg" id="defiGrid"></div>
     <div class="sep"></div>
     <div class="lb">stBURN Yield</div>
     <div class="mg" id="stGrid"></div>
     <div class="sep"></div>
-    <div class="lb">Lifetime</div>
+    <div class="lb">Total</div>
     <div class="mg" id="totalGrid"></div>
   </div>
 </div>
@@ -411,13 +414,22 @@ function render(){
   // Mini market info under price
   $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
 
-  // PORTFOLIO
-  var bEq=MY_STBURN*stR,eff=MY_BURN+bEq+ALP;
-  $("portGrid").innerHTML=[MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),
-    MB("Ratio",stOK?stR.toFixed(6):LD,"var(--cy)"),MB("Effective",F(eff,0)+" BURN","var(--br)"),
-    MB("In LPs",F(ALP,0),"var(--b)"),MB("USD","$"+F(eff*P,0),"var(--g)")].join("");
+  // P&L ACTIVE (compute early, needed by portfolio + P&L section)
+  var pD=0,pL=0,pU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;}
+  var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
 
-  // stBURN
+  // PORTFOLIO: Ledger (HODL)
+  var bEq=MY_STBURN*stR,ledgerBurn=MY_BURN+bEq,ledgerUsd=ledgerBurn*P;
+  $("portGrid").innerHTML=[MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),
+    MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("Total BURN",F(ledgerBurn,0),"var(--br)"),
+    MB("USD","$"+F(ledgerUsd,0),"var(--g)")].join("");
+
+  // PORTFOLIO: DeFi Wallet (LPs)
+  $("defiGrid").innerHTML=[MB("Positions","5 active","var(--b)"),MB("BURN Deposited",F(pD,0),"var(--o)"),
+    MB("BURN Left",F(pL,0),"var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
+    MB("LP Value","$"+F(lpV,0),"var(--br)")].join("");
+
+  // stBURN Yield
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
   $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
     MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("USD","$"+F(stV,0),"var(--g)"),
@@ -430,18 +442,17 @@ function render(){
       MB("stBURN Supply",F(sup.stSup,0),"var(--p)"),MB("Circ MCap","$"+F(sup.circ*P,0),"var(--g)")].join("");
   }else{$("supplyGrid").innerHTML='<div class="ld">Loading on-chain supply data</div>';}
 
-  // P&L ACTIVE
-  var pD=0,pL=0,pU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;}
-  var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
+  // P&L ACTIVE (display)
   $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0),"var(--o)"),MB("Left",F(pL,0),"var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
     MB("LP Value","$"+F(lpV,2),"var(--br)"),MB("HODL","$"+F(hdV,2),"var(--mt)"),
     MB("IL",(il>=0?"+$":"-$")+F(Math.abs(il),2),il>=0?"var(--g)":"var(--r)")].join("");
 
-  // LIFETIME
+  // TOTAL (Ledger + DeFi + Realized)
+  var eff=ledgerBurn+ALP;
   var wV=MY_BURN*P,stTV=bEq*P,tot=TR+wV+stTV+lpV,prof=tot-INVESTED,roi=prof/INVESTED*100;
   $("totalGrid").innerHTML=[MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Realized","$"+F(TR,0),"var(--g)"),
-    MB("Wallet","$"+F(wV,0),"var(--o)"),MB("stBURN","$"+F(stTV,0),"var(--p)"),
-    MB("LPs","$"+F(lpV,0),"var(--cy)"),MB("Total","$"+F(tot,0),"var(--br)"),
+    MB("Ledger","$"+F(ledgerUsd,0),"var(--o)"),MB("DeFi LPs","$"+F(lpV,0),"var(--cy)"),
+    MB("Total","$"+F(tot,0),"var(--br)"),MB("Effective",F(eff,0)+" BURN","var(--dm)"),
     MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")].join("");
 
   // HISTORY
