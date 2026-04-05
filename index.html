@@ -170,7 +170,6 @@ var BURN_TK="0xBFC6620459762a6e485eBF1cF7E532e06253B62f";
 var STBURN_TK="0xd36701e8cFe1C8eDD993Fa67B90134671c8F8424";
 var STBURN_POOL="0xae87c1e544cd73d6d67f29500a2969abc9f3ab75";
 var DEAD_ADDR="0x000000000000000000000000000000000000dEaD";
-var ZERO_ADDR="0x0000000000000000000000000000000000000000";
 var STAKE_VAULT="0x9ae5453F156a1f7AC297781C15C77b622E42C12c";
 var CONTRIB_VAULT="0x5b08D24EfcB4B485fa34bBdCed6d63205100afd6";
 var CLIENT_VAULT="0x2e9237771d0AE73B7D9a2C791209EfD5a1Ea9513";
@@ -248,7 +247,7 @@ async function rpc(to,data){
     body:JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:to,data:data},"latest"],id:1}),signal:ac.signal});
     clearTimeout(tm);var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
-function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e18;}
+function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;try{return Number(BigInt(h)*1000n/10n**18n)/1000;}catch(e){return parseInt(h,16)/1e18;}}
 function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e6;}
 
 // ═══ NOTIFICATIONS ═══
@@ -369,12 +368,11 @@ async function fetchSup(){
   try{
     var tH=await rpc(BURN_TK,"0x18160ddd");
     var bH=await rpc(BURN_TK,bof(DEAD_ADDR));
-    var zH=await rpc(BURN_TK,bof(ZERO_ADDR));
     var s1=await rpc(BURN_TK,bof(STAKE_VAULT));
     var s2=await rpc(BURN_TK,bof(CONTRIB_VAULT));
     var s3=await rpc(BURN_TK,bof(CLIENT_VAULT));
     var stH=await rpc(STBURN_TK,"0x18160ddd");
-    sup.total=h2n(tH);sup.burned=h2n(bH)+h2n(zH);
+    sup.total=h2n(tH);sup.burned=h2n(bH);
     sup.locked=h2n(s1)+h2n(s2)+h2n(s3);
     sup.circ=sup.total-sup.burned-sup.locked;
     sup.stSup=h2n(stH);
