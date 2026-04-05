@@ -305,7 +305,7 @@ async function go(manual){
       if(Math.abs(dv)>500&&(ds>0||db>0)){whl.unshift({t:new Date(),type:ds>db?"SELL":"BUY",vol:Math.abs(dv)});if(whl.length>15)whl.pop();}}
     pm5={v:mv,s:ms,b:mb};
     if(TAB==="auto"&&apiP>0){var vy=aU>0?aU:(tU>0?tU/2:0),vx=vy/apiP;if(vx>0&&vy>0)set(vx,vy,"api");}
-    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ DexScreener · 15s</span>';sts("ok");
+    $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ DexScreener · 60s</span>';sts("ok");
   }else{
     // ON-CHAIN FALLBACK: Uniswap V3 slot0 + pool balances
     console.log("DexScreener failed ("+lastErr+"), trying on-chain...");
@@ -321,7 +321,7 @@ async function go(manual){
           var cP=Number(10n**30n*(2n**192n)/(sq*sq))/1e18;
           console.log("On-chain price: $"+cP.toFixed(6),"pool:",pB,"BURN /",pU,"USDC");
           if(cP>0.0001&&cP<100){var vy2=pU,vx2=vy2/cP;set(vx2,vy2,"chain");ok2=true;
-            $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--cy)">⛓ On-Chain · 15s</span>';sts("ok");}
+            $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--cy)">⛓ On-Chain · 60s</span>';sts("ok");}
         }
       }
     }catch(e){console.log("On-chain err:",e);}
@@ -548,8 +548,7 @@ function render(){
 
 // ═══ START ═══
 go(); fetchSt(); fetchSup(); if(MY_WALLET)fetchWal();
-setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();},15000);
-setInterval(function(){if(document.hidden)return;fetchSup();if(MY_WALLET)fetchWal();},60000);
+setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();if(MY_WALLET)fetchWal();},60000);
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();}});
 </script>
 </body>
