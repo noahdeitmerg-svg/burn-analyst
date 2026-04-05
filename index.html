@@ -144,11 +144,10 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
       <!-- Paste tab -->
       <div id="panel-paste" class="hidden">
         <div style="font-size:11px;color:var(--mut);margin-bottom:6px">
-          <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener noreferrer">GeckoTerminal öffnen ↗</a>
-          → Abschnitt mit "pooled BURN" und "pooled USDC" kopieren → hier einfügen.
+          <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener noreferrer">GeckoTerminal ↗</a>
+          → Pooled-Werte kopieren → hier einfügen.
         </div>
-        <textarea class="inp" id="pasteInput" oninput="handlePaste()"
-          placeholder='Beispiel: "The amount of pooled BURN is 500,000 ($50,000.00) and the amount of pooled USDC is 50,000 ($50,000.00)"'></textarea>
+        <textarea class="inp" id="pasteInput" oninput="handlePaste()" placeholder='"pooled BURN is 500,000 ... pooled USDC is 50,000"'></textarea>
         <div id="pasteResult" style="margin-top:6px;font-size:11px"></div>
       </div>
       <!-- Manual tab -->
@@ -171,45 +170,32 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
   <!-- ═══ ANALYSIS (hidden until data available) ═══ -->
   <div id="analysisSection" class="hidden">
 
-    <!-- ① PRICE -->
+    <!-- PRICE -->
     <div class="card">
-      <div class="lbl">① Real Pool Price</div>
       <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
         <span class="price-big" id="displayPrice"></span>
         <span id="displayPct"></span>
         <span id="displaySrc"></span>
-      </div>
-      <div style="font-size:10px;color:var(--dim);margin-top:8px;line-height:1.5">
-        Current Uniswap V3 pool price from DexScreener (derived from current tick).
-        Virtual AMM reserves are modeled as <span style="color:var(--txt)">y / x = price</span> for buyflow and sell impact calculations.
+        <span id="sparkline" style="margin-left:auto"></span>
       </div>
     </div>
 
-    <!-- ① POOL STATE -->
+    <!-- P&L HERO -->
+    <div class="card" style="border-color:rgba(251,146,60,.2)">
+      <div class="lbl">P&L Overview</div>
+      <div class="mgrid" id="pnlGrid"></div>
+    </div>
+
+    <!-- LP RANGE BAR -->
     <div class="card">
-      <div class="lbl">① Pool State</div>
+      <div class="lbl">LP Ranges vs. Price</div>
+      <div id="rangeBar"></div>
+    </div>
+
+    <!-- POOL -->
+    <div class="card">
+      <div class="lbl">Pool</div>
       <div class="mgrid" id="poolGrid"></div>
-    </div>
-
-    <!-- AMM EXPLAINER -->
-    <div class="card">
-      <div class="lbl">How the AMM Works</div>
-      <div class="amm-grid">
-        <div class="amm-box">
-          <h4 style="color:var(--b)">Constant Product</h4>
-          <p>The pool holds BURN (x) and USDC (y). Their product <span style="color:var(--bri)">k = x × y</span> stays constant during every swap.</p>
-        </div>
-        <div class="amm-box">
-          <h4 style="color:var(--o)">Price Discovery</h4>
-          <p>Price = <span style="color:var(--bri)">y / x</span>. Buying BURN removes it from the pool, USDC goes in → price rises. Selling is the reverse.</p>
-        </div>
-      </div>
-      <div class="note" style="background:rgba(192,132,252,.03);border:1px solid rgba(192,132,252,.1)">
-        <div style="font-weight:600;color:var(--p);margin-bottom:3px">⚠ Uniswap V3 — Concentrated Liquidity</div>
-        Liquidity providers choose specific price ranges, so liquidity may be unevenly distributed.
-        Price movement may accelerate sharply if liquidity gaps exist between ranges.
-        All calculations below use the constant-product model as an approximation.
-      </div>
     </div>
 
     <!-- ② BUYFLOW -->
@@ -224,19 +210,7 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
       </div>
     </div>
 
-    <!-- ③ SUPPLY -->
-    <div class="card">
-      <div class="lbl">③ DEX Supply Remaining at Targets</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">x(P) = √(k / P) — BURN tokens left in pool</div>
-      <div class="ov">
-        <table>
-          <thead><tr><th>Price</th><th>BURN Left</th><th>USDC in Pool</th><th>% Removed</th></tr></thead>
-          <tbody id="supplyBody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ④ SELL IMPACT -->
+    <!-- ③ SELL IMPACT -->
     <div class="card">
       <div class="lbl">④ Sell Impact Simulation</div>
       <div style="font-size:10px;color:var(--dim);margin-bottom:10px">x_new = x + Δ · y_new = k / x_new · price_new = y_new / x_new</div>
@@ -336,11 +310,12 @@ let poolPrice = 0;       // price = y / x
 let actualBurn = 0;      // Actual BURN in pool (all LP ranges)
 let actualUsdc = 0;      // Actual USDC in pool (all LP ranges)
 let poolTvl = 0;         // Total value locked
-let dataSource = "none"; // "api" | "est" | "paste" | "manual"
+let dataSource = "none"; // "api" | "est" | "manual"
 let activeTab = "auto";
 let apiRawData = null;
 let isFirstLoad = true;
 let refreshTimer = null;
+let priceHistory = [];  // collected on each refresh for sparkline
 
 // ── Helpers ──
 function el(id) { return document.getElementById(id); }
@@ -464,6 +439,8 @@ function applyReserves(x, y, actBurn, actUsdc, tvl, source) {
   actualUsdc = actUsdc || y;
   poolTvl = tvl || (x * poolPrice + y);
   dataSource = source;
+  priceHistory.push(poolPrice);
+  if (priceHistory.length > 120) priceHistory.shift();
   el("analysisSection").classList.remove("hidden");
   renderAll();
 }
@@ -486,39 +463,6 @@ function switchTab(tabId) {
 }
 
 // ═══════════════════════════════════════════════════════
-// PASTE HANDLER
-// ═══════════════════════════════════════════════════════
-
-function handlePaste() {
-  var raw = el("pasteInput").value;
-  var text = raw.replace(/,/g, "");
-  var regex = /pooled\s+(\w+)\s+is\s+([\d.]+)\s*([KMB]?)/gi;
-  var found = {};
-  var match;
-  while ((match = regex.exec(text)) !== null) {
-    var val = parseFloat(match[2]);
-    var suffix = match[3] ? match[3].toUpperCase() : "";
-    if (suffix === "K") val *= 1000;
-    else if (suffix === "M") val *= 1000000;
-    else if (suffix === "B") val *= 1000000000;
-    if (val > 0) found[match[1].toUpperCase()] = val;
-  }
-
-  var out = el("pasteResult");
-  if (found.BURN && found.USDC) {
-    var calcPrice = found.USDC / found.BURN;
-    out.innerHTML = tag("✓ Extracted", "#34d399") +
-      ' <span style="color:var(--o);margin-left:8px">BURN: ' + fmt(found.BURN, 0) + '</span>' +
-      ' <span style="color:var(--g);margin-left:8px">USDC: $' + fmt(found.USDC, 2) + '</span>' +
-      ' <span style="color:var(--bri);margin-left:8px">Price: ' + fmtPrice(calcPrice) + '</span>';
-    applyReserves(found.BURN, found.USDC, found.BURN, found.USDC, 0, "paste");
-  } else if (text.trim().length > 15) {
-    out.innerHTML = '<span style="color:var(--o)">⚠ Kein "pooled BURN" / "pooled USDC" gefunden. Kopiere den richtigen Text-Abschnitt.</span>';
-  } else {
-    out.innerHTML = "";
-  }
-}
-
 // ═══════════════════════════════════════════════════════
 // MANUAL INPUT
 // ═══════════════════════════════════════════════════════
@@ -535,6 +479,35 @@ function handleManual() {
   }
 }
 
+function handlePaste() {
+  var raw = el("pasteInput").value;
+  var text = raw.replace(/,/g, "");
+  var regex = /pooled\s+(\w+)\s+is\s+([\d.]+)\s*([KMB]?)/gi;
+  var found = {};
+  var match;
+  while ((match = regex.exec(text)) !== null) {
+    var val = parseFloat(match[2]);
+    var suffix = match[3] ? match[3].toUpperCase() : "";
+    if (suffix === "K") val *= 1000;
+    else if (suffix === "M") val *= 1000000;
+    else if (suffix === "B") val *= 1000000000;
+    if (val > 0) found[match[1].toUpperCase()] = val;
+  }
+  var out = el("pasteResult");
+  if (found.BURN && found.USDC) {
+    var cp = found.USDC / found.BURN;
+    out.innerHTML = tag("✓", "#34d399") +
+      ' <span style="color:var(--o);margin-left:6px">BURN: ' + fmt(found.BURN, 0) + '</span>' +
+      ' <span style="color:var(--g);margin-left:6px">USDC: $' + fmt(found.USDC, 2) + '</span>' +
+      ' <span style="color:var(--bri);margin-left:6px">= ' + fmtPrice(cp) + '</span>';
+    applyReserves(found.BURN, found.USDC, found.BURN, found.USDC, 0, "paste");
+  } else if (text.trim().length > 15) {
+    out.innerHTML = '<span style="color:var(--o)">⚠ No "pooled BURN/USDC" found.</span>';
+  } else {
+    out.innerHTML = "";
+  }
+}
+
 // ═══════════════════════════════════════════════════════
 // RENDER ALL ANALYSIS SECTIONS
 // ═══════════════════════════════════════════════════════
@@ -543,35 +516,91 @@ function renderAll() {
   var x = poolX, y = poolY, k = poolK, price = poolPrice;
   var d = apiRawData || {};
 
-  // API metadata (may be empty if paste/manual)
+  // API metadata (may be empty if manual)
   var vol24 = parseFloat(d.volume && d.volume.h24) || 0;
   var pct24 = parseFloat(d.priceChange && d.priceChange.h24) || 0;
   var buys24 = (d.txns && d.txns.h24 && d.txns.h24.buys) || 0;
   var sells24 = (d.txns && d.txns.h24 && d.txns.h24.sells) || 0;
   var apiTvl = parseFloat(d.liquidity && d.liquidity.usd) || 0;
 
-  // ── ① Price ──
+  // ── Price + Source ──
   el("displayPrice").textContent = fmtPrice(price);
   el("displayPct").innerHTML = pct24 !== 0
     ? tag((pct24 >= 0 ? "▲ " : "▼ ") + Math.abs(pct24).toFixed(2) + "% 24h", pct24 >= 0 ? "#34d399" : "#f87171")
     : "";
-  var srcLabels = { api: "✓ LIVE API", est: "≈ ESTIMATED", paste: "📋 PASTE", manual: "✎ MANUAL" };
+  var srcLabels = { api: "✓ LIVE", est: "≈ EST", paste: "📋", manual: "✎" };
   var srcColors = { api: "#34d399", est: "#f87171", paste: "#fb923c", manual: "#fb923c" };
   el("displaySrc").innerHTML = tag(srcLabels[dataSource] || dataSource, srcColors[dataSource] || "#60a5fa");
 
-  // ── ① Pool grid ──
+  // ── Sparkline ──
+  if (priceHistory.length >= 2) {
+    var pts = priceHistory;
+    var pMin = Math.min.apply(null, pts), pMax = Math.max.apply(null, pts);
+    var pRng = pMax - pMin; if (pRng === 0) pRng = pMin * 0.01;
+    var sw = 140, sh = 28, coords = [];
+    for (var si = 0; si < pts.length; si++) {
+      coords.push(((si / (pts.length - 1)) * sw).toFixed(1) + "," + (sh - ((pts[si] - pMin) / pRng) * (sh - 4) - 2).toFixed(1));
+    }
+    var sUp = pts[pts.length - 1] >= pts[0];
+    el("sparkline").innerHTML = '<svg viewBox="0 0 ' + sw + ' ' + sh + '" style="width:140px;height:28px;opacity:.7"><polyline points="' + coords.join(" ") + '" fill="none" stroke="' + (sUp ? "var(--g)" : "var(--r)") + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+  } else {
+    el("sparkline").innerHTML = '<span style="font-size:9px;color:var(--dim)">collecting...</span>';
+  }
+
+  // ── P&L ──
+  var pnlDep = 0, pnlLeft = 0, pnlUsdc = 0;
+  for (var pi = 0; pi < USER_LP.length; pi++) {
+    if (USER_LP[pi].fullRange) continue;
+    var pv = calcV3Position(USER_LP[pi].burn, USER_LP[pi].lo, USER_LP[pi].hi, price);
+    pnlDep += USER_LP[pi].burn;
+    pnlLeft += pv.burnLeft;
+    pnlUsdc += pv.usdc;
+  }
+  var lpVal = pnlLeft * price + pnlUsdc;
+  var hodlVal = pnlDep * price;
+  var il = lpVal - hodlVal;
+  var ilP = hodlVal > 0 ? (il / hodlVal * 100) : 0;
+  el("pnlGrid").innerHTML = [
+    metricBox("Deposited", fmt(pnlDep, 0) + " BURN", "var(--o)"),
+    metricBox("Remaining", fmt(pnlLeft, 0) + " BURN", "var(--txt)"),
+    metricBox("USDC Earned", "$" + fmt(pnlUsdc, 2), "var(--g)"),
+    metricBox("LP Value", "$" + fmt(lpVal, 2), "var(--bri)"),
+    metricBox("HODL Value", "$" + fmt(hodlVal, 2), "var(--mut)"),
+    metricBox("IL", (il >= 0 ? "+$" : "-$") + fmt(Math.abs(il), 2) + " (" + ilP.toFixed(1) + "%)", il >= 0 ? "var(--g)" : "var(--r)")
+  ].join("");
+
+  // ── LP Range Bar ──
+  var maxP = 2.50;
+  var bar = '<div style="position:relative;height:40px;background:#080c16;border-radius:8px;overflow:hidden;margin-bottom:6px">';
+  for (var ri = 0; ri < USER_LP.length; ri++) {
+    var rp = USER_LP[ri];
+    if (rp.fullRange) continue;
+    var rL = (rp.lo / maxP * 100), rW = ((rp.hi - rp.lo) / maxP * 100);
+    var rAct = price >= rp.lo && price <= rp.hi, rFill = price > rp.hi;
+    var rBg = rFill ? "rgba(52,211,153,.15)" : rAct ? "rgba(251,146,60,.2)" : "rgba(96,165,250,.06)";
+    var rBd = rFill ? "rgba(52,211,153,.4)" : rAct ? "rgba(251,146,60,.5)" : "rgba(96,165,250,.12)";
+    var rC = rFill ? "var(--g)" : rAct ? "var(--o)" : "var(--dim)";
+    bar += '<div style="position:absolute;left:' + rL + '%;width:' + rW + '%;height:100%;background:' + rBg +
+      ';border-left:1px solid ' + rBd + ';border-right:1px solid ' + rBd +
+      ';display:flex;align-items:center;padding:0 3px">' +
+      '<span style="font-size:7px;color:' + rC + ';white-space:nowrap">' + fmt(rp.burn, 0) + (rFill ? " ✓" : rAct ? " ●" : "") + '</span></div>';
+  }
+  var pLine = Math.min(price / maxP * 100, 99);
+  bar += '<div style="position:absolute;left:' + pLine + '%;width:2px;height:100%;background:var(--bri);z-index:10;box-shadow:0 0 6px rgba(226,232,240,.6)"></div>';
+  bar += '</div><div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dim);padding:0 2px">';
+  [0, 0.20, 0.50, 1.00, 1.50, 2.00, 2.50].forEach(function(t) { bar += "<span>$" + t.toFixed(2) + "</span>"; });
+  bar += "</div>";
+  el("rangeBar").innerHTML = bar;
+
+  // ── Pool (compact) ──
   var displayTvl = poolTvl > 0 ? poolTvl : (apiTvl > 0 ? apiTvl : x * price + y);
   el("poolGrid").innerHTML = [
-    metricBox("BURN Pooled (actual)", fmt(actualBurn, 0), "var(--o)"),
-    metricBox("USDC Pooled (actual)", "$" + fmt(actualUsdc, 2), "var(--g)"),
-    metricBox("Virtual x (AMM)", fmt(x, 0), "var(--cy)"),
-    metricBox("Virtual y (AMM)", "$" + fmt(y, 2), "var(--cy)"),
-    metricBox("k = x × y", fmt(k, 0), "var(--b)"),
-    metricBox("Price (y / x)", fmtPrice(price), "var(--bri)"),
+    metricBox("BURN Pooled", fmt(actualBurn, 0), "var(--o)"),
+    metricBox("USDC Pooled", "$" + fmt(actualUsdc, 2), "var(--g)"),
     metricBox("TVL", "$" + fmt(displayTvl, 0), "var(--p)"),
-    metricBox("Volume 24h", vol24 > 0 ? "$" + fmt(vol24, 0) : "—", "var(--cy)"),
-    metricBox("Buys 24h", String(buys24), "var(--g)"),
-    metricBox("Sells 24h", String(sells24), "var(--r)")
+    metricBox("k (AMM)", fmt(k, 0), "var(--b)"),
+    metricBox("Vol 24h", vol24 > 0 ? "$" + fmt(vol24, 0) : "—", "var(--cy)"),
+    metricBox("Txns", buys24 + " buy / " + sells24 + " sell", buys24 > sells24 ? "var(--g)" : "var(--r)")
   ].join("");
 
   // ── ② Buyflow (LP-aware) ──
@@ -617,22 +646,7 @@ function renderAll() {
   }
   el("buyflowBody").innerHTML = bfRows;
 
-  // ── ③ Supply ──
-  var spRows = "";
-  for (var j = 0; j < TARGETS.length; j++) {
-    var tp2 = TARGETS[j];
-    var burnLeft = Math.sqrt(k / tp2);
-    var usdcAt = Math.sqrt(k * tp2);
-    var removed = ((x - burnLeft) / x) * 100;
-    spRows += '<tr>' +
-      '<td class="td-b">$' + tp2.toFixed(2) + '</td>' +
-      '<td style="color:var(--o)">' + fmt(burnLeft, 0) + '</td>' +
-      '<td style="color:var(--g)">$' + fmt(usdcAt, 0) + '</td>' +
-      '<td>' + tag(removed > 0 ? removed.toFixed(1) + "%" : "—", removed > 70 ? "#f87171" : removed > 40 ? "#fb923c" : "#60a5fa") + '</td></tr>';
-  }
-  el("supplyBody").innerHTML = spRows;
-
-  // ── ④ Sell Impact ──
+  // ── ③ Sell Impact ──
   var siRows = "";
   for (var s = 0; s < SELL_SIZES.length; s++) {
     var sellAmt = SELL_SIZES[s];
