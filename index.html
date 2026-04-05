@@ -256,7 +256,7 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
       <div class="lbl">⑤ LP Positions</div>
       <div class="ov">
         <table>
-          <thead><tr><th>Range</th><th>BURN</th><th>Status</th><th>Effect</th></tr></thead>
+          <thead><tr><th>Range</th><th>BURN In</th><th>BURN Left</th><th>USDC Earned</th><th>Status</th></tr></thead>
           <tbody id="lpBody"></tbody>
         </table>
       </div>
@@ -289,11 +289,44 @@ const DEXSCREENER_URL = "https://api.dexscreener.com/latest/dex/pairs/arbitrum/"
 const TARGETS = [0.20, 0.30, 0.50, 1.00, 2.00, 5.00];
 const SELL_SIZES = [10000, 50000, 100000, 180000];
 const USER_LP = [
-  { burn: 5000, lo: 0.14, hi: 0.50 },
-  { burn: 5000, lo: 0.50, hi: 1.00 },
-  { burn: 5000, lo: 1.00, hi: 1.50 },
-  { burn: 5000, lo: 1.50, hi: 2.00 },
+  { burn: 20300, lo: 0.149, hi: 0.20, label: "Sell Range" },
+  { burn: 5000,  lo: 0.14,  hi: 0.50, label: "Sell Range" },
+  { burn: 5000,  lo: 0.50,  hi: 1.00, label: "Sell Range" },
+  { burn: 5000,  lo: 1.00,  hi: 1.50, label: "Sell Range" },
+  { burn: 5000,  lo: 1.50,  hi: 2.00, label: "Sell Range" },
+  { burn: 0,     lo: 0,     hi: 0,    label: "DAOcademy Full Range", fullRange: true },
 ];
+
+// ── V3 Position State Calculator ──
+// Calculates remaining BURN and earned USDC for a concentrated liquidity position
+// Assumes position was opened with 100% BURN (one-sided sell range)
+function calcV3Position(burnDeposited, lo, hi, currentPrice) {
+  if (burnDeposited <= 0 || lo <= 0 || hi <= lo) return { burnLeft: 0, usdc: 0, pct: 0 };
+
+  if (currentPrice <= lo) {
+    // Price below range: 100% BURN, 0 USDC
+    return { burnLeft: burnDeposited, usdc: 0, pct: 0 };
+  }
+
+  var sqrtLo = Math.sqrt(lo);
+  var sqrtHi = Math.sqrt(hi);
+  // Liquidity from initial BURN deposit (price was below lo when deposited)
+  var L = burnDeposited * sqrtLo * sqrtHi / (sqrtHi - sqrtLo);
+
+  if (currentPrice >= hi) {
+    // Price above range: 0 BURN, all converted to USDC
+    var totalUsdc = L * (sqrtHi - sqrtLo);
+    return { burnLeft: 0, usdc: totalUsdc, pct: 100 };
+  }
+
+  // Price within range: partial conversion
+  var sqrtP = Math.sqrt(currentPrice);
+  var burnLeft = L * (sqrtHi - sqrtP) / (sqrtP * sqrtHi);
+  var usdc = L * (sqrtP - sqrtLo);
+  var pct = ((currentPrice - lo) / (hi - lo) * 100);
+
+  return { burnLeft: burnLeft, usdc: usdc, pct: pct };
+}
 
 // ── Global state ──
 let poolX = 0;           // Virtual BURN reserve (for AMM calc)
@@ -590,33 +623,70 @@ function renderAll() {
 
   // ── ⑤ LP ──
   var lpRows = "";
+  var totalBurnIn = 0, totalBurnLeft = 0, totalUsdc = 0;
+
   for (var lp = 0; lp < USER_LP.length; lp++) {
     var pos = USER_LP[lp];
-    var status, effect, color;
-    if (price < pos.lo) {
-      status = "BELOW"; effect = "Not active"; color = "#60a5fa";
-    } else if (price > pos.hi) {
-      status = "FILLED"; effect = "Filled ✓"; color = "#34d399";
+    var status, color, burnIn, burnLeft, usdcEarned, rangeText, pctText;
+
+    if (pos.fullRange) {
+      // DAOcademy full-range position: uses actual pooled tokens
+      rangeText = "Full Range";
+      burnIn = actualBurn;
+      burnLeft = actualBurn;
+      usdcEarned = actualUsdc;
+      status = "ACTIVE"; color = "#c084fc";
+      pctText = "Full range LP";
     } else {
-      var pctThrough = ((price - pos.lo) / (pos.hi - pos.lo) * 100).toFixed(0);
-      status = "ACTIVE"; effect = "Active — " + pctThrough + "% filled"; color = "#fb923c";
+      rangeText = "$" + pos.lo.toFixed(pos.lo < 1 ? 3 : 2) + " – $" + pos.hi.toFixed(2);
+      burnIn = pos.burn;
+      var v3 = calcV3Position(pos.burn, pos.lo, pos.hi, price);
+      burnLeft = v3.burnLeft;
+      usdcEarned = v3.usdc;
+
+      if (price < pos.lo) {
+        status = "BELOW"; color = "#60a5fa";
+        pctText = "Waiting";
+      } else if (price >= pos.hi) {
+        status = "FILLED"; color = "#34d399";
+        pctText = "100% sold";
+      } else {
+        status = "ACTIVE"; color = "#fb923c";
+        pctText = v3.pct.toFixed(0) + "% filled";
+      }
     }
+
+    totalBurnIn += burnIn;
+    totalBurnLeft += burnLeft;
+    totalUsdc += usdcEarned;
+
     lpRows += '<tr>' +
-      '<td class="td-b">$' + pos.lo.toFixed(2) + ' – $' + pos.hi.toFixed(2) + '</td>' +
-      '<td style="color:var(--o)">' + fmt(pos.burn, 0) + '</td>' +
-      '<td>' + tag(status, color) + '</td>' +
-      '<td style="color:var(--mut)">' + effect + '</td></tr>';
+      '<td class="td-b">' + rangeText + (pos.label === "DAOcademy Full Range" ? ' <span style="font-size:9px;color:var(--p)">(DAOcademy)</span>' : '') + '</td>' +
+      '<td style="color:var(--o)">' + fmt(burnIn, 0) + '</td>' +
+      '<td style="color:var(--txt)">' + fmt(burnLeft, 0) + '</td>' +
+      '<td style="color:var(--g)">$' + fmt(usdcEarned, 2) + '</td>' +
+      '<td>' + tag(status + " · " + pctText, color) + '</td></tr>';
   }
+
+  // Totals row
+  lpRows += '<tr style="border-top:1px solid var(--bdr)">' +
+    '<td class="td-b">TOTAL</td>' +
+    '<td style="color:var(--o)">' + fmt(totalBurnIn, 0) + '</td>' +
+    '<td style="color:var(--txt)">' + fmt(totalBurnLeft, 0) + '</td>' +
+    '<td style="color:var(--g);font-weight:600">$' + fmt(totalUsdc, 2) + '</td>' +
+    '<td></td></tr>';
+
   el("lpBody").innerHTML = lpRows;
 
   // LP Strategy text
   var strat;
-  if (price < 0.14) strat = "All positions above current price. Price can rise freely to $0.14.";
-  else if (price < 0.50) strat = "Position 1 ($0.14–$0.50) ACTIVE — absorbing buy pressure, slowing price rise. Positions 2–4 are sell walls above.";
-  else if (price < 1.00) strat = "Position 1 filled. Position 2 ($0.50–$1.00) active. 10K BURN in positions 3+4 waiting as sell walls.";
-  else if (price < 1.50) strat = "Positions 1+2 sold. Position 3 ($1.00–$1.50) active. Significant profit already secured.";
-  else if (price < 2.00) strat = "3 positions filled. Final position ($1.50–$2.00) active. Almost fully exited.";
-  else strat = "ALL positions converted. 20K BURN sold across $0.14–$2.00. No more LP sell pressure.";
+  if (price < 0.149) strat = "All sell positions above price. Price can rise freely. DAOcademy full-range LP provides baseline liquidity.";
+  else if (price < 0.20) strat = "20.3K BURN position ($0.149–$0.20) is ACTIVE — absorbing buy pressure. 20K BURN in wider ranges above. DAOcademy full-range LP active.";
+  else if (price < 0.50) strat = "First position filled. 5K BURN position ($0.14–$0.50) active. 15K BURN in wider ranges above as sell walls.";
+  else if (price < 1.00) strat = "Narrow positions filled. Position ($0.50–$1.00) active. 10K BURN remaining in upper sell walls.";
+  else if (price < 1.50) strat = "Lower positions sold. Position ($1.00–$1.50) active. Significant profit secured.";
+  else if (price < 2.00) strat = "4 positions filled. Final position ($1.50–$2.00) active.";
+  else strat = "ALL sell positions converted. 40.3K BURN sold. Only DAOcademy full-range LP remains.";
   el("lpStrategy").textContent = strat;
 
   // Footer
