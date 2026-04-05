@@ -241,7 +241,7 @@ function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
-var LD='<span class="ldd"><i></i><i></i><i></i></span>';
+var LD="…";
 function tog(el,id){var b=$(id);b.classList.toggle("open");el.classList.toggle("open");}
 
 // ═══ RPC ═══
@@ -256,7 +256,7 @@ function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e18;}
 var prevPrice=0, notifOn=false;
 function reqNotif(){if(!("Notification" in window)){alert("Browser does not support notifications");return;}
   Notification.requestPermission().then(function(p){if(p==="granted"){notifOn=true;alert("🔔 Alerts enabled!");}});}
-function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🔥</text></svg>"});}catch(e){}}}
+function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body});}catch(e){}}}
 
 // ═══ FETCH: Pool ═══
 async function go(manual){
