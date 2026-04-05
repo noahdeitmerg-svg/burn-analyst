@@ -11,8 +11,8 @@
 body{background:var(--bg);color:var(--tx);font-family:'Courier New',monospace;font-size:13px;line-height:1.5}
 a{color:var(--b);text-decoration:none}
 .w{max-width:860px;margin:0 auto;padding:16px}
-.hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.hdr h1{font-size:18px;font-weight:700;color:var(--br);letter-spacing:-.5px}
+.hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.hdr h1{font-size:16px;font-weight:700;color:var(--br)}
 .hdr h1 em{color:var(--o);font-style:normal}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
 .btn{font-family:inherit;font-size:10px;padding:4px 12px;border-radius:6px;border:1px solid #60a5fa30;background:#60a5fa08;color:var(--b);cursor:pointer}
@@ -34,21 +34,32 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .tab{flex:1;padding:8px 0;border:none;font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;background:0;color:var(--mt);border-bottom:2px solid transparent}
 .tab.on{background:#60a5fa08;color:var(--b);border-bottom-color:var(--b)}
 .inp{width:100%;background:#0a0f1a;border:1px solid var(--bd);border-radius:6px;color:var(--tx);padding:5px 8px;font-family:inherit;font-size:11px;outline:0}
-textarea.inp{min-height:50px;resize:vertical}
 .big{font-size:26px;font-weight:700;color:var(--br);font-family:inherit}
 .hid{display:none}
 .nt{padding:8px;border-radius:6px;font-size:9px;line-height:1.5;color:var(--mt);margin-top:8px}
 @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
 .ld{display:flex;align-items:center;gap:6px;padding:16px;color:var(--dm);font-size:10px}
 .ld::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--b);animation:pulse 1.2s infinite}
-.ldd{display:inline-flex;gap:4px;padding:4px 0}
-.ldd i{width:5px;height:5px;border-radius:50%;background:var(--b);animation:pulse 1s infinite;font-style:normal}
-.ldd i:nth-child(2){animation-delay:.2s}
-.ldd i:nth-child(3){animation-delay:.4s}
+.col{font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;font-weight:600;cursor:pointer;padding:2px 0;user-select:none;display:flex;align-items:center;gap:6px}
+.col::before{content:'▸';color:var(--dm);font-size:12px;transition:transform .2s}
+.col.open::before{transform:rotate(90deg)}
+.col-b{display:none;padding-top:12px}
+.col-b.open{display:block}
+.rings{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:8px 0}
+.orb{width:140px;height:140px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 35% 35%,#141d30,#080c16);border:2px solid;
+  box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}
+.orb-lbl{font-size:8px;color:var(--mt);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px}
+.orb-val{font-size:17px;font-weight:700;font-family:inherit}
+.orb-sub{font-size:9px;color:var(--dm);margin-top:2px}
+.hero-row{text-align:center;margin-top:10px;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-meta{margin-top:8px;display:flex;justify-content:center;gap:16px;font-size:10px;color:var(--dm)}
+.sep{width:100%;height:1px;background:var(--bd);margin:6px 0 14px}
 </style>
 </head>
 <body>
 <div class="w">
+
 <div class="hdr"><h1><em>◆</em> BURN Terminal</h1><div style="display:flex;align-items:center;gap:10px"><span id="sts" style="font-size:9px;color:var(--mt)"></span><button class="btn" id="rbtn" onclick="go(true)">⟳</button></div></div>
 <div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span> <span style="font-size:10px;color:var(--mt)">Use ✎ Manual input</span></div>
 <div class="c hid" id="lbox" style="text-align:center;padding:40px"><div class="ld" style="justify-content:center">Connecting to DexScreener + Arbitrum RPC</div></div>
@@ -59,23 +70,102 @@ textarea.inp{min-height:50px;resize:vertical}
 </div></div>
 
 <div id="main" class="hid">
-<div class="c"><div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span class="big" id="dPrice"></span><span id="dPct"></span><span id="dSrc"></span><span id="spark" style="margin-left:auto"></span></div></div>
-<div class="c" style="border-color:#fb923c20"><div class="lb">My Portfolio</div><div class="mg" id="portGrid"></div></div>
-<div class="c"><div class="lb">stBURN Yield</div><div class="mg" id="stGrid"></div></div>
-<div class="c"><div class="lb">BURN Supply (On-Chain)</div><div class="mg" id="supplyGrid"></div></div>
-<div class="c" style="border-color:#34d39920"><div class="lb">P&L — Active LPs</div><div class="mg" id="pnlGrid"></div></div>
-<div class="c" style="border-color:#60a5fa20"><div class="lb">Portfolio — Lifetime</div><div class="mg" id="totalGrid"></div></div>
-<div class="c"><div class="lb">Closed Positions</div><div class="ov"><table><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div></div>
+
+<!-- ═══ 1. HERO: 3 CIRCLES ═══ -->
+<div class="c" style="padding:24px 14px">
+  <div class="rings">
+    <div class="orb" style="border-color:var(--o)">
+      <div class="orb-lbl">BURN Price</div>
+      <div class="orb-val" id="dPrice" style="color:var(--o)"></div>
+      <div class="orb-sub" id="dPct"></div>
+    </div>
+    <div class="orb" style="border-color:var(--p)">
+      <div class="orb-lbl">stBURN Price</div>
+      <div class="orb-val" id="stPrice" style="color:var(--p)"></div>
+      <div class="orb-sub" id="stPriceSub"></div>
+    </div>
+    <div class="orb" style="border-color:var(--cy)">
+      <div class="orb-lbl">stBURN / BURN</div>
+      <div class="orb-val" id="dRatio" style="color:var(--cy)"></div>
+      <div class="orb-sub">Ratio</div>
+    </div>
+  </div>
+  <div class="hero-row"><span id="dSrc"></span><span id="spark"></span></div>
+  <div class="hero-meta" id="miniMkt"></div>
+</div>
+
+<!-- ═══ 2. ACTIVE LP POSITIONS ═══ -->
 <div class="c"><div class="lb">LP Ranges</div><div id="rangeBar"></div></div>
 <div class="c"><div class="lb">LP Positions</div><div class="ov"><table><thead><tr><th>Range</th><th>In</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div><div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div></div>
-<div class="c"><div class="lb">Buyflow</div><div class="ov"><table><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div></div>
-<div class="c"><div class="lb">DEX Supply</div><div class="ov"><table><thead><tr><th>Price</th><th>BURN Left</th><th>USDC</th><th>Removed</th></tr></thead><tbody id="dsB"></tbody></table></div></div>
-<div class="c"><div class="lb">Sell Impact</div><div class="ov"><table><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div></div>
-<div class="c"><div class="lb">Supply Dynamics</div><div class="mg" id="dynGrid"></div></div>
-<div class="c"><div class="lb">Liquidity Walls</div><div class="ov"><table><thead><tr><th>Price Level</th><th>BURN Liquidity</th><th>USDC to Pass</th><th>Type</th></tr></thead><tbody id="wallB"></tbody></table></div></div>
-<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div id="chartWrap" style="position:relative;min-height:350px"><div class="ld" id="chartLd" style="position:absolute;inset:0;display:flex;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
-<div class="c"><div class="lb">Pool State</div><div class="mg" id="poolG"></div></div>
-<div class="c"><div class="lb">Whale Activity <button class="btn" style="margin-left:8px;font-size:8px" onclick="reqNotif()">🔔 Enable Alerts</button></div><div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div></div>
+<div class="c" style="border-color:#34d39920"><div class="lb">P&L — Active LPs</div><div class="mg" id="pnlGrid"></div></div>
+
+<!-- ═══ 3. CLOSED POSITIONS ═══ -->
+<div class="c"><div class="lb">Closed Positions</div><div class="ov"><table><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div></div>
+
+<!-- ═══ 4. CHART ═══ -->
+<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div style="position:relative;min-height:350px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
+
+<!-- ═══ COLLAPSIBLE: Portfolio ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-port')">Portfolio</div>
+  <div id="sec-port" class="col-b">
+    <div class="lb" style="margin-top:4px">Holdings</div>
+    <div class="mg" id="portGrid"></div>
+    <div class="sep"></div>
+    <div class="lb">stBURN Yield</div>
+    <div class="mg" id="stGrid"></div>
+    <div class="sep"></div>
+    <div class="lb">Lifetime</div>
+    <div class="mg" id="totalGrid"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Market Mechanics ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-mkt')">Market Mechanics</div>
+  <div id="sec-mkt" class="col-b">
+    <div class="lb" style="margin-top:4px">Buyflow</div>
+    <div class="ov"><table><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div>
+    <div class="sep"></div>
+    <div class="lb">Sell Impact</div>
+    <div class="ov"><table><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
+    <div class="sep"></div>
+    <div class="lb">Pool State</div>
+    <div class="mg" id="poolG"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Liquidity Analysis ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-liq')">Liquidity Analysis</div>
+  <div id="sec-liq" class="col-b">
+    <div class="lb" style="margin-top:4px">Liquidity Walls</div>
+    <div class="ov"><table><thead><tr><th>Price Level</th><th>BURN Liquidity</th><th>USDC to Pass</th><th>Type</th></tr></thead><tbody id="wallB"></tbody></table></div>
+    <div class="sep"></div>
+    <div class="lb">DEX Supply</div>
+    <div class="ov"><table><thead><tr><th>Price</th><th>BURN Left</th><th>USDC</th><th>Removed</th></tr></thead><tbody id="dsB"></tbody></table></div>
+    <div class="sep"></div>
+    <div class="lb">Supply Dynamics</div>
+    <div class="mg" id="dynGrid"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Tokenomics ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-tok')">Tokenomics</div>
+  <div id="sec-tok" class="col-b">
+    <div class="mg" id="supplyGrid"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Whale ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-whale')">Whale Activity <button class="btn" style="margin-left:8px;font-size:8px" onclick="event.stopPropagation();reqNotif()">🔔</button></div>
+  <div id="sec-whale" class="col-b">
+    <div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div>
+  </div>
+</div>
+
 </div>
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--bd)" id="foot">BURN Terminal</div>
 </div>
@@ -152,6 +242,7 @@ function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
 var LD='<span class="ldd"><i></i><i></i><i></i></span>';
+function tog(el,id){var b=$(id);b.classList.toggle("open");el.classList.toggle("open");}
 
 // ═══ RPC ═══
 async function rpc(to,data){
@@ -255,15 +346,22 @@ function render(){
   var b24=(d.txns&&d.txns.h24&&d.txns.h24.buys)||0,s24=(d.txns&&d.txns.h24&&d.txns.h24.sells)||0;
   var m5v=parseFloat(d.volume&&d.volume.m5)||0;
 
-  // PRICE
+  // PRICE CIRCLES
   $("dPrice").textContent=FP(P);
-  $("dPct").innerHTML=pct?TG((pct>=0?"▲ ":"▼ ")+Math.abs(pct).toFixed(2)+"%",pct>=0?"#34d399":"#f87171"):"";
+  $("dPct").innerHTML=pct?(pct>=0?"▲":"▼")+" "+Math.abs(pct).toFixed(2)+"%":"";
+  $("dPct").style.color=pct>=0?"var(--g)":"var(--r)";
+  $("stPrice").textContent=FP(P*stR);
+  $("stPriceSub").textContent=stOK?"via "+stSrc:"…";
+  $("dRatio").textContent=stOK?stR.toFixed(6):"…";
   $("dSrc").innerHTML=TG(SRC==="api"?"✓ LIVE":"◇ "+SRC,SRC==="api"?"#34d399":"#fb923c");
 
   // Sparkline
   if(hst.length>=2){var mn=Math.min.apply(null,hst),mx2=Math.max.apply(null,hst),rg=mx2-mn||mn*.01,sw=130,sh=24,co=[];
     for(var si=0;si<hst.length;si++)co.push(((si/(hst.length-1))*sw).toFixed(1)+","+(sh-((hst[si]-mn)/rg)*(sh-4)-2).toFixed(1));
     $("spark").innerHTML='<svg viewBox="0 0 '+sw+' '+sh+'" style="width:130px;height:24px;opacity:.6"><polyline points="'+co.join(" ")+'" fill="none" stroke="'+(hst[hst.length-1]>=hst[0]?"var(--g)":"var(--r)")+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';}
+
+  // Mini market info under price
+  $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
 
   // PORTFOLIO
   var bEq=MY_STBURN*stR,eff=MY_BURN+bEq+ALP;
