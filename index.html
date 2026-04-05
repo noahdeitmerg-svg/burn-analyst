@@ -66,13 +66,10 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <div class="w">
 
 <div class="hdr"><h1><em>◆</em> BURN Terminal</h1><div style="display:flex;align-items:center;gap:10px"><span id="sts" style="font-size:9px;color:var(--mt)"></span><button class="btn" id="rbtn" onclick="go(true)">⟳</button></div></div>
-<div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span> <span style="font-size:10px;color:var(--mt)">Use ✎ Manual input</span></div>
+<div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span></div>
 <div class="c hid" id="lbox" style="text-align:center;padding:40px"><div class="ld" style="justify-content:center">Connecting to DexScreener + Arbitrum RPC</div></div>
-<div class="c c0"><div class="tabs"><button class="tab on" data-t="auto" onclick="tab('auto')">⟳ Auto</button><button class="tab" data-t="manual" onclick="tab('manual')">✎ Manual</button></div>
-<div style="padding:10px">
-<div id="t-auto"><span style="font-size:10px" id="astat">Connecting...</span></div>
-<div id="t-manual" class="hid"><div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt)">BURN</div><input class="inp" type="number" id="mx" oninput="doMan()"></div><div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt)">USDC</div><input class="inp" type="number" id="my" oninput="doMan()"></div><div style="flex:1;min-width:100px;display:flex;align-items:flex-end" id="mp"></div></div></div>
-</div></div>
+<div id="manBox" class="hid" style="margin-bottom:10px"><div class="c" style="padding:10px 14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div style="font-size:9px;color:var(--mt);white-space:nowrap">✎ Manual:</div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="mx" placeholder="BURN" oninput="doMan()"></div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="my" placeholder="USDC" oninput="doMan()"></div><div id="mp" style="font-size:11px"></div></div></div></div>
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:10px" id="astat">Connecting...</span><button class="btn" style="font-size:8px;padding:2px 8px" onclick="$('manBox').classList.toggle('hid')">⚙️</button></div>
 
 <div id="main" class="hid">
 
@@ -122,10 +119,14 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <div class="c">
   <div class="lb">Closed Positions</div>
   <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
+  <div class="mg" id="histSummary" style="margin-top:12px"></div>
 </div>
 
-<!-- ═══ 6. CHART ═══ -->
-<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div style="position:relative;min-height:350px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
+<!-- ═══ 6. CHART (collapsible) ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-chart')">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px" onclick="event.stopPropagation()">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px" onclick="event.stopPropagation()">DexScreener ↗</a></div>
+  <div id="sec-chart" class="col-b"><div style="position:relative;min-height:400px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:400px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
+</div>
 
 <!-- ═══ COLLAPSIBLE: Market Mechanics ═══ -->
 <div class="c">
@@ -387,11 +388,8 @@ async function fetchWal(){
 function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="err"?'<span class="dot" style="background:var(--r)"></span>'+t:'<span class="dot" style="background:var(--g)"></span>'+t;}
 function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();}}
 
-function tab(id){TAB=id;document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.dataset.t===id)});
-  ["auto","manual"].forEach(function(t){$("t-"+t).classList.toggle("hid",t!==id)});if(id==="auto")go();}
-
 function doMan(){var x=parseFloat($("mx").value),y=parseFloat($("my").value);
-  if(x>0&&y>0){$("mp").innerHTML=MB("Price",FP(y/x),"var(--br)");set(x,y,"manual");}else $("mp").innerHTML="";}
+  if(x>0&&y>0){$("mp").innerHTML='<span style="color:var(--br);font-weight:600">'+FP(y/x)+'</span>';set(x,y,"manual");}else $("mp").innerHTML="";}
 
 // ═══════════════════════════════════════════════════════
 // RENDER
@@ -429,13 +427,12 @@ function render(){
   var effBurn=MY_BURN+bEq+ALP;
   var portUsd=MY_BURN*P+bEq*P+lpV;
   var tot=TR+portUsd,prof=tot-INVESTED,roi=prof/INVESTED*100;
+  var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
   $("portGrid").innerHTML=[
-    MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Realized","$"+F(TR,0),"var(--g)"),
-    MB("BURN Held",F(MY_BURN,0),"var(--o)"),MB("stBURN Held",F(MY_STBURN,0),"var(--p)"),
-    MB("In LPs",F(ALP,0),"var(--b)"),MB("Total Tokens",F(totalTokens,0),"var(--br)"),
-    MB("Portfolio","$"+F(portUsd,0),"var(--br)"),MB("Total Value","$"+F(tot,0),"var(--g)"),
-    MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),
-    MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
+    MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),MB("Multiple",mult>0?mult.toFixed(1)+"x":"…",mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)"),
+    MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Portfolio","$"+F(portUsd,0),"var(--br)"),MB("Total Value","$"+F(tot,0),"var(--g)"),
+    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("In LPs",F(ALP,0),"var(--b)"),
+    MB("Realized","$"+F(TR,0),"var(--g)"),MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
   ].join("");
 
   // stBURN Yield
@@ -463,6 +460,10 @@ function render(){
   for(var mi=0;mi<MS.length;mi++){var ms2=MS[mi];hR+='<tr style="background:#60a5fa04"><td style="color:var(--mt)">'+ms2.d+'</td><td style="color:var(--o)">'+F(ms2.b,0)+'</td><td style="color:var(--dm)">Market</td><td style="color:var(--g)">$'+F(ms2.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(ms2.u/ms2.b).toFixed(4)+'</td></tr>';}
   hR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TR,0)+'</td><td style="font-size:9px;color:var(--mt)">Ø $'+(TR/TS).toFixed(4)+'</td></tr>';
   $("histB").innerHTML=hR;
+  var avgSell=TS>0?TR/TS:0,realMult=AVG_ENTRY>0?avgSell/AVG_ENTRY:0;
+  $("histSummary").innerHTML=[MB("BURN Sold",F(TS,0),"var(--o)"),MB("USDC Received","$"+F(TR,0),"var(--g)"),
+    MB("Ø Sell Price","$"+avgSell.toFixed(4),"var(--br)"),MB("Realized","$"+(TR-TS*AVG_ENTRY).toFixed(0)+" profit","var(--g)"),
+    MB("vs Entry",realMult>0?realMult.toFixed(1)+"x":"…",realMult>=10?"var(--g)":"var(--o)")].join("");
 
   // LP TABLE
   var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
@@ -545,7 +546,7 @@ function render(){
   if(whl.length>0){$("whaleBox").innerHTML=whl.map(function(w){return'<div style="padding:3px 0;border-bottom:1px solid #0f172a"><span style="color:var(--mt)">'+w.t.toLocaleTimeString()+"</span> "+TG(w.type,w.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br)">$'+F(w.vol,0)+"</span></div>";}).join("");}
   else $("whaleBox").innerHTML='<span style="color:var(--dm)">Monitoring 5m spikes...</span>';
 
-  $("foot").innerHTML="BURN Terminal · "+SRC+" · stBURN:"+(stOK?"✓"+stR.toFixed(6)+" ("+stSrc+")":LD)+" · Supply:"+(sup.total>0?"✓":LD)+(MY_WALLET?" · Wallet:✓":"");
+  $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
 // ═══ START ═══
