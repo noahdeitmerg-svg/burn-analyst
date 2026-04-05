@@ -55,6 +55,11 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .hero-row{text-align:center;margin-top:10px;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}
 .hero-meta{margin-top:8px;display:flex;justify-content:center;gap:16px;font-size:10px;color:var(--dm)}
 .sep{width:100%;height:1px;background:var(--bd);margin:6px 0 14px}
+.lp-tbl th{padding:8px 10px;font-size:10px;letter-spacing:1px}
+.lp-tbl td{padding:10px 10px;font-size:13px;border-bottom:1px solid #151d2e}
+.lp-tbl tr:hover td{background:#0a0f1a}
+.hist-tbl td{padding:8px 8px;font-size:12px;border-bottom:1px solid #151d2e}
+.hist-tbl tr:hover td{background:#0a0f1a}
 </style>
 </head>
 <body>
@@ -94,34 +99,33 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="hero-meta" id="miniMkt"></div>
 </div>
 
-<!-- ═══ 2. ACTIVE LP POSITIONS ═══ -->
-<div class="c"><div class="lb">LP Ranges</div><div id="rangeBar"></div></div>
-<div class="c"><div class="lb">LP Positions</div><div class="ov"><table><thead><tr><th>Range</th><th>In</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div><div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div></div>
+<!-- ═══ 2. PORTFOLIO (always visible) ═══ -->
+<div class="c">
+  <div class="lb">Portfolio</div>
+  <div class="mg" id="portGrid"></div>
+  <div class="sep"></div>
+  <div class="lb">stBURN Yield</div>
+  <div class="mg" id="stGrid"></div>
+</div>
+
+<!-- ═══ 3. LP POSITIONS (emphasized) ═══ -->
+<div class="c" style="border-color:#fb923c15">
+  <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
+  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
+  <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+</div>
+
+<!-- ═══ 4. P&L — ACTIVE LPs ═══ -->
 <div class="c" style="border-color:#34d39920"><div class="lb">P&L — Active LPs</div><div class="mg" id="pnlGrid"></div></div>
 
-<!-- ═══ 3. CLOSED POSITIONS ═══ -->
-<div class="c"><div class="lb">Closed Positions</div><div class="ov"><table><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div></div>
-
-<!-- ═══ 4. CHART ═══ -->
-<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div style="position:relative;min-height:350px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
-
-<!-- ═══ COLLAPSIBLE: Portfolio ═══ -->
+<!-- ═══ 5. CLOSED POSITIONS ═══ -->
 <div class="c">
-  <div class="col" onclick="tog(this,'sec-port')">Portfolio</div>
-  <div id="sec-port" class="col-b">
-    <div class="lb" style="margin-top:4px">🔒 Ledger — HODL</div>
-    <div class="mg" id="portGrid"></div>
-    <div class="sep"></div>
-    <div class="lb">🔗 DeFi Wallet — LPs</div>
-    <div class="mg" id="defiGrid"></div>
-    <div class="sep"></div>
-    <div class="lb">stBURN Yield</div>
-    <div class="mg" id="stGrid"></div>
-    <div class="sep"></div>
-    <div class="lb">Total</div>
-    <div class="mg" id="totalGrid"></div>
-  </div>
+  <div class="lb">Closed Positions</div>
+  <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
 </div>
+
+<!-- ═══ 6. CHART ═══ -->
+<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">DexScreener ↗</a></div><div style="position:relative;min-height:350px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:350px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
 
 <!-- ═══ COLLAPSIBLE: Market Mechanics ═══ -->
 <div class="c">
@@ -419,22 +423,26 @@ function render(){
   var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
   var outU=maxU-pU,fillPct=maxU>0?(pU/maxU*100):0;
 
-  // PORTFOLIO: Ledger (HODL)
-  var bEq=MY_STBURN*stR,ledgerBurn=MY_BURN+bEq,ledgerUsd=ledgerBurn*P;
-  $("portGrid").innerHTML=[MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),
-    MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("Total BURN",F(ledgerBurn,0),"var(--br)"),
-    MB("USD","$"+F(ledgerUsd,0),"var(--g)")].join("");
-
-  // PORTFOLIO: DeFi Wallet (LPs)
-  $("defiGrid").innerHTML=[MB("Positions","5 active","var(--b)"),MB("BURN Deposited",F(pD,0),"var(--o)"),
-    MB("BURN Left",F(pL,0),"var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
-    MB("LP Value","$"+F(lpV,0),"var(--br)")].join("");
+  // PORTFOLIO (unified)
+  var bEq=MY_STBURN*stR;
+  var totalTokens=MY_BURN+MY_STBURN+ALP;
+  var effBurn=MY_BURN+bEq+ALP;
+  var portUsd=MY_BURN*P+bEq*P+lpV;
+  var tot=TR+portUsd,prof=tot-INVESTED,roi=prof/INVESTED*100;
+  $("portGrid").innerHTML=[
+    MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Realized","$"+F(TR,0),"var(--g)"),
+    MB("BURN Held",F(MY_BURN,0),"var(--o)"),MB("stBURN Held",F(MY_STBURN,0),"var(--p)"),
+    MB("In LPs",F(ALP,0),"var(--b)"),MB("Total Tokens",F(totalTokens,0),"var(--br)"),
+    MB("Portfolio","$"+F(portUsd,0),"var(--br)"),MB("Total Value","$"+F(tot,0),"var(--g)"),
+    MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),
+    MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
+  ].join("");
 
   // stBURN Yield
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
   $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
-    MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("USD","$"+F(stV,0),"var(--g)"),
-    MB("Yield",(stY>=0?"+":"")+F(stY,0)+" BURN",stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
+    MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("Yield","+"+(stY>=0?F(stY,0):0)+" BURN",stY>=0?"var(--g)":"var(--r)"),
+    MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)"),MB("USD","$"+F(stV,0),"var(--g)")].join("");
 
   // SUPPLY
   if(sup.total>0){var bP=sup.total>0?(sup.burned/sup.total*100):0;
@@ -448,28 +456,12 @@ function render(){
     MB("Max USDC","$"+F(maxU,0),"var(--dm)"),MB("Outstanding","$"+F(outU,0),"var(--cy)"),
     MB("Filled",fillPct.toFixed(1)+"%",fillPct>50?"var(--g)":fillPct>0?"var(--o)":"var(--mt)")].join("");
 
-  // TOTAL (Ledger + DeFi + Realized)
-  var eff=ledgerBurn+ALP;
-  var wV=MY_BURN*P,stTV=bEq*P,tot=TR+wV+stTV+lpV,prof=tot-INVESTED,roi=prof/INVESTED*100;
-  $("totalGrid").innerHTML=[MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Realized","$"+F(TR,0),"var(--g)"),
-    MB("Ledger","$"+F(ledgerUsd,0),"var(--o)"),MB("DeFi LPs","$"+F(lpV,0),"var(--cy)"),
-    MB("Total","$"+F(tot,0),"var(--br)"),MB("Effective",F(eff,0)+" BURN","var(--dm)"),
-    MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")].join("");
-
   // HISTORY
   var hR="";for(var hi2=0;hi2<CL.length;hi2++){var hp=CL[hi2],hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"Ø "+FP(hp.u/hp.b);
     hR+='<tr><td style="color:var(--mt)">'+hp.d+'</td><td style="color:var(--o)">'+F(hp.b,0)+'</td><td style="font-size:10px;color:var(--dm)">'+hr+'</td><td style="color:var(--g)">$'+F(hp.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(hp.u/hp.b).toFixed(4)+'</td></tr>';}
   for(var mi=0;mi<MS.length;mi++){var ms2=MS[mi];hR+='<tr style="background:#60a5fa04"><td style="color:var(--mt)">'+ms2.d+'</td><td style="color:var(--o)">'+F(ms2.b,0)+'</td><td style="color:var(--dm)">Market</td><td style="color:var(--g)">$'+F(ms2.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(ms2.u/ms2.b).toFixed(4)+'</td></tr>';}
   hR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TR,0)+'</td><td style="font-size:9px;color:var(--mt)">Ø $'+(TR/TS).toFixed(4)+'</td></tr>';
   $("histB").innerHTML=hR;
-
-  // LP RANGE BAR
-  var mxP=2.5,bar='<div style="position:relative;height:36px;background:#080c16;border-radius:6px;overflow:hidden;margin-bottom:4px">';
-  for(var ri=0;ri<LP.length;ri++){var rp=LP[ri];if(rp.fr)continue;var rL=(rp.lo/mxP*100),rW=((rp.hi-rp.lo)/mxP*100),rA=P>=rp.lo&&P<=rp.hi,rF=P>rp.hi;
-    bar+='<div style="position:absolute;left:'+rL+'%;width:'+rW+'%;height:100%;background:'+(rF?"rgba(52,211,153,.15)":rA?"rgba(251,146,60,.2)":"rgba(96,165,250,.06)")+';border-left:1px solid '+(rF?"rgba(52,211,153,.4)":rA?"rgba(251,146,60,.5)":"rgba(96,165,250,.12)")+';border-right:1px solid '+(rF?"rgba(52,211,153,.4)":rA?"rgba(251,146,60,.5)":"rgba(96,165,250,.12)")+';display:flex;align-items:center;padding:0 2px"><span style="font-size:7px;color:'+(rF?"var(--g)":rA?"var(--o)":"var(--dm)")+';white-space:nowrap">'+F(rp.b,0)+(rF?" ✓":rA?" ●":"")+'</span></div>';}
-  bar+='<div style="position:absolute;left:'+Math.min(P/mxP*100,99)+'%;width:2px;height:100%;background:var(--br);z-index:10;box-shadow:0 0 6px rgba(226,232,240,.5)"></div></div>';
-  bar+='<div style="display:flex;justify-content:space-between;font-size:7px;color:var(--dm)">';[0,.2,.5,1,1.5,2,2.5].forEach(function(t){bar+="<span>$"+t.toFixed(2)+"</span>";});
-  $("rangeBar").innerHTML=bar+"</div>";
 
   // LP TABLE
   var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
