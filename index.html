@@ -65,8 +65,11 @@ textarea.inp{min-height:50px;resize:vertical}
 <div class="c"><div class="lb">Buyflow</div><div class="ov"><table><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div></div>
 <div class="c"><div class="lb">DEX Supply</div><div class="ov"><table><thead><tr><th>Price</th><th>BURN Left</th><th>USDC</th><th>Removed</th></tr></thead><tbody id="dsB"></tbody></table></div></div>
 <div class="c"><div class="lb">Sell Impact</div><div class="ov"><table><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div></div>
+<div class="c"><div class="lb">Supply Dynamics</div><div class="mg" id="dynGrid"></div></div>
+<div class="c"><div class="lb">Liquidity Walls</div><div class="ov"><table><thead><tr><th>Price Level</th><th>BURN Liquidity</th><th>USDC to Pass</th><th>Type</th></tr></thead><tbody id="wallB"></tbody></table></div></div>
+<div class="c" style="border-color:#22d3ee20"><div class="lb">Chart <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px">Open full ↗</a></div><iframe id="chartFrame" src="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=60" style="width:100%;height:350px;border:none;border-radius:8px" loading="lazy" allow="clipboard-write"></iframe></div>
 <div class="c"><div class="lb">Pool State</div><div class="mg" id="poolG"></div></div>
-<div class="c"><div class="lb">Whale Activity</div><div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div></div>
+<div class="c"><div class="lb">Whale Activity <button class="btn" style="margin-left:8px;font-size:8px" onclick="reqNotif()">🔔 Enable Alerts</button></div><div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div></div>
 </div>
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--bd)" id="foot">BURN Terminal</div>
 </div>
@@ -150,6 +153,12 @@ async function rpc(to,data){
     var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
 function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e18;}
+
+// ═══ NOTIFICATIONS ═══
+var prevPrice=0, notifOn=false;
+function reqNotif(){if(!("Notification" in window)){alert("Browser does not support notifications");return;}
+  Notification.requestPermission().then(function(p){if(p==="granted"){notifOn=true;alert("🔔 Alerts enabled!");}});}
+function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body,icon:"data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🔥</text></svg>"});}catch(e){}}}
 
 // ═══ FETCH: Pool ═══
 async function go(manual){
@@ -308,6 +317,47 @@ function render(){
   var siR="";for(var s=0;s<SEL.length;s++){var n=SEL[s],xn=X+n,yn=K/xn,np=yn/xn,imp=((np-P)/P)*100,uo=Math.max(0,Y-yn);
     siR+='<tr><td class="bld">'+F(n,0)+'</td><td style="color:var(--g)">$'+F(uo,2)+'</td><td style="color:var(--o)">'+FP(np)+'</td><td>'+TG(imp.toFixed(1)+"%",imp<-50?"#f87171":imp<-20?"#fb923c":"#60a5fa")+'</td></tr>';}
   $("siB").innerHTML=siR;
+
+  // SUPPLY DYNAMICS
+  if(sup.total>0){
+    var dexSup=aB, stLocked=sup.locked, liqRatio=sup.circ>0?(dexSup/sup.circ*100):0;
+    var freeFloat=sup.circ-dexSup;
+    $("dynGrid").innerHTML=[
+      MB("DEX Supply",F(dexSup,0)+" BURN","var(--o)"),
+      MB("stBURN Locked",F(sup.stSup,0),"var(--p)"),
+      MB("Burned",F(sup.burned,0),"var(--r)"),
+      MB("Circulating",F(sup.circ,0),"var(--br)"),
+      MB("DEX/Circ Ratio",liqRatio.toFixed(1)+"%","var(--cy)"),
+      MB("Free Float",F(freeFloat,0),"var(--dm)")
+    ].join("");
+  }else{$("dynGrid").innerHTML='<span style="font-size:10px;color:var(--dm)">Waiting for on-chain data...</span>';}
+
+  // LIQUIDITY WALLS
+  var walls=[];
+  for(var wi=0;wi<LP.length;wi++){if(LP[wi].fr)continue;
+    var wp=LP[wi],wv3=v3(wp.b,wp.lo,wp.hi,P);
+    var wUsdc=wp.b*Math.sqrt(wp.lo*wp.hi); // geometric mean cost to pass
+    walls.push({lo:wp.lo,hi:wp.hi,burn:wp.b,left:wv3.left,usdc:wUsdc,
+      status:P>=wp.hi?"passed":P>=wp.lo?"active":"ahead"});}
+  walls.sort(function(a,b){return a.lo-b.lo;});
+  var wR="";for(var wj=0;wj<walls.length;wj++){var ww=walls[wj];
+    var wClr=ww.status==="passed"?"var(--dm)":ww.status==="active"?"var(--o)":"var(--b)";
+    var wTag=ww.status==="passed"?TG("Passed","#334155"):ww.status==="active"?TG("Active","#fb923c"):TG("Wall","#60a5fa");
+    wR+='<tr><td class="bld" style="color:'+wClr+'">$'+ww.lo.toFixed(3)+' – $'+ww.hi.toFixed(2)+'</td><td style="color:var(--o)">'+F(ww.left,0)+' / '+F(ww.burn,0)+'</td><td style="color:var(--g)">$'+F(ww.usdc,0)+'</td><td>'+wTag+'</td></tr>';}
+  $("wallB").innerHTML=wR;
+
+  // NOTIFICATIONS
+  if(prevPrice>0&&P!==prevPrice){
+    // LP range crossing
+    for(var ni=0;ni<LP.length;ni++){if(LP[ni].fr)continue;
+      if(prevPrice<LP[ni].lo&&P>=LP[ni].lo)notify("LP Range Entered","Price crossed $"+LP[ni].lo.toFixed(3)+" — position now active");
+      if(prevPrice<LP[ni].hi&&P>=LP[ni].hi)notify("LP Position Filled","Price crossed $"+LP[ni].hi.toFixed(2)+" — position fully converted");}
+    // Targets
+    for(var ti=0;ti<TGT.length;ti++){if(prevPrice<TGT[ti]&&P>=TGT[ti])notify("Target Reached","BURN hit $"+TGT[ti].toFixed(2)+"!");}
+  }
+  // Whale notification
+  if(whl.length>0&&whl[0].t>new Date(Date.now()-20000)){notify("Whale "+whl[0].type,"$"+F(whl[0].vol,0)+" volume spike detected");}
+  prevPrice=P;
 
   // POOL
   $("poolG").innerHTML=[MB("BURN",F(aB,0),"var(--o)"),MB("USDC","$"+F(aU,2),"var(--g)"),MB("TVL","$"+F(tU>0?tU:(X*P+Y),0),"var(--p)"),
