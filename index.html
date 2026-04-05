@@ -214,11 +214,11 @@ textarea.inp { min-height:60px; resize:vertical; line-height:1.5; }
 
     <!-- ② BUYFLOW -->
     <div class="card">
-      <div class="lbl">② AMM Theoretical Buyflow Estimate</div>
-      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">ΔUSDC = √(k × target_price) − current_USDC</div>
+      <div class="lbl">② Buyflow to Price Targets</div>
+      <div style="font-size:10px;color:var(--dim);margin-bottom:10px">AMM estimate (constant-product). Your LP earnings at each target shown.</div>
       <div class="ov">
         <table>
-          <thead><tr><th>Target</th><th>USDC Needed</th><th>BURN Bought</th><th>Multiple</th></tr></thead>
+          <thead><tr><th>Target</th><th>USDC Needed</th><th>BURN Bought</th><th>Your BURN Sold</th><th>Your USDC Earned</th><th>×</th></tr></thead>
           <tbody id="buyflowBody"></tbody>
         </table>
       </div>
@@ -410,14 +410,15 @@ async function fetchPool(isManualRefresh) {
     // NOT the virtual reserves at the current tick.
     // We must use priceUsd as the anchor and derive virtual reserves.
 
-    if (activeTab === "auto" && apiPriceUsd > 0 && tvlUsd > 0) {
-      // Virtual reserves: assume 50/50 split at current price
-      var virtY = tvlUsd / 2;          // USDC side (virtual)
-      var virtX = virtY / apiPriceUsd;  // BURN side (virtual)
-      // Now price = virtY / virtX = apiPriceUsd ✓
-      applyReserves(virtX, virtY, pooledBurn, pooledUsdc, tvlUsd, "api");
+    if (activeTab === "auto" && apiPriceUsd > 0) {
+      // Use actual USDC in pool as y (not TVL/2 which overestimates)
+      // For USDC, 1 token ≈ $1, so pooledUsdc IS the dollar amount
+      var useY = pooledUsdc > 0 ? pooledUsdc : (tvlUsd > 0 ? tvlUsd / 2 : 0);
+      var useX = useY / apiPriceUsd;
+      if (useX > 0 && useY > 0) {
+        applyReserves(useX, useY, pooledBurn, pooledUsdc, tvlUsd, "api");
+      }
     } else if (activeTab === "auto" && pooledBurn > 0 && pooledUsdc > 0) {
-      // Absolute fallback: raw reserves (less accurate for V3)
       applyReserves(pooledBurn, pooledUsdc, pooledBurn, pooledUsdc, tvlUsd, "est");
     }
 
@@ -573,7 +574,17 @@ function renderAll() {
     metricBox("Sells 24h", String(sells24), "var(--r)")
   ].join("");
 
-  // ── ② Buyflow ──
+  // ── ② Buyflow (LP-aware) ──
+
+  // Calculate current LP state (baseline)
+  var currentLpBurnSold = 0, currentLpUsdc = 0;
+  for (var li = 0; li < USER_LP.length; li++) {
+    if (USER_LP[li].fullRange) continue;
+    var cv = calcV3Position(USER_LP[li].burn, USER_LP[li].lo, USER_LP[li].hi, price);
+    currentLpBurnSold += (USER_LP[li].burn - cv.burnLeft);
+    currentLpUsdc += cv.usdc;
+  }
+
   var bfRows = "";
   for (var i = 0; i < TARGETS.length; i++) {
     var tp = TARGETS[i];
@@ -581,10 +592,27 @@ function renderAll() {
     var usdcNeeded = reachable ? Math.sqrt(k * tp) - y : 0;
     var burnBought = reachable ? x - Math.sqrt(k / tp) : 0;
     var mult = tp / price;
+
+    // Calculate LP state at this target price
+    var lpBurnSold = 0, lpUsdc = 0;
+    if (reachable) {
+      for (var lj = 0; lj < USER_LP.length; lj++) {
+        if (USER_LP[lj].fullRange) continue;
+        var tv = calcV3Position(USER_LP[lj].burn, USER_LP[lj].lo, USER_LP[lj].hi, tp);
+        lpBurnSold += (USER_LP[lj].burn - tv.burnLeft);
+        lpUsdc += tv.usdc;
+      }
+    }
+    // Delta from current state
+    var deltaLpBurn = lpBurnSold - currentLpBurnSold;
+    var deltaLpUsdc = lpUsdc - currentLpUsdc;
+
     bfRows += '<tr style="opacity:' + (reachable ? 1 : 0.3) + '">' +
       '<td class="td-b">$' + tp.toFixed(2) + '</td>' +
       '<td style="color:' + (reachable ? "var(--g)" : "var(--mut)") + '">' + (reachable ? "$" + fmt(usdcNeeded, 0) : "Above") + '</td>' +
       '<td style="color:var(--o)">' + (reachable ? fmt(burnBought, 0) : "—") + '</td>' +
+      '<td style="color:var(--cy)">' + (reachable && deltaLpBurn > 0 ? fmt(deltaLpBurn, 0) : "—") + '</td>' +
+      '<td style="color:var(--g)">' + (reachable && deltaLpUsdc > 0 ? "$" + fmt(deltaLpUsdc, 0) : "—") + '</td>' +
       '<td>' + tag(mult.toFixed(1) + "x", mult > 5 ? "#c084fc" : mult > 2 ? "#fb923c" : "#60a5fa") + '</td></tr>';
   }
   el("buyflowBody").innerHTML = bfRows;
