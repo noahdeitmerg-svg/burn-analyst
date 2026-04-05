@@ -442,7 +442,7 @@ function render(){
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
   $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
     MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("Yield","+"+(stY>=0?F(stY,0):0)+" BURN",stY>=0?"var(--g)":"var(--r)"),
-    MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)"),MB("USD","$"+F(stV,0),"var(--g)")].join("");
+    MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
 
   // SUPPLY
   if(sup.total>0){var bP=sup.total>0?(sup.burned/sup.total*100):0;
