@@ -41,6 +41,10 @@ textarea.inp{min-height:50px;resize:vertical}
 @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
 .ld{display:flex;align-items:center;gap:6px;padding:16px;color:var(--dm);font-size:10px}
 .ld::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--b);animation:pulse 1.2s infinite}
+.ldd{display:inline-flex;gap:4px;padding:4px 0}
+.ldd i{width:5px;height:5px;border-radius:50%;background:var(--b);animation:pulse 1s infinite;font-style:normal}
+.ldd i:nth-child(2){animation-delay:.2s}
+.ldd i:nth-child(3){animation-delay:.4s}
 </style>
 </head>
 <body>
@@ -147,6 +151,7 @@ function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
+var LD='<span class="ldd"><i></i><i></i><i></i></span>';
 
 // ═══ RPC ═══
 async function rpc(to,data){
@@ -263,12 +268,12 @@ function render(){
   // PORTFOLIO
   var bEq=MY_STBURN*stR,eff=MY_BURN+bEq+ALP;
   $("portGrid").innerHTML=[MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),
-    MB("Ratio",stOK?stR.toFixed(6):"…","var(--cy)"),MB("Effective",F(eff,0)+" BURN","var(--br)"),
+    MB("Ratio",stOK?stR.toFixed(6):LD,"var(--cy)"),MB("Effective",F(eff,0)+" BURN","var(--br)"),
     MB("In LPs",F(ALP,0),"var(--b)"),MB("USD","$"+F(eff*P,0),"var(--g)")].join("");
 
   // stBURN
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
-  $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):"…","var(--cy)"),
+  $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
     MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("USD","$"+F(stV,0),"var(--g)"),
     MB("Yield",(stY>=0?"+":"")+F(stY,0)+" BURN",stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
 
@@ -388,7 +393,7 @@ function render(){
   if(whl.length>0){$("whaleBox").innerHTML=whl.map(function(w){return'<div style="padding:3px 0;border-bottom:1px solid #0f172a"><span style="color:var(--mt)">'+w.t.toLocaleTimeString()+"</span> "+TG(w.type,w.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br)">$'+F(w.vol,0)+"</span></div>";}).join("");}
   else $("whaleBox").innerHTML='<span style="color:var(--dm)">Monitoring 5m spikes...</span>';
 
-  $("foot").innerHTML="BURN Terminal · "+SRC+" · stBURN:"+(stOK?"✓"+stR.toFixed(6)+" ("+stSrc+")":"…")+" · Supply:"+(sup.total>0?"✓":"…")+(MY_WALLET?" · Wallet:✓":"");
+  $("foot").innerHTML="BURN Terminal · "+SRC+" · stBURN:"+(stOK?"✓"+stR.toFixed(6)+" ("+stSrc+")":LD)+" · Supply:"+(sup.total>0?"✓":LD)+(MY_WALLET?" · Wallet:✓":"");
 }
 
 // ═══ START ═══
