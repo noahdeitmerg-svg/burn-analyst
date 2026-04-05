@@ -43,12 +43,11 @@ textarea.inp{min-height:50px;resize:vertical}
 <body>
 <div class="w">
 <div class="hdr"><h1><em>◆</em> BURN Terminal</h1><div style="display:flex;align-items:center;gap:10px"><span id="sts" style="font-size:9px;color:var(--mt)"></span><button class="btn" id="rbtn" onclick="go(true)">⟳</button></div></div>
-<div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span> <span style="font-size:10px;color:var(--mt);cursor:pointer" onclick="tab('paste')">📋 Paste</span></div>
+<div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span> <span style="font-size:10px;color:var(--mt)">Use ✎ Manual input</span></div>
 <div class="c hid" id="lbox" style="text-align:center;padding:40px">◆ Loading...</div>
-<div class="c c0"><div class="tabs"><button class="tab on" data-t="auto" onclick="tab('auto')">⟳ Auto</button><button class="tab" data-t="paste" onclick="tab('paste')">📋 Paste</button><button class="tab" data-t="manual" onclick="tab('manual')">✎ Manual</button></div>
+<div class="c c0"><div class="tabs"><button class="tab on" data-t="auto" onclick="tab('auto')">⟳ Auto</button><button class="tab" data-t="manual" onclick="tab('manual')">✎ Manual</button></div>
 <div style="padding:10px">
 <div id="t-auto"><span style="font-size:10px" id="astat">Connecting...</span></div>
-<div id="t-paste" class="hid"><div style="font-size:10px;color:var(--mt);margin-bottom:4px"><a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener">GeckoTerminal ↗</a></div><textarea class="inp" id="ptxt" oninput="doPaste()" placeholder='"pooled BURN is 500,000 ... pooled USDC is 50,000"'></textarea><div id="pres" style="margin-top:4px;font-size:10px"></div></div>
 <div id="t-manual" class="hid"><div style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt)">BURN</div><input class="inp" type="number" id="mx" oninput="doMan()"></div><div style="flex:1;min-width:100px"><div style="font-size:8px;color:var(--mt)">USDC</div><input class="inp" type="number" id="my" oninput="doMan()"></div><div style="flex:1;min-width:100px;display:flex;align-items:flex-end" id="mp"></div></div></div>
 </div></div>
 
@@ -176,7 +175,7 @@ async function go(manual){
     pm5={v:mv,s:ms,b:mb};
     if(TAB==="auto"&&apiP>0){var vy=aU>0?aU:(tU>0?tU/2:0),vx=vy/apiP;if(vx>0&&vy>0)set(vx,vy,"api");}
     $("ebox").classList.add("hid");$("astat").innerHTML='<span style="color:var(--g)">✓ Live · 15s</span>';sts("ok");
-  }catch(e){$("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+e.message;$("astat").innerHTML='<span style="color:var(--mt)">Error</span>';sts("err");if(TAB==="auto")tab("paste");}
+  }catch(e){$("ebox").classList.remove("hid");$("emsg").textContent="⚠ "+e.message;$("astat").innerHTML='<span style="color:var(--mt)">Error</span>';sts("err");if(TAB==="auto")tab("manual");}
   $("lbox").classList.add("hid");first=false;btn.disabled=false;
 }
 
@@ -212,12 +211,7 @@ function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="er
 function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();}}
 
 function tab(id){TAB=id;document.querySelectorAll(".tab").forEach(function(t){t.classList.toggle("on",t.dataset.t===id)});
-  ["auto","paste","manual"].forEach(function(t){$("t-"+t).classList.toggle("hid",t!==id)});if(id==="auto")go();}
-
-function doPaste(){var txt=$("ptxt").value.replace(/,/g,""),rx=/pooled\s+(\w+)\s+is\s+([\d.]+)\s*([KMB]?)/gi,o={},m;
-  while((m=rx.exec(txt))!==null){var v=parseFloat(m[2]);var s={K:1e3,M:1e6,B:1e9}[m[3]&&m[3].toUpperCase()];if(s)v*=s;if(v>0)o[m[1].toUpperCase()]=v;}
-  if(o.BURN&&o.USDC){$("pres").innerHTML=TG("✓","#34d399")+" "+F(o.BURN,0)+"/"+F(o.USDC,2);set(o.BURN,o.USDC,"paste");}
-  else if(txt.trim().length>10)$("pres").innerHTML='<span style="color:var(--o)">⚠ Not found</span>';else $("pres").innerHTML="";}
+  ["auto","manual"].forEach(function(t){$("t-"+t).classList.toggle("hid",t!==id)});if(id==="auto")go();}
 
 function doMan(){var x=parseFloat($("mx").value),y=parseFloat($("my").value);
   if(x>0&&y>0){$("mp").innerHTML=MB("Price",FP(y/x),"var(--br)");set(x,y,"manual");}else $("mp").innerHTML="";}
@@ -274,7 +268,7 @@ function render(){
     MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")].join("");
 
   // HISTORY
-  var hR="";for(var hi2=0;hi2<CL.length;hi2++){var hp=CL[hi2],hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"—";
+  var hR="";for(var hi2=0;hi2<CL.length;hi2++){var hp=CL[hi2],hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"Ø "+FP(hp.u/hp.b);
     hR+='<tr><td style="color:var(--mt)">'+hp.d+'</td><td style="color:var(--o)">'+F(hp.b,0)+'</td><td style="font-size:10px;color:var(--dm)">'+hr+'</td><td style="color:var(--g)">$'+F(hp.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(hp.u/hp.b).toFixed(4)+'</td></tr>';}
   for(var mi=0;mi<MS.length;mi++){var ms2=MS[mi];hR+='<tr style="background:#60a5fa04"><td style="color:var(--mt)">'+ms2.d+'</td><td style="color:var(--o)">'+F(ms2.b,0)+'</td><td style="color:var(--dm)">Market</td><td style="color:var(--g)">$'+F(ms2.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(ms2.u/ms2.b).toFixed(4)+'</td></tr>';}
   hR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TR,0)+'</td><td style="font-size:9px;color:var(--mt)">Ø $'+(TR/TS).toFixed(4)+'</td></tr>';
