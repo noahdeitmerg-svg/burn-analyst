@@ -111,7 +111,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <!-- ═══ 4. LP POSITIONS (emphasized) ═══ -->
 <div class="c" style="border-color:#fb923c15">
   <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
-  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
+  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
   <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
 </div>
 
@@ -230,6 +230,7 @@ var stR=1,stOK=false,stSrc="";
 var sup={total:0,burned:0,locked:0,circ:0,stSup:0};
 var hst=[],whl=[],pm5={v:0,s:0,b:0};
 var first=true,failCount=0;
+var cache={P:0,stR:1,sup:null};
 
 // ═══ HELPERS ═══
 function $(id){return document.getElementById(id)}
@@ -361,7 +362,8 @@ async function fetchSt(){
   try{var r2=await fetch(DS_ST);if(!r2.ok)return;var j=await r2.json(),p=j.pairs&&j.pairs[0];if(!p)return;
     var bs=(p.baseToken&&p.baseToken.symbol)||"";
     if(bs.indexOf("stBURN")>=0){stR=parseFloat(p.priceNative)||1;}else{stR=1/(parseFloat(p.priceNative)||1);}
-    stOK=true;stSrc="dex";}catch(e){}}
+    stOK=true;stSrc="dex";}catch(e){}
+  if(stOK)cache.stR=stR;else if(cache.stR>1){stR=cache.stR;stOK=true;stSrc="cache";}}
 
 // ═══ FETCH: On-chain supply ═══
 async function fetchSup(){
@@ -376,7 +378,8 @@ async function fetchSup(){
     sup.locked=h2n(s1)+h2n(s2)+h2n(s3);
     sup.circ=sup.total-sup.burned-sup.locked;
     sup.stSup=h2n(stH);
-  }catch(e){}}
+    if(sup.total>0)cache.sup={total:sup.total,burned:sup.burned,locked:sup.locked,circ:sup.circ,stSup:sup.stSup};
+  }catch(e){if(cache.sup){sup.total=cache.sup.total;sup.burned=cache.sup.burned;sup.locked=cache.sup.locked;sup.circ=cache.sup.circ;sup.stSup=cache.sup.stSup;}}}
 
 // ═══ FETCH: Wallet ═══
 async function fetchWal(){
@@ -385,7 +388,7 @@ async function fetchWal(){
     var b=h2n(bH),s=h2n(sH);if(b>0)MY_BURN=Math.round(b);if(s>0)MY_STBURN=Math.round(s);}catch(e){}}
 
 function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="err"?'<span class="dot" style="background:var(--r)"></span>'+t:'<span class="dot" style="background:var(--g)"></span>'+t;}
-function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();}}
+function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;if(P>0)cache.P=P;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();}}
 
 function doMan(){var x=parseFloat($("mx").value),y=parseFloat($("my").value);
   if(x>0&&y>0){$("mp").innerHTML='<span style="color:var(--br);font-weight:600">'+FP(y/x)+'</span>';set(x,y,"manual");}else $("mp").innerHTML="";}
@@ -420,12 +423,11 @@ function render(){
   var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
   var outU=maxU-pU,fillPct=maxU>0?(pU/maxU*100):0;
 
-  // PORTFOLIO (unified)
+  // PORTFOLIO (unified) — TOTAL_BURN_EQUIVALENT is the single source of truth
   var bEq=MY_STBURN*stR;
-  var totalTokens=MY_BURN+MY_STBURN+ALP;
-  var effBurn=MY_BURN+bEq+ALP;
-  var portUsd=MY_BURN*P+bEq*P+lpV;
-  var tot=TR+portUsd,prof=tot-INVESTED,roi=prof/INVESTED*100;
+  var TOTAL_BURN_EQ=MY_BURN+bEq+ALP;
+  var portUsd=TOTAL_BURN_EQ*P;
+  var tot=TR+portUsd,prof=tot-INVESTED,roi=INVESTED>0?prof/INVESTED*100:0;
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
   $("portGrid").innerHTML=[
     MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),MB("Multiple",mult>0?mult.toFixed(1)+"x":"…",mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)"),
@@ -449,9 +451,11 @@ function render(){
 
   // P&L ACTIVE (display)
   var maxHi=0;for(var mh=0;mh<LP.length;mh++){if(!LP[mh].fr&&LP[mh].hi>maxHi)maxHi=LP[mh].hi;}
+  var lpExposure=portUsd>0?(lpV/portUsd*100):0;
   $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0)+" BURN","var(--o)"),MB("Left",F(pL,0)+" BURN","var(--tx)"),MB("USDC Earned","$"+F(pU,2),"var(--g)"),
     MB("100% Filled","$"+F(maxU,0)+" @ $"+maxHi.toFixed(2),"var(--br)"),MB("Outstanding","$"+F(outU,0),"var(--cy)"),
-    MB("Filled",fillPct.toFixed(1)+"%",fillPct>50?"var(--g)":fillPct>0?"var(--o)":"var(--mt)")].join("");
+    MB("Filled",fillPct.toFixed(1)+"%",fillPct>50?"var(--g)":fillPct>0?"var(--o)":"var(--mt)"),
+    MB("LP Exposure",lpExposure.toFixed(1)+"%","var(--dm)")].join("");
 
   // HISTORY
   var hR="";for(var hi2=0;hi2<CL.length;hi2++){var hp=CL[hi2],hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"Ø "+FP(hp.u/hp.b);
@@ -468,13 +472,16 @@ function render(){
   var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
   function ring(p,cl,tx){p=Math.max(0,Math.min(100,p||0));return'<div style="width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:conic-gradient('+cl+' '+p+'%,#1a2235 '+p+'% 100%)"><div style="width:34px;height:34px;border-radius:50%;background:#0c1220;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+cl+'">'+tx+'</div></div>';}
   var lpR="",tBI=0,tBL=0,tU2=0;
-  for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH;
-    if(pos.fr){rng="Full Range";bI=pos.b;bL=aB;uE=aU;var frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");}
+  for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
+    if(pos.fr){rng="Full Range";bI=pos.b;bL=aB;uE=aU;var frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
     else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+"–$"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
-      if(P<pos.lo){ringH=ring(0,"#334155","—");}else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");}else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");}}
+      var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
+      if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:9px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
+      else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:9px;color:var(--g)">✓</span>';}
+      else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:9px;color:var(--mt)">↓'+dLo.toFixed(0)+'% ↑'+dHi.toFixed(0)+'%</span>';}}
     tBI+=bI;tBL+=bL;tU2+=uE;
-    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:10px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
-  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td></tr>';
+    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:10px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
+  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td></tr>';
   $("lpB").innerHTML=lpR;
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
 
@@ -508,9 +515,13 @@ function render(){
     MB("k",F(K,0),"var(--b)"),MB("Vol 24h",vol>0?"$"+F(vol,0):"—","var(--cy)"),MB("Vol 5m",m5v>0?"$"+F(m5v,0):"—","var(--cy)"),
     MB("Txns",b24+" / "+s24,b24>s24?"var(--g)":"var(--r)")].join("");
 
-  // WHALE
-  if(whl.length>0){$("whaleBox").innerHTML=whl.map(function(w){return'<div style="padding:3px 0;border-bottom:1px solid #0f172a"><span style="color:var(--mt)">'+w.t.toLocaleTimeString()+"</span> "+TG(w.type,w.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br)">$'+F(w.vol,0)+"</span></div>";}).join("");}
-  else $("whaleBox").innerHTML='<span style="color:var(--dm)">Monitoring 5m spikes...</span>';
+  // WHALE — Last Large Trade
+  if(whl.length>0){
+    var big=whl[0];for(var wi2=1;wi2<whl.length;wi2++){if(whl[wi2].vol>big.vol)big=whl[wi2];}
+    var ago=Math.round((Date.now()-big.t.getTime())/60000);
+    var agoTxt=ago<60?ago+"m ago":ago<1440?Math.round(ago/60)+"h ago":Math.round(ago/1440)+"d ago";
+    $("whaleBox").innerHTML='<div style="padding:6px 0"><span style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Last Large Trade</span><div style="margin-top:4px;font-size:13px">'+TG(big.type,big.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br);font-weight:600">$'+F(big.vol,0)+'</span> <span style="color:var(--mt);font-size:10px">'+agoTxt+'</span></div></div>';}
+  else $("whaleBox").innerHTML='<span style="color:var(--dm)">No large trade detected yet.</span>';
 
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
