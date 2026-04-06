@@ -46,20 +46,27 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .col-b{display:none;padding-top:12px}
 .col-b.open{display:block}
 .rings{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:8px 0}
-.orb{width:140px;height:140px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+.orb{width:130px;height:130px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:radial-gradient(circle at 35% 35%,#141d30,#080c16);border:2px solid;
   box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}
+.orb-main{width:155px;height:155px}
+.orb-main .orb-val{font-size:21px}
 .orb-lbl{font-size:8px;color:var(--mt);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px}
-.orb-val{font-size:17px;font-weight:700;font-family:inherit}
+.orb-val{font-size:16px;font-weight:700;font-family:inherit}
 .orb-sub{font-size:9px;color:var(--dm);margin-top:2px}
 .hero-row{text-align:center;margin-top:10px;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}
 .hero-meta{margin-top:8px;display:flex;justify-content:center;gap:16px;font-size:10px;color:var(--dm)}
+.hero-update{text-align:center;margin-top:6px;font-size:9px;color:var(--dm)}
 .sep{width:100%;height:1px;background:var(--bd);margin:6px 0 14px}
+.sep-sm{width:100%;height:1px;background:var(--bd);margin:4px 0 8px}
 .lp-tbl th{padding:10px 12px;font-size:11px;letter-spacing:1px}
 .lp-tbl td{padding:14px 12px;font-size:15px;border-bottom:1px solid #151d2e}
 .lp-tbl tr:hover td{background:#0a0f1a}
 .hist-tbl td{padding:8px 8px;font-size:12px;border-bottom:1px solid #151d2e}
 .hist-tbl tr:hover td{background:#0a0f1a}
+.mkt-tbl td{padding:7px 8px}
+.yield-big{font-size:18px !important}
+@media(max-width:600px){.c{margin-bottom:14px;padding:16px}.lp-tbl td{padding:12px 8px;font-size:13px}table{line-height:1.6}}
 </style>
 </head>
 <body>
@@ -76,7 +83,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <!-- ═══ 1. HERO: 3 CIRCLES ═══ -->
 <div class="c" style="padding:24px 14px">
   <div class="rings">
-    <div class="orb" style="border-color:var(--o)">
+    <div class="orb orb-main" style="border-color:var(--o)">
       <div class="orb-lbl">BURN Price</div>
       <div class="orb-val" id="dPrice" style="color:var(--o)"></div>
       <div class="orb-sub" id="dPct"></div>
@@ -94,12 +101,17 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   </div>
   <div class="hero-row"><span id="dSrc"></span><span id="spark"></span></div>
   <div class="hero-meta" id="miniMkt"></div>
+  <div class="hero-update" id="lastUpd"></div>
 </div>
 
 <!-- ═══ 2. PORTFOLIO (always visible) ═══ -->
 <div class="c">
   <div class="lb">Portfolio</div>
-  <div class="mg" id="portGrid"></div>
+  <div class="mg" id="portG1"></div>
+  <div class="sep-sm"></div>
+  <div class="mg" id="portG2"></div>
+  <div class="sep-sm"></div>
+  <div class="mg" id="portG3"></div>
   <div class="sep"></div>
   <div class="lb">stBURN Yield</div>
   <div class="mg" id="stGrid"></div>
@@ -124,7 +136,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 
 <!-- ═══ 6. CHART (collapsible) ═══ -->
 <div class="c">
-  <div class="col" onclick="tog(this,'sec-chart')">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px" onclick="event.stopPropagation()">GeckoTerminal ↗</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:8px;color:var(--b);margin-left:8px" onclick="event.stopPropagation()">DexScreener ↗</a></div>
+  <div class="col" onclick="tog(this,'sec-chart')">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:12px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ GeckoTerminal</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:10px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ DexScreener</a></div>
   <div id="sec-chart" class="col-b"><div style="position:relative;min-height:400px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0" style="width:100%;height:400px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
 </div>
 
@@ -133,10 +145,10 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="col" onclick="tog(this,'sec-mkt')">Market Mechanics</div>
   <div id="sec-mkt" class="col-b">
     <div class="lb" style="margin-top:4px">Buyflow</div>
-    <div class="ov"><table><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div>
     <div class="sep"></div>
     <div class="lb">Sell Impact</div>
-    <div class="ov"><table><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
     <div class="sep"></div>
     <div class="lb">Pool State</div>
     <div class="mg" id="poolG"></div>
@@ -417,6 +429,7 @@ function render(){
 
   // Mini market info under price
   $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
+  $("lastUpd").textContent="Last Update: "+new Date().toLocaleTimeString();
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
   var pD=0,pL=0,pU=0,maxU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;var pf=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,LP[pi].hi);maxU+=pf.usdc;}
@@ -429,18 +442,26 @@ function render(){
   var portUsd=TOTAL_BURN_EQ*P;
   var tot=TR+portUsd,prof=tot-INVESTED,roi=INVESTED>0?prof/INVESTED*100:0;
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
-  $("portGrid").innerHTML=[
-    MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),MB("Multiple",mult>0?mult.toFixed(1)+"x":"…",mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)"),
+  // Group 1 — Investment
+  $("portG1").innerHTML=[
+    MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),MB("Multiple",mult>0?mult.toFixed(1)+"x":"…",mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")
+  ].join("");
+  // Group 2 — Holdings
+  $("portG2").innerHTML=[
+    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("In LPs",F(ALP,0),"var(--b)")
+  ].join("");
+  // Group 3 — Performance
+  $("portG3").innerHTML=[
     MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Portfolio","$"+F(portUsd,0),"var(--br)"),MB("Total Value","$"+F(tot,0),"var(--g)"),
-    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("In LPs",F(ALP,0),"var(--b)"),
     MB("Realized","$"+F(TR,0),"var(--g)"),MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
   ].join("");
 
-  // stBURN Yield
+  // stBURN Yield (yield value emphasized)
   var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
   $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
-    MB("BURN Equiv",F(bEq,0),"var(--o)"),MB("Yield","+"+(stY>=0?F(stY,0):0)+" BURN",stY>=0?"var(--g)":"var(--r)"),
-    MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
+    MB("BURN Equiv",F(bEq,0),"var(--o)")].join("")+
+    '<div class="mb"><small>YIELD</small><b class="yield-big" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
+    [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
 
   // SUPPLY
   if(sup.total>0){var bP=sup.total>0?(sup.burned/sup.total*100):0;
@@ -461,7 +482,7 @@ function render(){
   var hR="";for(var hi2=0;hi2<CL.length;hi2++){var hp=CL[hi2],hr=(hp.lo>0&&hp.hi>0)?FP(hp.lo)+"–"+FP(hp.hi):"Ø "+FP(hp.u/hp.b);
     hR+='<tr><td style="color:var(--mt)">'+hp.d+'</td><td style="color:var(--o)">'+F(hp.b,0)+'</td><td style="font-size:10px;color:var(--dm)">'+hr+'</td><td style="color:var(--g)">$'+F(hp.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(hp.u/hp.b).toFixed(4)+'</td></tr>';}
   for(var mi=0;mi<MS.length;mi++){var ms2=MS[mi];hR+='<tr style="background:#60a5fa04"><td style="color:var(--mt)">'+ms2.d+'</td><td style="color:var(--o)">'+F(ms2.b,0)+'</td><td style="color:var(--dm)">Market</td><td style="color:var(--g)">$'+F(ms2.u,2)+'</td><td style="font-size:9px;color:var(--mt)">$'+(ms2.u/ms2.b).toFixed(4)+'</td></tr>';}
-  hR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TR,0)+'</td><td style="font-size:9px;color:var(--mt)">Ø $'+(TR/TS).toFixed(4)+'</td></tr>';
+  hR+='<tr style="border-top:2px solid var(--bd);background:#080c16"><td class="bld">TOTAL</td><td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td><td style="color:var(--g);font-weight:600">$'+F(TR,0)+'</td><td style="font-size:9px;color:var(--mt)">Ø $'+(TR/TS).toFixed(4)+'</td></tr>';
   $("histB").innerHTML=hR;
   var avgSell=TS>0?TR/TS:0,realMult=AVG_ENTRY>0?avgSell/AVG_ENTRY:0;
   $("histSummary").innerHTML=[MB("BURN Sold",F(TS,0),"var(--o)"),MB("USDC Received","$"+F(TR,0),"var(--g)"),
@@ -474,7 +495,7 @@ function render(){
   var lpR="",tBI=0,tBL=0,tU2=0;
   for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
     if(pos.fr){rng="Full Range";bI=pos.b;bL=aB;uE=aU;var frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
-    else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+"–$"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
+    else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
       var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:9px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
       else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:9px;color:var(--g)">✓</span>';}
