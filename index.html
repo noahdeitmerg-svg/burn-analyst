@@ -149,9 +149,6 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
     <div class="sep"></div>
     <div class="lb">Sell Impact</div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
-    <div class="sep"></div>
-    <div class="lb">Pool State</div>
-    <div class="mg" id="poolG"></div>
   </div>
 </div>
 
@@ -218,7 +215,8 @@ var CL=[
   {d:"14.10.25",b:6806,lo:0,hi:0,u:725,n:"Partial"},
   {d:"16.10.25",b:2677,lo:.11086,hi:.1122,u:299,n:"Filled"},
   {d:"21.10.25",b:1915,lo:.1122,hi:.12203,u:217,n:"Partial"},
-  {d:"01.12.25",b:8264,lo:.114,hi:.115,u:949.80,n:"Filled"}
+  {d:"01.12.25",b:8264,lo:.114,hi:.115,u:949.80,n:"Filled"},
+  {d:"26.01.26",b:10195,lo:.138,hi:.14,u:1420,n:"Filled"}
 ];
 var MS=[{d:"05.12.25",b:10500,u:1196,n:"Market"}];
 var TS=0,TR=0;
@@ -530,11 +528,6 @@ function render(){
   // Whale notification
   if(whl.length>0&&whl[0].t>new Date(Date.now()-20000)){notify("Whale "+whl[0].type,"$"+F(whl[0].vol,0)+" volume spike detected");}
   prevPrice=P;
-
-  // POOL
-  $("poolG").innerHTML=[MB("BURN",F(aB,0),"var(--o)"),MB("USDC","$"+F(aU,2),"var(--g)"),MB("TVL","$"+F(tU>0?tU:(X*P+Y),0),"var(--p)"),
-    MB("k",F(K,0),"var(--b)"),MB("Vol 24h",vol>0?"$"+F(vol,0):"—","var(--cy)"),MB("Vol 5m",m5v>0?"$"+F(m5v,0):"—","var(--cy)"),
-    MB("Txns",b24+" / "+s24,b24>s24?"var(--g)":"var(--r)")].join("");
 
   // WHALE — Last Large Trade
   if(whl.length>0){
