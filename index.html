@@ -66,6 +66,10 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .hist-tbl tr:hover td{background:#0a0f1a}
 .mkt-tbl td{padding:7px 8px}
 .yield-big{font-size:18px !important}
+.key-val{font-size:20px !important}
+.nxt{text-align:center;margin-top:12px;padding:10px;background:#080c16;border-radius:8px;font-size:11px;color:var(--mt)}
+.nxt b{font-size:14px;font-weight:700}
+.tgt-row{text-align:center;margin-top:8px;font-size:10px;color:var(--dm);display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
 @media(max-width:600px){.c{margin-bottom:14px;padding:16px}.lp-tbl td{padding:12px 8px;font-size:13px}table{line-height:1.6}}
 </style>
 </head>
@@ -101,10 +105,22 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   </div>
   <div class="hero-row"><span id="dSrc"></span><span id="spark"></span></div>
   <div class="hero-meta" id="miniMkt"></div>
+  <div class="nxt" id="nextFill"></div>
+  <div class="tgt-row" id="tgtRow"></div>
   <div class="hero-update" id="lastUpd"></div>
 </div>
 
-<!-- ═══ 2. PORTFOLIO (always visible) ═══ -->
+<!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
+<div class="c" style="border-color:#34d39920"><div class="lb" style="font-size:11px;letter-spacing:1.5px">P&L — Active LPs</div><div class="mg" id="pnlGrid"></div></div>
+
+<!-- ═══ 3. LP POSITIONS ═══ -->
+<div class="c" style="border-color:#fb923c15">
+  <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
+  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
+  <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+</div>
+
+<!-- ═══ 4. PORTFOLIO ═══ -->
 <div class="c">
   <div class="lb">Portfolio</div>
   <div class="mg" id="portG1"></div>
@@ -117,21 +133,13 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="mg" id="stGrid"></div>
 </div>
 
-<!-- ═══ 3. P&L — ACTIVE LPs ═══ -->
-<div class="c" style="border-color:#34d39920"><div class="lb" style="font-size:11px;letter-spacing:1.5px">P&L — Active LPs</div><div class="mg" id="pnlGrid"></div></div>
-
-<!-- ═══ 4. LP POSITIONS (emphasized) ═══ -->
-<div class="c" style="border-color:#fb923c15">
-  <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
-  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
-  <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
-</div>
-
-<!-- ═══ 5. CLOSED POSITIONS ═══ -->
+<!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->
 <div class="c">
-  <div class="lb">Closed Positions</div>
-  <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
-  <div class="mg" id="histSummary" style="margin-top:12px"></div>
+  <div class="mg" id="histSummary"></div>
+  <div class="col" onclick="tog(this,'sec-hist')" style="margin-top:10px">Closed Positions — Details</div>
+  <div id="sec-hist" class="col-b">
+    <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
+  </div>
 </div>
 
 <!-- ═══ 6. CHART (collapsible) ═══ -->
@@ -157,14 +165,6 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="col" onclick="tog(this,'sec-tok')">Tokenomics</div>
   <div id="sec-tok" class="col-b">
     <div class="mg" id="supplyGrid"></div>
-  </div>
-</div>
-
-<!-- ═══ COLLAPSIBLE: Whale ═══ -->
-<div class="c">
-  <div class="col" onclick="tog(this,'sec-whale')">Whale Activity <button class="btn" style="margin-left:8px;font-size:8px" onclick="event.stopPropagation();reqNotif()">🔔</button></div>
-  <div id="sec-whale" class="col-b">
-    <div id="whaleBox" style="font-size:10px;color:var(--mt)">Monitoring...</div>
   </div>
 </div>
 
@@ -427,6 +427,19 @@ function render(){
 
   // Mini market info under price
   $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
+
+  // NEXT FILL — find the next LP position to be filled
+  var nxtFill="";
+  if(P>0){for(var nf=0;nf<LP.length;nf++){if(LP[nf].fr)continue;
+    if(P<LP[nf].hi){var nfV=v3(LP[nf].b,LP[nf].lo,LP[nf].hi,LP[nf].hi);var nfDist=P>0?((LP[nf].hi-P)/P*100):0;
+      nxtFill='Next Fill: <b style="color:var(--o)">$'+LP[nf].hi.toFixed(2)+'</b> <span style="color:var(--dm)">(↑'+nfDist.toFixed(0)+'%)</span> → '+F(LP[nf].b,0)+' BURN → <b style="color:var(--g)">$'+F(nfV.usdc,0)+' USDC</b>';break;}}}
+  $("nextFill").innerHTML=nxtFill||'<span style="color:var(--g)">All positions filled ✓</span>';
+
+  // TARGETS — compact line
+  var tgtH="";for(var tg=0;tg<TGT.length;tg++){var tm2=P>0?TGT[tg]/P:0;
+    tgtH+='<span>$'+TGT[tg].toFixed(2)+' <span style="color:'+(tm2>5?"var(--p)":tm2>2?"var(--o)":"var(--b)")+'">'+tm2.toFixed(1)+'x</span></span>';}
+  $("tgtRow").innerHTML=tgtH;
+
   $("lastUpd").textContent="Last Update: "+new Date().toLocaleTimeString();
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
@@ -442,7 +455,8 @@ function render(){
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
   // Group 1 — Investment
   $("portG1").innerHTML=[
-    MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),MB("Multiple",mult>0?mult.toFixed(1)+"x":"…",mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")
+    MB("Avg Entry","$"+AVG_ENTRY.toFixed(4),"var(--mt)"),MB("Current",FP(P),"var(--br)"),
+    '<div class="mb"><small>MULTIPLE</small><b class="key-val" style="color:'+(mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")+'">'+(mult>0?mult.toFixed(1)+"x":"…")+'</b></div>'
   ].join("");
   // Group 2 — Holdings
   $("portG2").innerHTML=[
@@ -450,8 +464,11 @@ function render(){
   ].join("");
   // Group 3 — Performance
   $("portG3").innerHTML=[
-    MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Portfolio","$"+F(portUsd,0),"var(--br)"),MB("Total Value","$"+F(tot,0),"var(--g)"),
-    MB("Realized","$"+F(TR,0),"var(--g)"),MB("Profit",(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0),prof>=0?"var(--g)":"var(--r)"),MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
+    MB("Invested","$"+F(INVESTED,0),"var(--r)"),MB("Realized","$"+F(TR,0),"var(--g)"),
+    '<div class="mb"><small>TOTAL VALUE</small><b class="key-val" style="color:var(--g)">'+"$"+F(tot,0)+'</b></div>',
+    MB("Portfolio","$"+F(portUsd,0),"var(--br)"),
+    '<div class="mb"><small>PROFIT</small><b class="key-val" style="color:'+(prof>=0?"var(--g)":"var(--r)")+'">'+(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0)+'</b></div>',
+    MB("ROI",roi.toFixed(0)+"%",roi>=0?"var(--g)":"var(--r)")
   ].join("");
 
   // stBURN Yield (yield value emphasized)
@@ -525,17 +542,7 @@ function render(){
     // Targets
     for(var ti=0;ti<TGT.length;ti++){if(prevPrice<TGT[ti]&&P>=TGT[ti])notify("Target Reached","BURN hit $"+TGT[ti].toFixed(2)+"!");}
   }
-  // Whale notification
-  if(whl.length>0&&whl[0].t>new Date(Date.now()-20000)){notify("Whale "+whl[0].type,"$"+F(whl[0].vol,0)+" volume spike detected");}
   prevPrice=P;
-
-  // WHALE — Last Large Trade
-  if(whl.length>0){
-    var big=whl[0];for(var wi2=1;wi2<whl.length;wi2++){if(whl[wi2].vol>big.vol)big=whl[wi2];}
-    var ago=Math.round((Date.now()-big.t.getTime())/60000);
-    var agoTxt=ago<60?ago+"m ago":ago<1440?Math.round(ago/60)+"h ago":Math.round(ago/1440)+"d ago";
-    $("whaleBox").innerHTML='<div style="padding:6px 0"><span style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Last Large Trade</span><div style="margin-top:4px;font-size:13px">'+TG(big.type,big.type==="SELL"?"#f87171":"#34d399")+' <span style="color:var(--br);font-weight:600">$'+F(big.vol,0)+'</span> <span style="color:var(--mt);font-size:10px">'+agoTxt+'</span></div></div>';}
-  else $("whaleBox").innerHTML='<span style="color:var(--dm)">No large trade detected yet.</span>';
 
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
