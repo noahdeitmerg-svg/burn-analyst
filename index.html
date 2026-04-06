@@ -428,12 +428,15 @@ function render(){
   // Mini market info under price
   $("miniMkt").innerHTML='<span>TVL $'+F(tU>0?tU:(X*P+Y),0)+'</span><span>Vol $'+F(vol,0)+'</span><span>'+new Date().toLocaleTimeString()+'</span>';
 
-  // NEXT FILL — find the next LP position to be filled
-  var nxtFill="";
+  // NEXT FILL — show ALL active LP positions and their fill targets
+  var nxtFills=[];
   if(P>0){for(var nf=0;nf<LP.length;nf++){if(LP[nf].fr)continue;
-    if(P<LP[nf].hi){var nfV=v3(LP[nf].b,LP[nf].lo,LP[nf].hi,LP[nf].hi);var nfDist=P>0?((LP[nf].hi-P)/P*100):0;
-      nxtFill='Next Fill: <b style="color:var(--o)">$'+LP[nf].hi.toFixed(2)+'</b> <span style="color:var(--dm)">(↑'+nfDist.toFixed(0)+'%)</span> → '+F(LP[nf].b,0)+' BURN → <b style="color:var(--g)">$'+F(nfV.usdc,0)+' USDC</b>';break;}}}
-  $("nextFill").innerHTML=nxtFill||'<span style="color:var(--g)">All positions filled ✓</span>';
+    if(P>=LP[nf].lo&&P<LP[nf].hi){var nfDist=((LP[nf].hi-P)/P*100);
+      var nfBuy=K>0&&Y>0?Math.sqrt(K*LP[nf].hi)-Y:0;
+      var nfV=v3(LP[nf].b,LP[nf].lo,LP[nf].hi,LP[nf].hi);
+      nxtFills.push('<b style="color:var(--o)">$'+LP[nf].hi.toFixed(2)+'</b> <span style="color:var(--dm)">(↑'+nfDist.toFixed(0)+'%)</span> · <span style="color:var(--cy)">$'+F(nfBuy,0)+' buy</span> · <b style="color:var(--g)">$'+F(nfV.usdc,0)+' earned</b> <span style="color:var(--dm)">'+F(LP[nf].b,0)+' BURN</span>');}}}
+  if(nxtFills.length>0){$("nextFill").innerHTML=nxtFills.map(function(f,i){return(i===0?'Next Fill: ':'Then: ')+f;}).join('<br style="margin-top:4px">');}
+  else{$("nextFill").innerHTML='<span style="color:var(--g)">All active positions filled ✓</span>';}
 
   // TARGETS — compact line
   var tgtH="";for(var tg=0;tg<TGT.length;tg++){var tm2=P>0?TGT[tg]/P:0;
