@@ -116,7 +116,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <!-- ═══ 3. LP POSITIONS ═══ -->
 <div class="c" style="border-color:#fb923c15">
   <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
-  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
+  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>To Fill</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"></tbody></table></div>
   <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
 </div>
 
@@ -515,9 +515,15 @@ function render(){
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:9px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
       else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:9px;color:var(--g)">✓</span>';}
       else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:9px;color:var(--mt)">↓'+dLo.toFixed(0)+'% ↑'+dHi.toFixed(0)+'%</span>';}}
+    // USDC to Fill
+    var fillH="";
+    if(pos.fr){fillH='<span style="color:var(--dm)">—</span>';}
+    else if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
+    else if(P<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
+    else{var dU2=K>0&&Y>0?Math.sqrt(K*pos.hi)-Y:0;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
     tBI+=bI;tBL+=bL;tU2+=uE;
-    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:10px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
-  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td></tr>';
+    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:10px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
+  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td><td></td></tr>';
   $("lpB").innerHTML=lpR;
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
 
