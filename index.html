@@ -564,35 +564,49 @@ function render(){
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
-// ═══ FETCH: Recent Trades ═══
+// ═══ FETCH: Recent Trades (Arbiscan Swap Events) ═══
+var SWAP_SIG="0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 async function fetchTrades(){
   try{
     var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-    var r=await fetch("https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/trades",{signal:ac.signal});
+    var url="https://api.arbiscan.io/api?module=logs&action=getLogs&address="+POOL+"&topic0="+SWAP_SIG+"&fromBlock=0&toBlock=latest&page=1&offset=50&sort=desc";
+    var r=await fetch(url,{signal:ac.signal});
     clearTimeout(tm);
-    console.log("Trades API status:",r.status);
-    if(!r.ok){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">API '+r.status+'</td></tr>';return;}
+    if(!r.ok){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">API error</td></tr>';return;}
     var j=await r.json();
-    var trades=j.data||[];
-    if(trades.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    var logs=j.result||[];
+    if(!Array.isArray(logs)||logs.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
     var rows="";
     var now=Date.now();
-    for(var ti2=0;ti2<trades.length;ti2++){
-      var t=trades[ti2].attributes||trades[ti2];
-      var ts=t.block_timestamp?new Date(t.block_timestamp).getTime():0;
+    for(var ti2=0;ti2<logs.length;ti2++){
+      var log=logs[ti2];
+      var data=log.data||"";
+      if(data.length<258)continue;
+      // Decode Swap event: amount0(USDC/6dec) amount1(BURN/18dec) sqrtPriceX96 liquidity tick
+      var a0raw=BigInt("0x"+data.slice(2,66));
+      var a1raw=BigInt("0x"+data.slice(66,130));
+      if(a0raw>=2n**255n)a0raw=a0raw-2n**256n;
+      if(a1raw>=2n**255n)a1raw=a1raw-2n**256n;
+      // USDC=token0(6dec), BURN=token1(18dec)
+      var usdcVal=Number(a0raw)/1e6;
+      var burnVal=Number(a1raw*1000n/10n**18n)/1000;
+      // BUY: USDC in (a0>0), BURN out (a1<0)
+      var isBuy=usdcVal>0;
+      var burnAmt=Math.abs(burnVal);
+      var usdcAmt=Math.abs(usdcVal);
+      var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
+      // Timestamp
+      var ts=parseInt(log.timeStamp,16)*1000;
       var ago=ts>0?Math.round((now-ts)/60000):0;
-      var agoT=ts<=0?"—":ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
-      var isBuy=(t.kind||"").toLowerCase()==="buy";
-      // BUY: USDC→BURN, from=USDC, to=BURN
-      // SELL: BURN→USDC, from=BURN, to=USDC
-      var burnAmt=parseFloat(isBuy?t.to_token_amount:t.from_token_amount)||0;
-      var usdcAmt=parseFloat(t.volume_in_usd)||0;
-      var tPrice=parseFloat(isBuy?t.price_to_in_usd:t.price_from_in_usd)||0;
-      var wallet=t.tx_from_address||"";
+      var agoT=ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
+      // Wallet from topics[2] (recipient)
+      var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
       var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
       var clr=isBuy?"var(--g)":"var(--r)";
-      rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+F(burnAmt,0)+'</td><td style="color:var(--g)">$'+F(usdcAmt,0)+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
-    $("tradeB").innerHTML=rows;
+      var bD=burnAmt>=10000?F(burnAmt,0):burnAmt>=100?burnAmt.toFixed(0):burnAmt.toFixed(2);
+      var uD=usdcAmt>=1000?"$"+F(usdcAmt,0):"$"+usdcAmt.toFixed(2);
+      rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
+    $("tradeB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No swaps decoded</td></tr>';
   }catch(e){console.log("Trades err:",e);$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
 
 // ═══ START ═══
