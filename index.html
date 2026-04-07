@@ -564,42 +564,54 @@ function render(){
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
-// ═══ FETCH: Recent Trades (Arbiscan Swap Events) ═══
+// ═══ FETCH: Recent Trades (On-Chain Swap Events via RPC) ═══
 var SWAP_SIG="0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 async function fetchTrades(){
   try{
-    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-    var url="https://api.arbiscan.io/api?module=logs&action=getLogs&address="+POOL+"&topic0="+SWAP_SIG+"&fromBlock=0&toBlock=latest&page=1&offset=50&sort=desc";
-    var r=await fetch(url,{signal:ac.signal});
+    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},12000);
+    // Get latest block
+    var bnR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:99}),signal:ac.signal});
+    var bnJ=await bnR.json();
+    var latest=parseInt(bnJ.result,16);
+    if(!latest){clearTimeout(tm);return;}
+    // Query last ~2M blocks (~6 days on Arbitrum @ 0.26s/block)
+    var from="0x"+(latest-2000000).toString(16);
+    var logR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:from,toBlock:"latest"}],id:100}),signal:ac.signal});
     clearTimeout(tm);
-    if(!r.ok){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">API error</td></tr>';return;}
-    var j=await r.json();
-    var logs=j.result||[];
-    if(!Array.isArray(logs)||logs.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    var logJ=await logR.json();
+    var logs=logJ.result||[];
+    if(!Array.isArray(logs)||logs.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No swaps found</td></tr>';return;}
+    // Newest first, limit 50
+    logs.reverse();
+    if(logs.length>50)logs=logs.slice(0,50);
     var rows="";
     var now=Date.now();
+    var blockTime=0.26; // Arbitrum avg block time in seconds
     for(var ti2=0;ti2<logs.length;ti2++){
       var log=logs[ti2];
       var data=log.data||"";
       if(data.length<258)continue;
-      // Decode Swap event: amount0(USDC/6dec) amount1(BURN/18dec) sqrtPriceX96 liquidity tick
-      var a0raw=BigInt("0x"+data.slice(2,66));
-      var a1raw=BigInt("0x"+data.slice(66,130));
-      if(a0raw>=2n**255n)a0raw=a0raw-2n**256n;
-      if(a1raw>=2n**255n)a1raw=a1raw-2n**256n;
-      // USDC=token0(6dec), BURN=token1(18dec)
-      var usdcVal=Number(a0raw)/1e6;
-      var burnVal=Number(a1raw*1000n/10n**18n)/1000;
-      // BUY: USDC in (a0>0), BURN out (a1<0)
-      var isBuy=usdcVal>0;
+      // Decode: amount0=USDC(6dec), amount1=BURN(18dec)
+      var a0=BigInt("0x"+data.slice(2,66));
+      var a1=BigInt("0x"+data.slice(66,130));
+      if(a0>=2n**255n)a0=a0-2n**256n;
+      if(a1>=2n**255n)a1=a1-2n**256n;
+      var usdcVal=Number(a0)/1e6;
+      var burnVal=Number(a1<0n?-a1:a1)*1e-18;
+      if(a1<0n)burnVal=Number((-a1)*1000n/10n**18n)/1000;
+      else burnVal=Number(a1*1000n/10n**18n)/1000;
+      var isBuy=usdcVal>0; // USDC flows in = someone bought BURN
       var burnAmt=Math.abs(burnVal);
       var usdcAmt=Math.abs(usdcVal);
       var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
-      // Timestamp
-      var ts=parseInt(log.timeStamp,16)*1000;
-      var ago=ts>0?Math.round((now-ts)/60000):0;
-      var agoT=ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
-      // Wallet from topics[2] (recipient)
+      // Estimate time from block distance
+      var blk=parseInt(log.blockNumber,16);
+      var secAgo=(latest-blk)*blockTime;
+      var minAgo=Math.round(secAgo/60);
+      var agoT=minAgo<1?"now":minAgo<60?minAgo+"m":minAgo<1440?Math.round(minAgo/60)+"h":Math.round(minAgo/1440)+"d";
+      // Wallet: topics[2] = recipient
       var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
       var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
       var clr=isBuy?"var(--g)":"var(--r)";
