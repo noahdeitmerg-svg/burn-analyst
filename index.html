@@ -109,11 +109,22 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="tgt-row" id="tgtRow"></div>
 </div>
 
-<!-- ═══ RECENT TRADES (collapsible) ═══ -->
+<!-- ═══ TRADES ═══ -->
 <div class="c">
-  <div class="col" onclick="tog(this,'sec-trades')">Recent Trades</div>
+  <div class="lb">Latest Trades</div>
+  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
+  <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">All Trades (<span id="tradeCnt">0</span>)</div>
   <div id="sec-trades" class="col-b">
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeB"></tbody></table></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
+      <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
+      <span style="font-size:10px;color:var(--mt)" id="tPgInfo">1/1</span>
+      <button class="btn" id="tNext" onclick="tradePg(1)">Next →</button>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn" id="tMore" onclick="fetchTradesOlder()" style="opacity:.7">Load Older ↓</button>
+      <span style="font-size:9px;color:var(--dm);margin-left:8px" id="tLoadStat"></span>
+    </div>
   </div>
 </div>
 
@@ -564,62 +575,84 @@ function render(){
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
-// ═══ FETCH: Recent Trades (On-Chain Swap Events via RPC) ═══
+// ═══ TRADES: On-Chain Swap Events ═══
 var SWAP_SIG="0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
+var allTrades=[],tradeLatest=0,tradeOldestFetched=0,tradePg_=0,TRADES_PP=20,BLOCK_CHUNK=5000000;
+
+function decodeSwap(log,latest){
+  var data=log.data||"";if(data.length<258)return null;
+  var a0=BigInt("0x"+data.slice(2,66)),a1=BigInt("0x"+data.slice(66,130));
+  if(a0>=2n**255n)a0=a0-2n**256n;if(a1>=2n**255n)a1=a1-2n**256n;
+  var usdc=Number(a0)/1e6;
+  var burn=a1<0n?Number((-a1)*1000n/10n**18n)/1000:Number(a1*1000n/10n**18n)/1000;
+  var isBuy=usdc>0,blk=parseInt(log.blockNumber,16);
+  var secAgo=(latest-blk)*0.26,minAgo=Math.round(secAgo/60);
+  var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
+  return{isBuy:isBuy,burn:Math.abs(burn),usdc:Math.abs(usdc),price:Math.abs(burn)>0?Math.abs(usdc)/Math.abs(burn):0,
+    minAgo:minAgo,blk:blk,wallet:wallet};}
+
+function tradeRow(t){
+  var agoT=t.minAgo<1?"now":t.minAgo<60?t.minAgo+"m":t.minAgo<1440?Math.round(t.minAgo/60)+"h":Math.round(t.minAgo/1440)+"d";
+  var clr=t.isBuy?"var(--g)":"var(--r)";
+  var wS=t.wallet.length>10?t.wallet.slice(0,6)+"…"+t.wallet.slice(-4):"—";
+  var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
+  var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
+  return'<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(t.price)+'</td><td style="font-size:9px;color:var(--dm)">'+wS+'</td></tr>';}
+
+function renderTrades(){
+  // Top 5 always visible
+  var top5="";for(var i=0;i<Math.min(5,allTrades.length);i++)top5+=tradeRow(allTrades[i]);
+  $("tradeTop").innerHTML=top5||'<tr><td colspan="6" style="color:var(--dm)">Loading trades...</td></tr>';
+  $("tradeCnt").textContent=allTrades.length;
+  // Paginated all
+  var pages=Math.max(1,Math.ceil(allTrades.length/TRADES_PP));
+  if(tradePg_>=pages)tradePg_=pages-1;
+  var start=tradePg_*TRADES_PP,rows="";
+  for(var j=start;j<Math.min(start+TRADES_PP,allTrades.length);j++)rows+=tradeRow(allTrades[j]);
+  $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
+  $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
+  $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;}
+
+function tradePg(d){tradePg_+=d;renderTrades();}
+
+async function fetchTradesChunk(fromBlock,toBlock){
+  var logR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:"0x"+fromBlock.toString(16),toBlock:"0x"+toBlock.toString(16)}],id:100})});
+  var logJ=await logR.json();
+  return logJ.result||[];}
+
 async function fetchTrades(){
   try{
-    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},12000);
-    // Get latest block
     var bnR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:99}),signal:ac.signal});
-    var bnJ=await bnR.json();
-    var latest=parseInt(bnJ.result,16);
-    if(!latest){clearTimeout(tm);return;}
-    // Query last ~2M blocks (~6 days on Arbitrum @ 0.26s/block)
-    var from="0x"+(latest-2000000).toString(16);
-    var logR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:from,toBlock:"latest"}],id:100}),signal:ac.signal});
-    clearTimeout(tm);
-    var logJ=await logR.json();
-    var logs=logJ.result||[];
-    if(!Array.isArray(logs)||logs.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No swaps found</td></tr>';return;}
-    // Newest first, limit 50
+      body:JSON.stringify({jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:99})});
+    var bnJ=await bnR.json();tradeLatest=parseInt(bnJ.result,16);
+    if(!tradeLatest)return;
+    var from=tradeLatest-BLOCK_CHUNK;
+    var logs=await fetchTradesChunk(from,tradeLatest);
+    if(!Array.isArray(logs))return;
+    tradeOldestFetched=from;
+    allTrades=[];
     logs.reverse();
-    if(logs.length>50)logs=logs.slice(0,50);
-    var rows="";
-    var now=Date.now();
-    var blockTime=0.26; // Arbitrum avg block time in seconds
-    for(var ti2=0;ti2<logs.length;ti2++){
-      var log=logs[ti2];
-      var data=log.data||"";
-      if(data.length<258)continue;
-      // Decode: amount0=USDC(6dec), amount1=BURN(18dec)
-      var a0=BigInt("0x"+data.slice(2,66));
-      var a1=BigInt("0x"+data.slice(66,130));
-      if(a0>=2n**255n)a0=a0-2n**256n;
-      if(a1>=2n**255n)a1=a1-2n**256n;
-      var usdcVal=Number(a0)/1e6;
-      var burnVal=Number(a1<0n?-a1:a1)*1e-18;
-      if(a1<0n)burnVal=Number((-a1)*1000n/10n**18n)/1000;
-      else burnVal=Number(a1*1000n/10n**18n)/1000;
-      var isBuy=usdcVal>0; // USDC flows in = someone bought BURN
-      var burnAmt=Math.abs(burnVal);
-      var usdcAmt=Math.abs(usdcVal);
-      var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
-      // Estimate time from block distance
-      var blk=parseInt(log.blockNumber,16);
-      var secAgo=(latest-blk)*blockTime;
-      var minAgo=Math.round(secAgo/60);
-      var agoT=minAgo<1?"now":minAgo<60?minAgo+"m":minAgo<1440?Math.round(minAgo/60)+"h":Math.round(minAgo/1440)+"d";
-      // Wallet: topics[2] = recipient
-      var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
-      var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
-      var clr=isBuy?"var(--g)":"var(--r)";
-      var bD=burnAmt>=100000?F(burnAmt,1):burnAmt.toLocaleString("en",{maximumFractionDigits:2});
-      var uD="$"+(usdcAmt>=100000?F(usdcAmt,1):usdcAmt.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
-      rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
-    $("tradeB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No swaps decoded</td></tr>';
-  }catch(e){console.log("Trades err:",e);$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
+    for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
+    renderTrades();
+    $("tLoadStat").textContent="Loaded ~"+Math.round(BLOCK_CHUNK*0.26/86400)+"d";
+  }catch(e){console.log("Trades err:",e);}}
+
+async function fetchTradesOlder(){
+  if(!tradeOldestFetched||tradeOldestFetched<300000000){$("tLoadStat").textContent="All history loaded";return;}
+  $("tMore").disabled=true;$("tLoadStat").textContent="Loading...";
+  try{
+    var to=tradeOldestFetched-1;var from=to-BLOCK_CHUNK;if(from<300000000)from=300000000;
+    var logs=await fetchTradesChunk(from,to);
+    if(!Array.isArray(logs)||logs.length===0){$("tLoadStat").textContent="No older trades";$("tMore").disabled=false;return;}
+    tradeOldestFetched=from;
+    logs.reverse();
+    for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
+    renderTrades();
+    var days=Math.round((tradeLatest-from)*0.26/86400);
+    $("tLoadStat").textContent=allTrades.length+" trades · ~"+days+"d history";
+  }catch(e){$("tLoadStat").textContent="Error loading";}
+  $("tMore").disabled=false;}
 
 // ═══ START ═══
 go(); fetchSt(); fetchSup(); fetchTrades(); if(MY_WALLET)fetchWal();
