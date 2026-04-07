@@ -107,7 +107,14 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="hero-meta" id="miniMkt"></div>
   <div class="nxt" id="nextFill"></div>
   <div class="tgt-row" id="tgtRow"></div>
-  <div class="hero-update" id="lastUpd"></div>
+</div>
+
+<!-- ═══ RECENT TRADES (collapsible) ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-trades')">Recent Trades</div>
+  <div id="sec-trades" class="col-b">
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeB"></tbody></table></div>
+  </div>
 </div>
 
 <!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
@@ -438,12 +445,12 @@ function render(){
   if(nxtFills.length>0){$("nextFill").innerHTML=nxtFills.map(function(f,i){return(i===0?'Next Fill: ':'Then: ')+f;}).join('<br style="margin-top:4px">');}
   else{$("nextFill").innerHTML='<span style="color:var(--g)">All active positions filled ✓</span>';}
 
-  // TARGETS — compact line
+  // TARGETS — compact line, dim far targets
   var tgtH="";for(var tg=0;tg<TGT.length;tg++){var tm2=P>0?TGT[tg]/P:0;
-    tgtH+='<span>$'+TGT[tg].toFixed(2)+' <span style="color:'+(tm2>5?"var(--p)":tm2>2?"var(--o)":"var(--b)")+'">'+tm2.toFixed(1)+'x</span></span>';}
+    var tOp=tm2<3?"1":tm2<10?".6":".35";
+    tgtH+='<span style="opacity:'+tOp+'">$'+TGT[tg].toFixed(2)+' <span style="color:'+(tm2>5?"var(--p)":tm2>2?"var(--o)":"var(--b)")+'">'+tm2.toFixed(1)+'x</span></span>';}
   $("tgtRow").innerHTML=tgtH;
 
-  $("lastUpd").textContent="Last Update: "+new Date().toLocaleTimeString();
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
   var pD=0,pL=0,pU=0,maxU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;var pf=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,LP[pi].hi);maxU+=pf.usdc;}
@@ -463,7 +470,8 @@ function render(){
   ].join("");
   // Group 2 — Holdings
   $("portG2").innerHTML=[
-    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("In LPs",F(ALP,0),"var(--b)")
+    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("In LPs",F(ALP,0),"var(--b)"),
+    '<div class="mb"><small>BURN EQUIVALENT</small><b class="key-val" style="color:var(--br)">'+F(TOTAL_BURN_EQ,0)+'</b></div>'
   ].join("");
   // Group 3 — Performance
   $("portG3").innerHTML=[
@@ -556,10 +564,39 @@ function render(){
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
+// ═══ FETCH: Recent Trades ═══
+async function fetchTrades(){
+  try{
+    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+    var r=await fetch("https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/trades",{signal:ac.signal});
+    clearTimeout(tm);
+    if(!r.ok){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    var j=await r.json();
+    var trades=j.data||[];
+    if(trades.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    var rows="";
+    var now=Date.now();
+    for(var ti2=0;ti2<Math.min(trades.length,10);ti2++){
+      var t=trades[ti2].attributes||trades[ti2];
+      var ts=t.block_timestamp||t.timestamp;
+      var ago=ts?Math.round((now-new Date(ts*1000).getTime())/60000):0;
+      var agoT=ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
+      var kind=t.kind||"";
+      var isBuy=kind==="buy";
+      var burnAmt=parseFloat(t.volume_in_base||t.from_token_amount||0);
+      var usdcAmt=parseFloat(t.volume_in_usd||t.to_token_amount||0);
+      var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
+      var wallet=t.tx_from_address||"";
+      var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
+      var clr=isBuy?"var(--g)":"var(--r)";
+      rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+F(burnAmt,0)+'</td><td style="color:var(--g)">$'+F(usdcAmt,0)+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
+    $("tradeB").innerHTML=rows;
+  }catch(e){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
+
 // ═══ START ═══
-go(); fetchSt(); fetchSup(); if(MY_WALLET)fetchWal();
-setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();if(MY_WALLET)fetchWal();},60000);
-document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();}});
+go(); fetchSt(); fetchSup(); fetchTrades(); if(MY_WALLET)fetchWal();
+setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();if(MY_WALLET)fetchWal();},60000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();}});
 </script>
 </body>
 </html>
