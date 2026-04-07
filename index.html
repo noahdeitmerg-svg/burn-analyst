@@ -112,10 +112,10 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <!-- ═══ TRADES ═══ -->
 <div class="c">
   <div class="lb">Latest Trades</div>
-  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>LP</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
+  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
   <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">All Trades (<span id="tradeCnt">0</span>)</div>
   <div id="sec-trades" class="col-b">
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>LP</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
     <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
       <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
       <span style="font-size:10px;color:var(--mt)" id="tPgInfo">1/1</span>
@@ -597,38 +597,19 @@ function tradeRow(t){
   var wS=t.wallet.length>10?t.wallet.slice(0,6)+"…"+t.wallet.slice(-4):"—";
   var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
   var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
-  // LP USDC delta (pre-calculated in renderTrades)
-  var lpH="";
-  if(t.lpDelta===null||t.lpDelta===undefined){lpH='<span style="font-size:9px;color:var(--dm)">—</span>';}
-  else if(t.lpDelta>=0){lpH='<span style="font-size:9px;color:var(--g)">+$'+Math.abs(t.lpDelta).toLocaleString("en",{maximumFractionDigits:2})+'</span>';}
-  else{lpH='<span style="font-size:9px;color:var(--r)">-$'+Math.abs(t.lpDelta).toLocaleString("en",{maximumFractionDigits:2})+'</span>';}
-  return'<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(t.price)+'</td><td style="text-align:center">'+lpH+'</td><td style="font-size:9px;color:var(--dm)">'+wS+'</td></tr>';}
+  return'<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(t.price)+'</td><td style="font-size:9px;color:var(--dm)">'+wS+'</td></tr>';}
 
 function renderTrades(){
-  // Pre-calculate LP USDC delta for each trade
-  for(var ri=0;ri<allTrades.length;ri++){
-    var pAfter=allTrades[ri].price;
-    var pBefore=ri<allTrades.length-1?allTrades[ri+1].price:0;
-    var delta=0,inRange=false;
-    if(pBefore>0){
-      for(var li3=0;li3<LP.length;li3++){if(LP[li3].fr)continue;
-        if(pAfter>=LP[li3].lo&&pAfter<=LP[li3].hi||pBefore>=LP[li3].lo&&pBefore<=LP[li3].hi){
-          var uAfter=v3(LP[li3].b,LP[li3].lo,LP[li3].hi,pAfter).usdc;
-          var uBefore=v3(LP[li3].b,LP[li3].lo,LP[li3].hi,pBefore).usdc;
-          delta+=uAfter-uBefore;inRange=true;}}
-      // Cap: LP delta can't exceed the trade's own USDC
-      if(Math.abs(delta)>allTrades[ri].usdc)delta=delta>0?allTrades[ri].usdc:-allTrades[ri].usdc;}
-    allTrades[ri].lpDelta=inRange?delta:null;}
   // Top 5 always visible
   var top5="";for(var i=0;i<Math.min(5,allTrades.length);i++)top5+=tradeRow(allTrades[i]);
-  $("tradeTop").innerHTML=top5||'<tr><td colspan="7" style="color:var(--dm)">Loading trades...</td></tr>';
+  $("tradeTop").innerHTML=top5||'<tr><td colspan="6" style="color:var(--dm)">Loading trades...</td></tr>';
   $("tradeCnt").textContent=allTrades.length;
   // Paginated all
   var pages=Math.max(1,Math.ceil(allTrades.length/TRADES_PP));
   if(tradePg_>=pages)tradePg_=pages-1;
   var start=tradePg_*TRADES_PP,rows="";
   for(var j=start;j<Math.min(start+TRADES_PP,allTrades.length);j++)rows+=tradeRow(allTrades[j]);
-  $("tradeAll").innerHTML=rows||'<tr><td colspan="7" style="color:var(--dm)">No trades</td></tr>';
+  $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;}
 
