@@ -574,24 +574,28 @@ async function fetchTrades(){
     var j=await r.json();
     var trades=j.data||[];
     if(trades.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    if(trades[0])console.log("Trade[0] attrs:",JSON.stringify(trades[0].attributes||trades[0]).slice(0,500));
     var rows="";
     var now=Date.now();
     for(var ti2=0;ti2<Math.min(trades.length,10);ti2++){
       var t=trades[ti2].attributes||trades[ti2];
-      var ts=t.block_timestamp||t.timestamp;
-      var ago=ts?Math.round((now-new Date(ts*1000).getTime())/60000):0;
-      var agoT=ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
+      // block_timestamp is ISO string like "2025-04-06T22:15:00Z"
+      var ts=t.block_timestamp?new Date(t.block_timestamp).getTime():0;
+      var ago=ts>0?Math.round((now-ts)/60000):0;
+      var agoT=ts<=0?"—":ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
       var kind=t.kind||"";
       var isBuy=kind==="buy";
-      var burnAmt=parseFloat(t.volume_in_base||t.from_token_amount||0);
-      var usdcAmt=parseFloat(t.volume_in_usd||t.to_token_amount||0);
+      var usdcAmt=parseFloat(t.volume_in_usd)||0;
+      var burnAmt=parseFloat(isBuy?(t.to_token_amount||0):(t.from_token_amount||0))||0;
+      if(burnAmt<=0)burnAmt=parseFloat(isBuy?(t.from_token_amount||0):(t.to_token_amount||0))||0;
+      if(burnAmt<=0&&usdcAmt>0&&P>0)burnAmt=usdcAmt/P;
       var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
       var wallet=t.tx_from_address||"";
       var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
       var clr=isBuy?"var(--g)":"var(--r)";
       rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+F(burnAmt,0)+'</td><td style="color:var(--g)">$'+F(usdcAmt,0)+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
     $("tradeB").innerHTML=rows;
-  }catch(e){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
+  }catch(e){console.log("Trades err:",e);$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
 
 // ═══ START ═══
 go(); fetchSt(); fetchSup(); fetchTrades(); if(MY_WALLET)fetchWal();
