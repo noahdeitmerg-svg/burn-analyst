@@ -615,8 +615,8 @@ async function fetchTrades(){
       var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
       var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
       var clr=isBuy?"var(--g)":"var(--r)";
-      var bD=burnAmt>=10000?F(burnAmt,0):burnAmt>=100?burnAmt.toFixed(0):burnAmt.toFixed(2);
-      var uD=usdcAmt>=1000?"$"+F(usdcAmt,0):"$"+usdcAmt.toFixed(2);
+      var bD=burnAmt>=100000?F(burnAmt,1):burnAmt.toLocaleString("en",{maximumFractionDigits:2});
+      var uD="$"+(usdcAmt>=100000?F(usdcAmt,1):usdcAmt.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
       rows+='<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(tPrice)+'</td><td style="font-size:9px;color:var(--dm)">'+wShort+'</td></tr>';}
     $("tradeB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No swaps decoded</td></tr>';
   }catch(e){console.log("Trades err:",e);$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';}}
