@@ -615,7 +615,9 @@ function renderTrades(){
         if(pAfter>=LP[li3].lo&&pAfter<=LP[li3].hi||pBefore>=LP[li3].lo&&pBefore<=LP[li3].hi){
           var uAfter=v3(LP[li3].b,LP[li3].lo,LP[li3].hi,pAfter).usdc;
           var uBefore=v3(LP[li3].b,LP[li3].lo,LP[li3].hi,pBefore).usdc;
-          delta+=uAfter-uBefore;inRange=true;}}}
+          delta+=uAfter-uBefore;inRange=true;}}
+      // Cap: LP delta can't exceed the trade's own USDC
+      if(Math.abs(delta)>allTrades[ri].usdc)delta=delta>0?allTrades[ri].usdc:-allTrades[ri].usdc;}
     allTrades[ri].lpDelta=inRange?delta:null;}
   // Top 5 always visible
   var top5="";for(var i=0;i<Math.min(5,allTrades.length);i++)top5+=tradeRow(allTrades[i]);
