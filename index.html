@@ -570,25 +570,32 @@ async function fetchTrades(){
     var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
     var r=await fetch("https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/trades",{signal:ac.signal});
     clearTimeout(tm);
-    if(!r.ok){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
+    console.log("Trades API status:",r.status);
+    if(!r.ok){console.log("Trades API failed:",r.status);$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">API '+r.status+'</td></tr>';return;}
     var j=await r.json();
+    console.log("Trades response keys:",Object.keys(j),"count:",((j.data||[]).length));
     var trades=j.data||[];
     if(trades.length===0){$("tradeB").innerHTML='<tr><td colspan="6" style="color:var(--dm)">No recent trades available</td></tr>';return;}
-    if(trades[0])console.log("Trade[0] attrs:",JSON.stringify(trades[0].attributes||trades[0]).slice(0,500));
+    console.log("Trade[0] full:",JSON.stringify(trades[0]).slice(0,1000));
     var rows="";
     var now=Date.now();
-    for(var ti2=0;ti2<Math.min(trades.length,10);ti2++){
+    for(var ti2=0;ti2<trades.length;ti2++){
       var t=trades[ti2].attributes||trades[ti2];
-      // block_timestamp is ISO string like "2025-04-06T22:15:00Z"
+      // block_timestamp is ISO string
       var ts=t.block_timestamp?new Date(t.block_timestamp).getTime():0;
       var ago=ts>0?Math.round((now-ts)/60000):0;
       var agoT=ts<=0?"—":ago<1?"now":ago<60?ago+"m":ago<1440?Math.round(ago/60)+"h":Math.round(ago/1440)+"d";
-      var kind=t.kind||"";
+      var kind=(t.kind||"").toLowerCase();
       var isBuy=kind==="buy";
       var usdcAmt=parseFloat(t.volume_in_usd)||0;
-      var burnAmt=parseFloat(isBuy?(t.to_token_amount||0):(t.from_token_amount||0))||0;
-      if(burnAmt<=0)burnAmt=parseFloat(isBuy?(t.from_token_amount||0):(t.to_token_amount||0))||0;
-      if(burnAmt<=0&&usdcAmt>0&&P>0)burnAmt=usdcAmt/P;
+      // Try multiple field names for BURN amount
+      var burnAmt=parseFloat(t.to_token_amount)||parseFloat(t.from_token_amount)||0;
+      // If buy: BURN is received (to), if sell: BURN is sent (from)
+      // But base/quote may vary — check which is larger relative to USD
+      var altAmt=parseFloat(isBuy?t.from_token_amount:t.to_token_amount)||0;
+      if(altAmt>burnAmt&&altAmt>10)burnAmt=altAmt;
+      // Fallback: derive from USD and current price
+      if(burnAmt<=1&&usdcAmt>0&&P>0)burnAmt=usdcAmt/P;
       var tPrice=burnAmt>0?usdcAmt/burnAmt:0;
       var wallet=t.tx_from_address||"";
       var wShort=wallet.length>10?wallet.slice(0,6)+"…"+wallet.slice(-4):"—";
