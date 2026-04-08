@@ -53,7 +53,17 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .big{font-size:26px;font-weight:700;color:var(--br);font-family:inherit}
 .hid{display:none}
 .nt{padding:8px;border-radius:6px;font-size:9px;line-height:1.5;color:var(--tx);margin-top:8px}
-@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes borderSpin{0%{--a:0deg}100%{--a:360deg}}
+@property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+.hero-card{position:relative;padding:24px 14px;background:var(--cd);border-radius:12px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden}
+.hero-card::before{content:'';position:absolute;inset:-1px;border-radius:12px;padding:1px;
+  background:conic-gradient(from var(--a),transparent 40%,var(--o) 50%,var(--cy) 55%,transparent 65%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  animation:borderSpin 8s linear infinite;pointer-events:none}
+.neon-g{text-shadow:0 0 12px rgba(52,211,153,.3),0 0 4px rgba(52,211,153,.15)}
+.neon-cy{text-shadow:0 0 12px rgba(34,211,238,.3),0 0 4px rgba(34,211,238,.15)}
+.neon-o{text-shadow:0 0 12px rgba(251,146,60,.3),0 0 4px rgba(251,146,60,.15)}
+.neon-w{text-shadow:0 0 12px rgba(226,232,240,.2),0 0 4px rgba(226,232,240,.1)}
 @keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
 @keyframes glow{0%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}50%{box-shadow:0 0 30px rgba(251,146,60,.4),inset 0 0 20px rgba(251,146,60,.1)}100%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
@@ -74,8 +84,9 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 .col-b.open{display:block}
 .rings{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:8px 0}
 .orb{width:130px;height:130px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:radial-gradient(circle at 35% 35%,#141d30,#080c16);border:2px solid;
-  box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3);transition:filter .3s}
+  background:radial-gradient(circle at 35% 35%,rgba(20,29,48,.9),rgba(8,12,22,.95));border:2px solid;
+  box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.03);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:filter .3s}
 .orb-main{width:155px;height:155px;animation:orbBreathe 4s ease-in-out infinite}
 .orb-main .orb-val{font-size:21px}
 .orb-lbl{font-size:8px;color:var(--mt);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px;font-family:'Inter',sans-serif}
@@ -147,7 +158,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 <div id="main" class="hid">
 
 <!-- ═══ 1. HERO: 3 CIRCLES ═══ -->
-<div class="c" style="padding:24px 14px">
+<div class="hero-card">
   <div class="rings">
     <div class="orb" style="border-color:var(--p)">
       <div class="orb-lbl">stBURN Price</div>
@@ -578,7 +589,7 @@ function render(){
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
   // Group 1 — Investment (Entry + Invested merged)
   $("portG1").innerHTML=[
-    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">$'+F(INVESTED,0)+' invested</span></div>',
+    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b class="neon-w" style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">$'+F(INVESTED,0)+' invested</span></div>',
     '<div class="mb" style="padding:14px"><small style="color:#fff">CURRENT PRICE</small><b class="key-val" style="color:'+(P>=AVG_ENTRY?"var(--g)":"var(--r)")+'">'+FP(P)+'</b></div>',
     '<div class="mb" style="padding:14px"><small style="color:#fff">MULTIPLE</small><b class="key-val" style="color:'+(mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")+'">'+(mult>0?mult.toFixed(1)+"x":"…")+'</b></div>'
   ].join("");
@@ -596,10 +607,10 @@ function render(){
   if(wal.ok||MY_BURN>0){
   var realizedProfit=TR-(TS*AVG_ENTRY);
   $("portG3").innerHTML=[
-    '<div class="mb"><small>PORTFOLIO</small><b class="key-val" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
-    '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage</span></div>',
+    '<div class="mb"><small>PORTFOLIO</small><b class="key-val neon-w" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
+    '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val neon-cy" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage</span></div>',
     MB("Realized","$"+realizedProfit.toLocaleString("en",{minimumFractionDigits:0,maximumFractionDigits:0}),"var(--g)"),
-    '<div class="mb"><small>PROFIT REAL</small><b class="key-val" style="color:'+(portReal+TR-INVESTED>=0?"var(--cy)":"var(--r)")+'">'+(portReal+TR-INVESTED>=0?"+":"-")+"$"+F(Math.abs(portReal+TR-INVESTED),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">if sold now</span></div>'
+    '<div class="mb"><small>PROFIT REAL</small><b class="key-val neon-cy" style="color:'+(portReal+TR-INVESTED>=0?"var(--cy)":"var(--r)")+'">'+(portReal+TR-INVESTED>=0?"+":"-")+"$"+F(Math.abs(portReal+TR-INVESTED),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">if sold now</span></div>'
   ].join("");}
 
   // stBURN Yield (yield value emphasized)
@@ -607,7 +618,7 @@ function render(){
     var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
     $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stR.toFixed(6),"var(--cy)"),
       MB("BURN Equiv",F(bEq,0),"var(--o)")].join("")+
-      '<div class="mb"><small>YIELD</small><b class="yield-big" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
+      '<div class="mb"><small>YIELD</small><b class="yield-big neon-g" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
       [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
   }
 
@@ -622,7 +633,7 @@ function render(){
   var maxHi=0;for(var mh=0;mh<LP.length;mh++){if(!LP[mh].fr&&LP[mh].hi>maxHi)maxHi=LP[mh].hi;}
   var lpExposure=portUsd>0?(lpV/portUsd*100):0;
   // P&L Hero: USDC Earned
-  $("pnlHero").innerHTML='<div class="mb" style="padding:16px;text-align:center"><small>USDC EARNED</small><b class="key-val" style="color:var(--g)">$'+F(pU,2)+'</b></div>';
+  $("pnlHero").innerHTML='<div class="mb" style="padding:16px;text-align:center"><small>USDC EARNED</small><b class="key-val neon-g" style="color:var(--g)">$'+F(pU,2)+'</b></div>';
   // P&L Grid
   $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0)+" BURN","var(--o)"),MB("Left",F(pL,0)+" BURN","var(--tx)"),
     MB("100% Filled","$"+F(maxU,0)+" @ $"+maxHi.toFixed(2),"var(--br)"),MB("Outstanding","$"+F(outU,0),"var(--cy)"),
