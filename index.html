@@ -171,7 +171,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 
 <!-- ═══ WALLETS ═══ -->
 <div class="c" style="border-color:#60a5fa15">
-  <div class="lb">Wallets <span style="font-size:8px;color:var(--dm);text-transform:none;letter-spacing:0">⛓ on-chain</span></div>
+  <div class="lb">Ledger <span style="font-size:8px;color:var(--dm);text-transform:none;letter-spacing:0">⛓ on-chain</span></div>
   <div id="walGrid"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div class="mb"><span class="skel" style="width:60px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:80px;height:14px"></span></div><div class="mb"><span class="skel" style="width:60px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:80px;height:14px"></span></div></div></div>
 </div>
 
@@ -279,10 +279,9 @@ var USDC_TK="0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 
 // ═══ CONFIG ═══
 var W_LEDGER="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
-var W_DEFI="0x505042fF781eA1689e44e1d200eFD691C30Db86C";
 var TGT=[.20,.30,.50,1,2,5], SEL=[10000,50000,100000,180000];
 var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
-var wal={lg:{burn:0,st:0},df:{burn:0,st:0},prev:{burn:0,st:0},ok:false};
+var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ LP POSITIONS ═══
 var LP=[
@@ -490,15 +489,13 @@ async function fetchSup(){
     if(sup.total>0)cache.sup={total:sup.total,burned:sup.burned,locked:sup.locked,circ:sup.circ,stSup:sup.stSup};
   }catch(e){if(cache.sup){sup.total=cache.sup.total;sup.burned=cache.sup.burned;sup.locked=cache.sup.locked;sup.circ=cache.sup.circ;sup.stSup=cache.sup.stSup;}}}
 
-// ═══ FETCH: Wallets (Ledger + DeFi) ═══
+// ═══ FETCH: Wallet (Ledger) ═══
 async function fetchWal(){
   try{
     var lb=await rpc(BURN_TK,bof(W_LEDGER)),ls=await rpc(STBURN_TK,bof(W_LEDGER));
-    var db=await rpc(BURN_TK,bof(W_DEFI)),ds=await rpc(STBURN_TK,bof(W_DEFI));
     wal.prev.burn=MY_BURN;wal.prev.st=MY_STBURN;
-    wal.lg.burn=Math.round(h2n(lb));wal.lg.st=Math.round(h2n(ls));
-    wal.df.burn=Math.round(h2n(db));wal.df.st=Math.round(h2n(ds));
-    MY_BURN=wal.lg.burn+wal.df.burn;MY_STBURN=wal.lg.st+wal.df.st;
+    MY_BURN=Math.round(h2n(lb));MY_STBURN=Math.round(h2n(ls));
+    wal.burn=MY_BURN;wal.st=MY_STBURN;
     wal.ok=true;renderWal();
   }catch(e){console.log("Wallet err:",e);}}
 
@@ -507,17 +504,12 @@ function renderWal(){
   var bCh=wal.prev.burn>0&&MY_BURN!==wal.prev.burn,sCh=wal.prev.st>0&&MY_STBURN!==wal.prev.st;
   var bClr=bCh?(MY_BURN>wal.prev.burn?"var(--g)":"var(--r)"):"var(--o)";
   var sClr=sCh?(MY_STBURN>wal.prev.st?"var(--g)":"var(--r)"):"var(--p)";
+  var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   $("walGrid").innerHTML=
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">'+
-    '<div class="mb" style="border-left:3px solid var(--b)"><small>LEDGER (HODL)</small>'+
-      '<b style="color:var(--o)">'+F(wal.lg.burn,0)+' <span style="font-size:9px;color:var(--mt)">BURN</span></b>'+
-      '<b style="color:var(--p);margin-top:2px">'+F(wal.lg.st,0)+' <span style="font-size:9px;color:var(--mt)">stBURN</span></b></div>'+
-    '<div class="mb" style="border-left:3px solid var(--cy)"><small>DEFI (LPs)</small>'+
-      '<b style="color:var(--o)">'+F(wal.df.burn,0)+' <span style="font-size:9px;color:var(--mt)">BURN</span></b>'+
-      '<b style="color:var(--p);margin-top:2px">'+F(wal.df.st,0)+' <span style="font-size:9px;color:var(--mt)">stBURN</span></b></div></div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
-    '<div class="mb"><small>TOTAL BURN</small><b style="color:'+bClr+'">'+F(MY_BURN,0)+(bCh?' <span style="font-size:10px">'+(MY_BURN>wal.prev.burn?"▲":"▼")+'</span>':'')+'</b></div>'+
-    '<div class="mb"><small>TOTAL stBURN</small><b style="color:'+sClr+'">'+F(MY_STBURN,0)+(sCh?' <span style="font-size:10px">'+(MY_STBURN>wal.prev.st?"▲":"▼")+'</span>':'')+'</b></div></div>';}
+    '<div class="mb"><small>BURN</small><b style="color:'+bClr+'">'+F(MY_BURN,0)+(bCh?' <span style="font-size:10px">'+(MY_BURN>wal.prev.burn?"▲":"▼")+'</span>':'')+'</b></div>'+
+    '<div class="mb"><small>stBURN</small><b style="color:'+sClr+'">'+F(MY_STBURN,0)+(sCh?' <span style="font-size:10px">'+(MY_STBURN>wal.prev.st?"▲":"▼")+'</span>':'')+'</b></div></div>'+
+    '<div style="text-align:center;margin-top:6px;font-size:9px"><a href="https://arbiscan.io/address/'+W_LEDGER+'" target="_blank" rel="noopener" style="color:var(--dm)">'+wShort+'</a></div>';}
 
 function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="err"?'<span class="dot" style="background:var(--r)"></span>'+t:'<span class="live-dot" style="background:var(--g)"></span>'+t;}
 function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;if(P>0)cache.P=P;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();saveOffline();}}
