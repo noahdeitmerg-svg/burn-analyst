@@ -864,35 +864,60 @@ async function wtLoad(){
   var addr=$("wtInput").value.trim();
   if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){$("wtResult").innerHTML='<span style="color:var(--r)">Invalid wallet address</span>';return;}
   if(wtCache&&wtCacheTs>Date.now()-60000&&wtCache.addr===addr){wtRender(wtCache);return;}
-  $("wtResult").innerHTML='<div style="text-align:center"><span class="skel" style="width:200px;height:14px"></span><br><span class="skel" style="width:160px;height:14px;margin-top:6px"></span></div>';
-  $("wtBtn").disabled=true;
+  $("wtResult").innerHTML=
+    '<div style="margin-bottom:8px"><span class="skel" style="width:90px;height:10px"></span></div>'+
+    '<div class="mg">'+
+      '<div class="mb"><span class="skel" style="width:35px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:55px;height:16px"></span></div>'+
+      '<div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:55px;height:16px"></span></div>'+
+      '<div class="mb"><span class="skel" style="width:50px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:65px;height:16px"></span></div>'+
+      '<div class="mb"><span class="skel" style="width:35px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:55px;height:16px"></span></div>'+
+    '</div>'+
+    '<div style="margin-top:10px"><span class="skel" style="width:100px;height:8px;margin-bottom:6px"></span>'+
+      '<div style="display:flex;gap:8px;margin-top:6px">'+
+        '<span class="skel" style="flex:1;height:14px"></span><span class="skel" style="flex:1;height:14px"></span><span class="skel" style="flex:1;height:14px"></span>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;margin-top:4px">'+
+        '<span class="skel" style="flex:1;height:14px"></span><span class="skel" style="flex:1;height:14px"></span><span class="skel" style="flex:1;height:14px"></span>'+
+      '</div>'+
+    '</div>';
+  $("wtBtn").disabled=true;$("wtBtn").textContent="Loading…";
+  var sec=$("sec-wt");if(sec&&!sec.classList.contains("open")){sec.classList.add("open");$("wtCol").classList.add("open");}
   try{
     // Balances
     var bH=await rpc(BURN_TK,bof(addr)),sH=await rpc(STBURN_TK,bof(addr));
     var wBurn=h2n(bH),wSt=h2n(sH);
+    console.log("WT balances:",wBurn,"BURN",wSt,"stBURN");
     // LP NFTs
     var nH=await rpc(WT_NFT,bof(addr));var nC=parseInt(nH,16);if(nC>50)nC=50;
+    console.log("WT NFT count:",nC,"raw:",nH);
     var lps=[],bLow=BURN_TK.toLowerCase(),uLow=USDC_TK.toLowerCase();
+    console.log("WT filter: t0="+uLow+" t1="+bLow);
     for(var i=0;i<nC;i++){
       try{
         var tH=await rpc(WT_NFT,"0x2f745c59"+addr.slice(2).toLowerCase().padStart(64,"0")+wtPad(i));
         var tId=BigInt("0x"+tH.slice(2));
+        console.log("WT NFT["+i+"] tokenId:",tId.toString());
         var pH=await rpc(WT_NFT,"0x99fd808c"+wtPad(tId));
-        if(!pH||pH.length<770)continue;
+        if(!pH||pH.length<770){console.log("WT NFT["+i+"] data too short:",pH?pH.length:0);continue;}
         var d=pH.slice(2);
         var t0="0x"+d.slice(152,192),t1="0x"+d.slice(216,256);
-        if(t0.toLowerCase()!==uLow||t1.toLowerCase()!==bLow)continue;
+        console.log("WT NFT["+i+"] t0="+t0+" t1="+t1);
+        if(t0.toLowerCase()!==uLow||t1.toLowerCase()!==bLow){console.log("WT NFT["+i+"] SKIP: not BURN/USDC");continue;}
         var tL=wtI24(d.slice(378,384)),tU=wtI24(d.slice(442,448));
         var liq=BigInt("0x"+d.slice(448,512));
-        if(liq<=0n)continue;
+        console.log("WT NFT["+i+"] ticks:",tL,tU,"liq:",liq.toString());
+        if(liq<=0n){console.log("WT NFT["+i+"] SKIP: zero liquidity");continue;}
         var pHi=wtTickToPrice(tL),pLo=wtTickToPrice(tU);
-        if(pLo<=0||pHi<=pLo)continue;
+        console.log("WT NFT["+i+"] prices: $"+pLo.toFixed(4)+" → $"+pHi.toFixed(4));
+        if(pLo<=0||pHi<=pLo){console.log("WT NFT["+i+"] SKIP: invalid prices");continue;}
         var bDep=wtLiqToBurn(Number(liq),tL,tU);
+        console.log("WT NFT["+i+"] BURN deposited:",bDep.toFixed(0));
         if(bDep<=0)continue;
         var cv=v3(bDep,pLo,pHi,P);
         lps.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,id:tId.toString()});
-      }catch(e2){continue;}
+      }catch(e2){console.log("WT NFT["+i+"] err:",e2);continue;}
     }
+    console.log("WT found",lps.length,"BURN/USDC LPs");
     var bEq2=wBurn+wSt*stR,lpB=0,lpU=0;
     for(var j=0;j<lps.length;j++){lpB+=lps[j].left;lpU+=lps[j].usdc;}
     var tEq=bEq2+lpB,tVal=tEq*P+lpU;
@@ -900,7 +925,7 @@ async function wtLoad(){
     wtCache=res;wtCacheTs=Date.now();
     wtRender(res);
   }catch(e){console.log("WT err:",e);$("wtResult").innerHTML='<span style="color:var(--r)">Wallet data unavailable</span>';}
-  $("wtBtn").disabled=false;
+  $("wtBtn").disabled=false;$("wtBtn").textContent="Load";
 }
 
 function wtRender(d){
