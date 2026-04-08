@@ -36,7 +36,7 @@ a{color:var(--b);text-decoration:none}
 .c0{padding:0;overflow:hidden}
 .lb{font-size:9px;color:var(--br);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;margin-bottom:8px;font-family:'Inter','JetBrains Mono',sans-serif}
 .mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
-.mb{background:rgba(8,12,22,.7);border:1px solid rgba(30,41,59,.4);border-radius:8px;padding:10px;transition:transform .15s,border-color .15s}
+.mb{background:rgba(8,12,22,.7);border:1px solid rgba(30,41,59,.4);border-radius:8px;padding:10px;transition:transform .15s,border-color .15s;animation:fadeIn .3s ease}
 .mb:hover{transform:translateY(-1px);border-color:rgba(96,165,250,.2)}
 .mb small{font-size:8px;color:#fff;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:3px;font-family:'Inter','JetBrains Mono',sans-serif}
 .mb b{font-size:14px;font-weight:600;display:block}
@@ -56,6 +56,7 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
 @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
 @keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
 @keyframes glow{0%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}50%{box-shadow:0 0 30px rgba(251,146,60,.4),inset 0 0 20px rgba(251,146,60,.1)}100%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes orbBreathe{0%,100%{border-color:var(--o);filter:drop-shadow(0 0 8px rgba(251,146,60,.15))}50%{border-color:#fbbf24;filter:drop-shadow(0 0 16px rgba(251,146,60,.3))}}
 .orb-pulse{animation:glow .6s ease-out}
 .prog-wrap{height:6px;background:#0a0f1a;border-radius:3px;margin-bottom:12px;overflow:hidden}
@@ -502,15 +503,23 @@ function render(){
   var m5v=parseFloat(d.volume&&d.volume.m5)||0;
 
   // PRICE CIRCLES
-  $("dPrice").textContent=FP(P);
+  $("dPrice").textContent=P>0?FP(P):"";
+  if(P<=0)$("dPrice").innerHTML='<span class="skel" style="width:100px;height:22px"></span>';
   document.title=P>0?FP(P)+" | BURN Terminal":"BURN Terminal";
   // Pulse on price change
   if(prevPrice>0&&P!==prevPrice){var orbEl=document.querySelector(".orb-main");if(orbEl){orbEl.classList.remove("orb-pulse");void orbEl.offsetWidth;orbEl.classList.add("orb-pulse");}}
   $("dPct").innerHTML=pct?(pct>=0?"▲":"▼")+" "+Math.abs(pct).toFixed(2)+"%":"";
   $("dPct").style.color=pct>=0?"var(--g)":"var(--r)";
-  $("stPrice").textContent=FP(P*stR);
-  $("stPriceSub").textContent=stOK?"via "+stSrc:"…";
-  $("dRatio").textContent=stOK?stR.toFixed(6):"…";
+  // stBURN: only show when ratio is confirmed
+  if(stOK){
+    $("stPrice").textContent=FP(P*stR);
+    $("stPriceSub").textContent="via "+stSrc;
+    $("dRatio").textContent=stR.toFixed(6);
+  }else{
+    $("stPrice").innerHTML='<span class="skel" style="width:80px;height:18px"></span>';
+    $("stPriceSub").textContent="loading";
+    $("dRatio").innerHTML='<span class="skel" style="width:80px;height:18px"></span>';
+  }
   $("dSrc").innerHTML=TG(SRC==="api"?"✓ LIVE":"◇ "+SRC,SRC==="api"?"#34d399":"#fb923c");
 
   // Sparkline
@@ -542,11 +551,10 @@ function render(){
   var bEq=MY_STBURN*stR;
   var TOTAL_BURN_EQ=MY_BURN+bEq+pL;
   var portUsd=TOTAL_BURN_EQ*P+pU;
-  var tot=TR+portUsd,prof=tot-INVESTED,roi=INVESTED>0?prof/INVESTED*100:0;
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
-  // Group 1 — Investment
+  // Group 1 — Investment (Entry + Invested merged)
   $("portG1").innerHTML=[
-    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b></div>',
+    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">$'+F(INVESTED,0)+' invested</span></div>',
     '<div class="mb" style="padding:14px"><small style="color:#fff">CURRENT PRICE</small><b class="key-val" style="color:'+(P>=AVG_ENTRY?"var(--g)":"var(--r)")+'">'+FP(P)+'</b></div>',
     '<div class="mb" style="padding:14px"><small style="color:#fff">MULTIPLE</small><b class="key-val" style="color:'+(mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")+'">'+(mult>0?mult.toFixed(1)+"x":"…")+'</b></div>'
   ].join("");
@@ -559,23 +567,23 @@ function render(){
   var realSellUsdc=0,realImpact=0;
   if(X>0&&K>0&&TOTAL_BURN_EQ>0){var newX=X+TOTAL_BURN_EQ;var newY=K/newX;realSellUsdc=Y-newY;realImpact=portUsd>0?((realSellUsdc+pU-portUsd)/portUsd*100):0;}
   var portReal=realSellUsdc+pU;
-  // Group 3 — Value
+  // Group 3 — Value (4 boxes, clean)
   var realizedProfit=TR-(TS*AVG_ENTRY);
   $("portG3").innerHTML=[
-    MB("Invested","$"+F(INVESTED,0),"var(--r)"),
-    '<div class="mb"><small>PORTFOLIO</small><b class="key-val" style="color:var(--br)">$'+F(portUsd,0)+'</b></div>',
-    '<div class="mb"><small>PROFIT</small><b class="key-val" style="color:'+(prof>=0?"var(--g)":"var(--r)")+'">'+(prof>=0?"+":"-")+"$"+F(Math.abs(prof),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
-    MB("Realized","$"+realizedProfit.toLocaleString("en",{minimumFractionDigits:0,maximumFractionDigits:0}),"var(--g)"),
+    '<div class="mb"><small>PORTFOLIO</small><b class="key-val" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
     '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage</span></div>',
+    MB("Realized","$"+realizedProfit.toLocaleString("en",{minimumFractionDigits:0,maximumFractionDigits:0}),"var(--g)"),
     '<div class="mb"><small>PROFIT REAL</small><b class="key-val" style="color:'+(portReal+TR-INVESTED>=0?"var(--cy)":"var(--r)")+'">'+(portReal+TR-INVESTED>=0?"+":"-")+"$"+F(Math.abs(portReal+TR-INVESTED),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">if sold now</span></div>'
   ].join("");
 
   // stBURN Yield (yield value emphasized)
-  var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
-  $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stOK?stR.toFixed(6):LD,"var(--cy)"),
-    MB("BURN Equiv",F(bEq,0),"var(--o)")].join("")+
-    '<div class="mb"><small>YIELD</small><b class="yield-big" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
-    [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
+  if(stOK){
+    var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
+    $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stR.toFixed(6),"var(--cy)"),
+      MB("BURN Equiv",F(bEq,0),"var(--o)")].join("")+
+      '<div class="mb"><small>YIELD</small><b class="yield-big" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
+      [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
+  }
 
   // SUPPLY
   if(sup.total>0){var bP=sup.total>0?(sup.burned/sup.total*100):0;
