@@ -297,7 +297,7 @@ var STAKE_VAULT="0x9ae5453F156a1f7AC297781C15C77b622E42C12c";
 var CONTRIB_VAULT="0x5b08D24EfcB4B485fa34bBdCed6d63205100afd6";
 var CLIENT_VAULT="0x2e9237771d0AE73B7D9a2C791209EfD5a1Ea9513";
 var DAO_VAULT="0x72aDe1298731f057796ECAb891F623Ae4C18E7c1";
-var RPC_LIST=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://rpc.ankr.com/arbitrum"];
+var RPC_LIST=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://arbitrum.llamarpc.com"];
 var rpcIdx=0,rpcFails=[0,0,0];
 
 async function rpcCall(to,data){
@@ -912,7 +912,7 @@ async function wtLoad(){
         if(!tH){console.log("WT NFT["+i+"] tokenOfOwnerByIndex failed");continue;}
         var tId=BigInt("0x"+tH.slice(2));
         console.log("WT NFT["+i+"] tokenId:",tId.toString());
-        var pH=await wtRpc(WT_NFT,"0x99fd808c"+wtPad(tId));
+        var pH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tId));
         if(!pH||pH.length<770){console.log("WT NFT["+i+"] positions() returned:",pH?pH.length:"null");continue;}
         var d=pH.slice(2);
         var t0="0x"+d.slice(152,192),t1="0x"+d.slice(216,256);
