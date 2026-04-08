@@ -169,10 +169,9 @@ td{padding:5px 6px;border-bottom:1px solid #0f172a}
   <div class="nxt" id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
 </div>
 
-<!-- ═══ WALLETS ═══ -->
-<div class="c" style="border-color:#60a5fa15">
-  <div class="lb">Ledger <span style="font-size:8px;color:var(--dm);text-transform:none;letter-spacing:0">⛓ on-chain</span></div>
-  <div id="walGrid"><div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><div class="mb"><span class="skel" style="width:60px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:80px;height:14px"></span></div><div class="mb"><span class="skel" style="width:60px;height:8px;margin-bottom:4px"></span><span class="skel" style="width:80px;height:14px"></span></div></div></div>
+<!-- ═══ WALLET ═══ -->
+<div class="c" style="padding:8px 14px">
+  <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
 </div>
 
 <!-- ═══ TRADES ═══ -->
@@ -501,15 +500,18 @@ async function fetchWal(){
 
 function renderWal(){
   if(!wal.ok)return;
-  var bCh=wal.prev.burn>0&&MY_BURN!==wal.prev.burn,sCh=wal.prev.st>0&&MY_STBURN!==wal.prev.st;
-  var bClr=bCh?(MY_BURN>wal.prev.burn?"var(--g)":"var(--r)"):"var(--o)";
-  var sClr=sCh?(MY_STBURN>wal.prev.st?"var(--g)":"var(--r)"):"var(--p)";
+  var bDrop=wal.prev.burn>0&&MY_BURN<wal.prev.burn,sDrop=wal.prev.st>0&&MY_STBURN<wal.prev.st;
+  var alert=bDrop||sDrop;
+  if(alert&&soundOn)beep();
+  if(alert)notify("⚠ Wallet Alert","Balance decreased! BURN:"+(bDrop?MY_BURN-wal.prev.burn:0)+" stBURN:"+(sDrop?MY_STBURN-wal.prev.st:0));
+  var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   $("walGrid").innerHTML=
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'+
-    '<div class="mb"><small>BURN</small><b style="color:'+bClr+'">'+F(MY_BURN,0)+(bCh?' <span style="font-size:10px">'+(MY_BURN>wal.prev.burn?"▲":"▼")+'</span>':'')+'</b></div>'+
-    '<div class="mb"><small>stBURN</small><b style="color:'+sClr+'">'+F(MY_STBURN,0)+(sCh?' <span style="font-size:10px">'+(MY_STBURN>wal.prev.st?"▲":"▼")+'</span>':'')+'</b></div></div>'+
-    '<div style="text-align:center;margin-top:6px;font-size:9px"><a href="https://arbiscan.io/address/'+W_LEDGER+'" target="_blank" rel="noopener" style="color:var(--dm)">'+wShort+'</a></div>';}
+    '<span style="font-size:9px;color:var(--dm)">⛓</span> '+
+    '<a href="https://arbiscan.io/address/'+W_LEDGER+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--dm)">'+wShort+'</a> '+
+    '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span> · '+
+    '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
+    (alert?' <span style="color:var(--r);font-weight:700"> ⚠ DROP</span>':'');}
 
 function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="err"?'<span class="dot" style="background:var(--r)"></span>'+t:'<span class="live-dot" style="background:var(--g)"></span>'+t;}
 function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;if(P>0)cache.P=P;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();saveOffline();}}
