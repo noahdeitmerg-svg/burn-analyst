@@ -323,20 +323,23 @@ var USDC_TK="0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 
 // ═══ CONFIG ═══
 var W_LEDGER="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
+var W_DEFI="0x505042fF781eA1689e44e1d200eFD691C30Db86C";
 var TGT=[.20,.30,.50,1,2,5], SEL=[10000,50000,100000,180000];
 var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
-// ═══ LP POSITIONS ═══
-var LP=[
+// ═══ LP POSITIONS (fallback — overwritten by on-chain if available) ═══
+var LP_FALLBACK=[
   {b:20300,lo:.149,hi:.20,label:"Sell"},
   {b:5000,lo:.14,hi:.50,label:"Sell"},
   {b:5000,lo:.50,hi:1,label:"Sell"},
   {b:5000,lo:1,hi:1.5,label:"Sell"},
-  {b:5000,lo:1.5,hi:2,label:"Sell"},
-  {b:5000000,lo:0,hi:0,label:"DAO Full Range",fr:true}
+  {b:5000,lo:1.5,hi:2,label:"Sell"}
 ];
+var LP_DAO={b:5000000,lo:0,hi:0,label:"DAO Full Range",fr:true};
+var LP=LP_FALLBACK.concat([LP_DAO]);
 var ALP=0;for(var ai=0;ai<LP.length;ai++)if(!LP[ai].fr)ALP+=LP[ai].b;
+var lpLive=false;
 
 // ═══ HISTORY ═══
 var CL=[
@@ -556,6 +559,43 @@ function renderWal(){
     '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span> · '+
     '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
     (alert?' <span style="color:var(--r);font-weight:700"> ⚠ DROP</span>':'');}
+
+// ═══ FETCH: Live LP Positions (DeFi wallet NFTs) ═══
+async function fetchLPs(){
+  try{
+    var nH=await rpc(WT_NFT,bof(W_DEFI));var nC=parseInt(nH,16);if(nC>50)nC=50;
+    if(nC<=0)return;
+    var newLP=[],bLow=BURN_TK.toLowerCase(),uLow=USDC_TK.toLowerCase();
+    for(var i=0;i<nC;i++){
+      try{
+        var tH=await wtRpc(WT_NFT,"0x2f745c59"+W_DEFI.slice(2).toLowerCase().padStart(64,"0")+wtPad(i));
+        if(!tH)continue;
+        var tId=BigInt("0x"+tH.slice(2));
+        var pH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tId));
+        if(!pH||pH.length<770)continue;
+        var d=pH.slice(2);
+        var t0="0x"+d.slice(152,192),t1="0x"+d.slice(216,256);
+        if(t0.toLowerCase()!==uLow||t1.toLowerCase()!==bLow)continue;
+        var tL=wtI24(d.slice(378,384)),tU=wtI24(d.slice(442,448));
+        var liq=BigInt("0x"+d.slice(448,512));
+        if(liq<=0n)continue;
+        var pHi=wtTickToPrice(tL),pLo=wtTickToPrice(tU);
+        if(pLo<=0||pHi<=pLo)continue;
+        var bDep=wtLiqToBurn(Number(liq),tL,tU);
+        if(bDep<=0)continue;
+        newLP.push({b:Math.round(bDep),lo:Math.round(pLo*10000)/10000,hi:Math.round(pHi*10000)/10000,label:"Sell"});
+      }catch(e2){continue;}
+    }
+    if(newLP.length>0){
+      // Keep DAO Full Range, replace user LPs
+      var dao=null;for(var di=0;di<LP.length;di++){if(LP[di].fr)dao=LP[di];}
+      LP=newLP;if(dao)LP.push(dao);
+      ALP=0;for(var ai2=0;ai2<LP.length;ai2++)if(!LP[ai2].fr)ALP+=LP[ai2].b;
+      lpLive=true;
+      console.log("LP[] updated from chain:",newLP.length,"positions, ALP="+ALP);
+      if(P>0)render();
+    }
+  }catch(e){console.log("fetchLPs err:",e);}}
 
 function sts(s){var t=new Date().toLocaleTimeString();$("sts").innerHTML=s==="err"?'<span class="dot" style="background:var(--r)"></span>'+t:'<span class="live-dot" style="background:var(--g)"></span>'+t;}
 function set(x,y,src){X=x;Y=y;K=x*y;P=y/x;SRC=src;if(P>0)cache.P=P;hst.push(P);if(hst.length>120)hst.shift();if(K>0&&P>0){$("main").classList.remove("hid");render();saveOffline();}}
@@ -981,20 +1021,24 @@ document.addEventListener("touchmove",function(e){if(ptrY>0&&window.scrollY===0)
 document.addEventListener("touchend",function(){if(ptrActive){ptrActive=false;$("ptr").classList.remove("show");go();fetchSt();fetchTrades();}ptrY=0;});
 
 // ═══ START ═══
-var _refreshId=null;
+var _refreshId=null,_refreshCount=0;
 function startRefresh(){
   if(_refreshId)clearInterval(_refreshId);
-  _refreshId=setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();saveOffline();updateSysStatus();},60000);
+  _refreshId=setInterval(function(){if(document.hidden)return;_refreshCount++;
+    if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
+    if(_refreshCount%5===0)fetchLPs(); // LP refresh every 5 min
+    saveOffline();updateSysStatus();},60000);
 }
 function updateSysStatus(){
   var rpcOk=rpcFails[rpcIdx]<3,apiOk=P>0&&SRC!=="",walOk=wal.ok||MY_BURN>0;
   var parts=["RPC:"+(rpcOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--r)'>FAIL</span>"),
     "API:"+(apiOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--o)'>"+SRC+"</span>"),
-    "WAL:"+(walOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--dm)'>…</span>")];
+    "WAL:"+(walOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--dm)'>…</span>"),
+    "LP:"+(lpLive?"<span style='color:var(--g)'>LIVE</span>":"<span style='color:var(--o)'>static</span>")];
   $("foot").innerHTML="BURN Terminal · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
 loadOffline();
-go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal();
+go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
 </script>
