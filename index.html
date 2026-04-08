@@ -190,6 +190,19 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
 </div>
 
+<!-- ═══ WALLET TRACKER ═══ -->
+<div class="c" style="padding:10px 14px">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span class="lb" style="margin:0;white-space:nowrap">Wallet Tracker</span>
+    <input class="inp" id="wtInput" placeholder="0x..." style="flex:1;min-width:180px;font-size:10px;padding:4px 8px">
+    <button class="btn" id="wtBtn" onclick="wtLoad()">Load</button>
+  </div>
+  <div class="col" onclick="tog(this,'sec-wt')" style="margin-top:8px" id="wtCol">Wallet Portfolio</div>
+  <div id="sec-wt" class="col-b">
+    <div id="wtResult" style="font-size:11px"><span style="color:var(--dm)">Enter a wallet address to load portfolio</span></div>
+  </div>
+</div>
+
 <!-- ═══ TRADES ═══ -->
 <div class="c">
   <div class="lb">Last Trade</div>
@@ -284,7 +297,23 @@ var STAKE_VAULT="0x9ae5453F156a1f7AC297781C15C77b622E42C12c";
 var CONTRIB_VAULT="0x5b08D24EfcB4B485fa34bBdCed6d63205100afd6";
 var CLIENT_VAULT="0x2e9237771d0AE73B7D9a2C791209EfD5a1Ea9513";
 var DAO_VAULT="0x72aDe1298731f057796ECAb891F623Ae4C18E7c1";
-var ARB_RPC="https://arb1.arbitrum.io/rpc";
+var RPC_LIST=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://1rpc.io/arb"];
+var rpcIdx=0,rpcFails=[0,0,0];
+
+async function rpcCall(to,data){
+  for(var i=0;i<RPC_LIST.length;i++){
+    var idx=(rpcIdx+i)%RPC_LIST.length;
+    try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},5000);
+      var r=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:to,data:data},"latest"],id:1}),signal:ac.signal});
+      clearTimeout(tm);var j=await r.json();
+      if(j.result&&j.result!=="0x"){rpcFails[idx]=0;if(idx!==rpcIdx){rpcIdx=idx;console.log("RPC switched to",RPC_LIST[idx]);}return j.result;}
+      rpcFails[idx]++;
+    }catch(e){clearTimeout(tm);rpcFails[idx]++;console.log("RPC["+idx+"] fail:",e.message);}
+  }
+  return"0x0";}
+// Legacy alias
+var rpc=rpcCall;
 
 var DS="https://api.dexscreener.com/latest/dex/pairs/arbitrum/"+POOL;
 var DS_TK="https://api.dexscreener.com/latest/dex/tokens/"+BURN_TK.toLowerCase();
@@ -346,6 +375,7 @@ var cache={P:0,stR:1,sup:null};
 
 // ═══ HELPERS ═══
 function $(id){return document.getElementById(id)}
+function sF(v){var n=parseFloat(v);return isFinite(n)?n:0;} // safe parseFloat — never NaN
 function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(2)+"M";if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
@@ -353,15 +383,10 @@ function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+
 var LD="…";
 function tog(el,id){var b=$(id);b.classList.toggle("open");el.classList.toggle("open");}
 
-// ═══ RPC ═══
-async function rpc(to,data){
-  try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-    var r=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({jsonrpc:"2.0",method:"eth_call",params:[{to:to,data:data},"latest"],id:1}),signal:ac.signal});
-    clearTimeout(tm);var j=await r.json();return j.result||"0x0";}catch(e){return"0x0";}}
+// ═══ RPC (uses rpcCall from fallback system above) ═══
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
-function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;try{return Number(BigInt(h)*1000n/10n**18n)/1000;}catch(e){return parseInt(h,16)/1e18;}}
-function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;return parseInt(h,16)/1e6;}
+function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;try{var v=Number(BigInt(h)*1000n/10n**18n)/1000;return isFinite(v)?v:0;}catch(e){var f=parseInt(h,16)/1e18;return isFinite(f)?f:0;}}
+function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;var v=parseInt(h,16)/1e6;return isFinite(v)?v:0;}
 
 // ═══ NOTIFICATIONS + SOUND ═══
 var prevPrice=0, notifOn=false, soundOn=false, audioCtx=null;
@@ -410,9 +435,9 @@ async function go(manual){
     }catch(e){lastErr=e.message;console.log("DS["+ui+"] err:",e.message);}
   }
   if(p){
-    RAW=p;aB=parseFloat(p.liquidity&&p.liquidity.base)||0;aU=parseFloat(p.liquidity&&p.liquidity.quote)||0;
-    tU=parseFloat(p.liquidity&&p.liquidity.usd)||0;var apiP=parseFloat(p.priceUsd)||0;
-    var mv=parseFloat(p.volume&&p.volume.m5)||0,mb=(p.txns&&p.txns.m5&&p.txns.m5.buys)||0,ms=(p.txns&&p.txns.m5&&p.txns.m5.sells)||0;
+    RAW=p;aB=sF(p.liquidity&&p.liquidity.base);aU=sF(p.liquidity&&p.liquidity.quote);
+    tU=sF(p.liquidity&&p.liquidity.usd);var apiP=sF(p.priceUsd);
+    var mv=sF(p.volume&&p.volume.m5),mb=(p.txns&&p.txns.m5&&p.txns.m5.buys)||0,ms=(p.txns&&p.txns.m5&&p.txns.m5.sells)||0;
     if(pm5.v>0){var dv=mv-pm5.v,ds=ms-pm5.s,db=mb-pm5.b;
       if(Math.abs(dv)>500&&(ds>0||db>0)){whl.unshift({t:new Date(),type:ds>db?"SELL":"BUY",vol:Math.abs(dv)});if(whl.length>15)whl.pop();}}
     pm5={v:mv,s:ms,b:mb};
@@ -508,8 +533,12 @@ async function fetchSup(){
 async function fetchWal(){
   try{
     var lb=await rpc(BURN_TK,bof(W_LEDGER)),ls=await rpc(STBURN_TK,bof(W_LEDGER));
+    var newB=Math.round(h2n(lb)),newS=Math.round(h2n(ls));
+    // Safety: never overwrite valid balances with 0 (RPC failure)
+    if(newB<=0&&MY_BURN>0)return;
+    if(newS<=0&&MY_STBURN>0)return;
     wal.prev.burn=MY_BURN;wal.prev.st=MY_STBURN;
-    MY_BURN=Math.round(h2n(lb));MY_STBURN=Math.round(h2n(ls));
+    MY_BURN=newB;MY_STBURN=newS;
     wal.burn=MY_BURN;wal.st=MY_STBURN;
     wal.ok=true;renderWal();
   }catch(e){console.log("Wallet err:",e);}}
@@ -755,16 +784,30 @@ function renderTrades(){
 function tradePg(d){tradePg_+=d;renderTrades();}
 
 async function fetchTradesChunk(fromBlock,toBlock){
-  var logR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:"0x"+fromBlock.toString(16),toBlock:"0x"+toBlock.toString(16)}],id:100})});
-  var logJ=await logR.json();
-  return logJ.result||[];}
+  for(var ri=0;ri<RPC_LIST.length;ri++){
+    var idx=(rpcIdx+ri)%RPC_LIST.length;
+    try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},8000);
+      var logR=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:"0x"+fromBlock.toString(16),toBlock:"0x"+toBlock.toString(16)}],id:100}),signal:ac.signal});
+      clearTimeout(tm);var logJ=await logR.json();
+      if(Array.isArray(logJ.result))return logJ.result;
+    }catch(e){clearTimeout(tm);}
+  }
+  return[];}
 
 async function fetchTrades(){
   try{
-    var bnR=await fetch(ARB_RPC,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:99})});
-    var bnJ=await bnR.json();tradeLatest=parseInt(bnJ.result,16);
+    var bnJ=null;
+    for(var ri=0;ri<RPC_LIST.length;ri++){
+      var idx=(rpcIdx+ri)%RPC_LIST.length;
+      try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},5000);
+        var bnR=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:99}),signal:ac.signal});
+        clearTimeout(tm);bnJ=await bnR.json();if(bnJ&&bnJ.result)break;
+      }catch(e){clearTimeout(tm);}
+    }
+    if(!bnJ||!bnJ.result)return;
+    tradeLatest=parseInt(bnJ.result,16);
     if(!tradeLatest)return;
     var isFirst=allTrades.length===0;
     var from=isFirst?tradeLatest-BLOCK_CHUNK:tradeLatest-200000; // refresh: only last ~15min
@@ -809,6 +852,75 @@ async function fetchTradesOlder(){
   }catch(e){$("tLoadStat").textContent="Error loading";}
   $("tMore").disabled=false;}
 
+// ═══ WALLET TRACKER (isolated module) ═══
+var WT_NFT="0xC36442b4a4522E871399CD717aBDD847Ab11FE88";
+var wtCache=null,wtCacheTs=0;
+function wtPad(n){return BigInt(n).toString(16).padStart(64,"0");}
+function wtI24(hex){var v=parseInt(hex,16);return v>=0x800000?v-0x1000000:v;}
+function wtTickToPrice(tick){return 1e12/Math.pow(1.0001,tick);}
+function wtLiqToBurn(liq,tL,tU){var sL=Math.pow(1.0001,tL/2),sU=Math.pow(1.0001,tU/2);return liq*(sU-sL)/1e18;}
+
+async function wtLoad(){
+  var addr=$("wtInput").value.trim();
+  if(!/^0x[0-9a-fA-F]{40}$/.test(addr)){$("wtResult").innerHTML='<span style="color:var(--r)">Invalid wallet address</span>';return;}
+  if(wtCache&&wtCacheTs>Date.now()-60000&&wtCache.addr===addr){wtRender(wtCache);return;}
+  $("wtResult").innerHTML='<div style="text-align:center"><span class="skel" style="width:200px;height:14px"></span><br><span class="skel" style="width:160px;height:14px;margin-top:6px"></span></div>';
+  $("wtBtn").disabled=true;
+  try{
+    // Balances
+    var bH=await rpc(BURN_TK,bof(addr)),sH=await rpc(STBURN_TK,bof(addr));
+    var wBurn=h2n(bH),wSt=h2n(sH);
+    // LP NFTs
+    var nH=await rpc(WT_NFT,bof(addr));var nC=parseInt(nH,16);if(nC>50)nC=50;
+    var lps=[],bLow=BURN_TK.toLowerCase(),uLow=USDC_TK.toLowerCase();
+    for(var i=0;i<nC;i++){
+      try{
+        var tH=await rpc(WT_NFT,"0x2f745c59"+addr.slice(2).toLowerCase().padStart(64,"0")+wtPad(i));
+        var tId=BigInt("0x"+tH.slice(2));
+        var pH=await rpc(WT_NFT,"0x99fd808c"+wtPad(tId));
+        if(!pH||pH.length<770)continue;
+        var d=pH.slice(2);
+        var t0="0x"+d.slice(152,192),t1="0x"+d.slice(216,256);
+        if(t0.toLowerCase()!==uLow||t1.toLowerCase()!==bLow)continue;
+        var tL=wtI24(d.slice(378,384)),tU=wtI24(d.slice(442,448));
+        var liq=BigInt("0x"+d.slice(448,512));
+        if(liq<=0n)continue;
+        var pHi=wtTickToPrice(tL),pLo=wtTickToPrice(tU);
+        if(pLo<=0||pHi<=pLo)continue;
+        var bDep=wtLiqToBurn(Number(liq),tL,tU);
+        if(bDep<=0)continue;
+        var cv=v3(bDep,pLo,pHi,P);
+        lps.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,id:tId.toString()});
+      }catch(e2){continue;}
+    }
+    var bEq2=wBurn+wSt*stR,lpB=0,lpU=0;
+    for(var j=0;j<lps.length;j++){lpB+=lps[j].left;lpU+=lps[j].usdc;}
+    var tEq=bEq2+lpB,tVal=tEq*P+lpU;
+    var res={addr:addr,burn:wBurn,stBurn:wSt,lps:lps,bEq:bEq2,lpBurn:lpB,lpUsdc:lpU,totalEq:tEq,totalVal:tVal};
+    wtCache=res;wtCacheTs=Date.now();
+    wtRender(res);
+  }catch(e){console.log("WT err:",e);$("wtResult").innerHTML='<span style="color:var(--r)">Wallet data unavailable</span>';}
+  $("wtBtn").disabled=false;
+}
+
+function wtRender(d){
+  var wS=d.addr.slice(0,6)+"…"+d.addr.slice(-4);
+  var h='<div style="margin-bottom:8px"><a href="https://arbiscan.io/address/'+d.addr+'" target="_blank" style="color:var(--b);font-size:10px">'+wS+'</a></div>';
+  h+='<div class="mg">'+MB("BURN",F(d.burn,0),"var(--o)")+MB("stBURN",F(d.stBurn,0),"var(--p)")+
+    MB("BURN Equiv",F(d.totalEq,0),"var(--br)")+MB("Value","$"+F(d.totalVal,0),"var(--g)")+'</div>';
+  if(d.lps.length>0){
+    h+='<div style="margin-top:10px"><div class="lb">LP Positions ('+d.lps.length+')</div>';
+    h+='<div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>Deposited</th><th>Left</th><th>USDC</th><th>Filled</th></tr></thead><tbody>';
+    for(var i=0;i<d.lps.length;i++){var lp=d.lps[i];
+      h+='<tr><td class="bld">$'+lp.lo.toFixed(lp.lo<1?3:2)+' → $'+lp.hi.toFixed(2)+'</td>';
+      h+='<td style="color:var(--o)">'+F(lp.burn,0)+'</td><td>'+F(lp.left,0)+'</td>';
+      h+='<td style="color:var(--g)">$'+F(lp.usdc,2)+'</td><td style="color:var(--cy)">'+lp.pct.toFixed(0)+'%</td></tr>';}
+    h+='</tbody></table></div></div>';}
+  else if(d.burn<=0&&d.stBurn<=0){h+='<div style="margin-top:8px;color:var(--dm);font-size:10px">No BURN holdings found</div>';}
+  $("wtResult").innerHTML=h;
+  var sec=$("sec-wt");if(sec&&!sec.classList.contains("open")){sec.classList.add("open");$("wtCol").classList.add("open");}
+}
+
 // ═══ OFFLINE CACHE ═══
 function saveOffline(){try{localStorage.setItem("burn_cache",JSON.stringify({P:P,stR:stR,stOK:stOK,stSrc:stSrc,sup:sup,X:X,Y:Y,K:K,SRC:SRC,MY_BURN:MY_BURN,MY_STBURN:MY_STBURN,wal:wal,ts:Date.now()}));}catch(e){}}
 function loadOffline(){try{var c=JSON.parse(localStorage.getItem("burn_cache"));if(!c||!c.P)return false;
@@ -829,10 +941,22 @@ document.addEventListener("touchmove",function(e){if(ptrY>0&&window.scrollY===0)
 document.addEventListener("touchend",function(){if(ptrActive){ptrActive=false;$("ptr").classList.remove("show");go();fetchSt();fetchTrades();}ptrY=0;});
 
 // ═══ START ═══
+var _refreshId=null;
+function startRefresh(){
+  if(_refreshId)clearInterval(_refreshId);
+  _refreshId=setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();saveOffline();updateSysStatus();},60000);
+}
+function updateSysStatus(){
+  var rpcOk=rpcFails[rpcIdx]<3,apiOk=P>0&&SRC!=="",walOk=wal.ok||MY_BURN>0;
+  var parts=["RPC:"+(rpcOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--r)'>FAIL</span>"),
+    "API:"+(apiOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--o)'>"+SRC+"</span>"),
+    "WAL:"+(walOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--dm)'>…</span>")];
+  $("foot").innerHTML="BURN Terminal · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
+}
 loadOffline();
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal();
-setInterval(function(){if(document.hidden)return;if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();saveOffline();},60000);
-document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();}});
+startRefresh();
+document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
 </script>
 </body>
 </html>
