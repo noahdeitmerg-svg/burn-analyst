@@ -507,8 +507,7 @@ function renderWal(){
   var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   $("walGrid").innerHTML=
-    '<span style="font-size:9px;color:var(--dm)">⛓</span> '+
-    '<a href="https://arbiscan.io/address/'+W_LEDGER+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--dm)">'+wShort+'</a> '+
+    '<span style="font-size:9px;color:var(--dm)">⛓ Ledger Balance</span> '+
     '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span> · '+
     '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
     (alert?' <span style="color:var(--r);font-weight:700"> ⚠ DROP</span>':'');}
