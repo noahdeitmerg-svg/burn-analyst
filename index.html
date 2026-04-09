@@ -1003,22 +1003,50 @@ async function scanLiqMap(){
       $("lmapStatus").textContent="Read "+Math.min(b+10,tickCalls.length)+"/"+tickCalls.length+" ticks ("+tickData.length+" active)";}
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
-    // 4. Find LP owners: collect wallets from trades + known addresses → scan NFTs
+    // 4. Find LP owners: scan BURN holders from Transfer events + trades → check NFTs
     var lpOwners=[];
-    $("lmapStatus").textContent="Scanning LP owners...";
+    $("lmapStatus").textContent="Finding BURN holders...";
     try{
       var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
       var NFM=WT_NFT;
-      // Collect unique wallets: from trades + known vaults
+      var XFER_T="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      // Collect wallets from: known addresses + trades + on-chain Transfer events
       var walSet={};
       walSet[W_DEFI.toLowerCase()]=1;walSet[W_LEDGER.toLowerCase()]=1;
       walSet[DAO_VAULT.toLowerCase()]=1;walSet[CONTRIB_VAULT.toLowerCase()]=1;
       walSet[CLIENT_VAULT.toLowerCase()]=1;
-      // Add wallets from recent trades (swap recipients)
       for(var sw=0;sw<allTrades.length;sw++){if(allTrades[sw].wallet)walSet[allTrades[sw].wallet.toLowerCase()]=1;}
+      // Scan BURN token Transfer events to find all holders (~30 days)
+      $("lmapStatus").textContent="Scanning BURN transfers...";
+      var bnRes=await batchRpc([{jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:0}]);
+      var headBlk=0;if(bnRes&&bnRes[0]&&bnRes[0].result)headBlk=parseInt(bnRes[0].result,16);
+      if(headBlk>0){
+        var xfrFrom=headBlk-12000000; // ~35 days on Arbitrum
+        for(var xc=xfrFrom;xc<headBlk;xc+=5000000){
+          try{
+            var xTo=Math.min(xc+5000000,headBlk);
+            var xR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:BURN_TK,topics:[XFER_T],fromBlock:"0x"+xc.toString(16),toBlock:"0x"+xTo.toString(16)}],id:0}]);
+            if(xR&&xR[0]&&Array.isArray(xR[0].result)){
+              for(var xi=0;xi<xR[0].result.length;xi++){
+                var xl=xR[0].result[xi];if(!xl.topics||xl.topics.length<3)continue;
+                var xTo2="0x"+xl.topics[2].slice(26);
+                if(xTo2!=="0x0000000000000000000000000000000000000000")walSet[xTo2.toLowerCase()]=1;
+                var xFrom="0x"+xl.topics[1].slice(26);
+                if(xFrom!=="0x0000000000000000000000000000000000000000")walSet[xFrom.toLowerCase()]=1;
+              }
+              console.log("LMAP: Transfer scan chunk "+Math.round((xc-xfrFrom)/5000000)+": "+xR[0].result.length+" events");
+            }
+          }catch(e3){}
+          await new Promise(function(r){setTimeout(r,500);});
+        }
+      }
+      // Remove known non-LP addresses (contracts, dead, pool, NFM)
+      delete walSet[POOL.toLowerCase()];delete walSet[DEAD_ADDR.toLowerCase()];
+      delete walSet[STAKE_VAULT.toLowerCase()];delete walSet[WT_NFT.toLowerCase()];
+      delete walSet[BURN_TK.toLowerCase()];delete walSet[STBURN_TK.toLowerCase()];
       var scanAddrs=Object.keys(walSet);
-      console.log("LMAP: scanning "+scanAddrs.length+" wallets for LP NFTs");
-      $("lmapStatus").textContent="Scanning "+scanAddrs.length+" wallets for NFTs...";
+      console.log("LMAP: found "+scanAddrs.length+" unique holder addresses");
+      $("lmapStatus").textContent="Checking "+scanAddrs.length+" wallets for LP NFTs...";
 
       // For each wallet: check NFT balance, then scan positions
       for(var wi=0;wi<scanAddrs.length;wi++){
