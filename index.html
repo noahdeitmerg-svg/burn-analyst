@@ -909,11 +909,7 @@ async function fetchTradesOlder(){
 // ═══ POOL LIQUIDITY MAP (bitmap + subgraph) ═══
 var lmapCache=null,lmapTs=0;
 var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
-var SUBGRAPH_URLS=[
-  "https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum-one/1.0.0/gn",
-  "https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum/1.0.0/gn",
-  "https://api.thegraph.com/subgraphs/name/revert-finance/uniswap-v3-arbitrum"
-];
+
 
 async function batchRpc(calls){
   // arb1 has CORS bug with batch requests (duplicate * header) — use dedicated batch endpoints
@@ -935,7 +931,7 @@ function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math
 
 async function scanLiqMap(){
   if(lmapCache&&lmapTs>Date.now()-120000){renderLmap(lmapCache);return;}
-  $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
+  $("lmapB").innerHTML='<tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
   $("lmapStatus").textContent="Scanning ticks...";
   try{
     // 1. slot0 + tickSpacing + liquidity (3 calls)
@@ -951,6 +947,10 @@ async function scanLiqMap(){
     var liqH=await wtRpc(POOL,"0x1a686502");
     var curLiq=0;if(liqH&&liqH.length>2)curLiq=Number(BigInt("0x"+liqH.slice(2)));
     console.log("LMAP: tick="+curTick+" spacing="+tSpacing+" liq="+curLiq);
+    // Get current block for Mint event scanning
+    var curBlock=0;
+    try{var bnR2=await batchRpc([{jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:0}]);
+      if(bnR2&&bnR2[0]&&bnR2[0].result)curBlock=parseInt(bnR2[0].result,16);}catch(e){}
 
     // 2. Batch bitmap scan (±8 words)
     var curComp=Math.floor(curTick/tSpacing);
@@ -989,25 +989,81 @@ async function scanLiqMap(){
       $("lmapStatus").textContent="Read "+Math.min(b+10,tickCalls.length)+"/"+tickCalls.length+" ticks ("+tickData.length+" active)";}
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
-    // 4. Fetch LP owners from subgraph (try multiple)
+    // 4. Find LP owners on-chain (Mint events → receipts → NFM Transfer → ownerOf)
     var lpOwners=[];
-    var gq='{"query":"{ positions(where:{pool:\\"'+POOL+'\\",liquidity_gt:\\"0\\"},first:100,orderBy:liquidity,orderDirection:desc){owner tickLower{tickIdx} tickUpper{tickIdx} liquidity}}"}';
-    for(var si=0;si<SUBGRAPH_URLS.length&&lpOwners.length===0;si++){
-      try{
-        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-        var gr=await fetch(SUBGRAPH_URLS[si],{method:"POST",headers:{"Content-Type":"application/json"},body:gq,signal:ac.signal});
-        clearTimeout(tm);
-        if(!gr.ok){console.log("Subgraph["+si+"] HTTP "+gr.status);continue;}
-        var gj=await gr.json();
-        if(gj.data&&gj.data.positions){
-          var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
-          for(var gi=0;gi<gj.data.positions.length;gi++){
-            var gp=gj.data.positions[gi];
-            var gpLo=wtTickToPrice(parseInt(gp.tickUpper.tickIdx)),gpHi=wtTickToPrice(parseInt(gp.tickLower.tickIdx));
-            lpOwners.push({lo:gpLo,hi:gpHi,owner:gp.owner,isMe:gp.owner.toLowerCase()===myD||gp.owner.toLowerCase()===myL,liq:parseFloat(gp.liquidity)});}
-          console.log("LMAP: "+lpOwners.length+" LP owners from "+SUBGRAPH_URLS[si].split("/").pop());}
-      }catch(e){console.log("Subgraph["+si+"] err:",e.message);}
-    }
+    $("lmapStatus").textContent="Scanning LP owners...";
+    try{
+      var MINT_SIG="0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde";
+      var XFER_SIG="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      var NFM=WT_NFT.toLowerCase();
+      // Scan last ~30M blocks (~90 days)
+      var mintFrom=curBlock-30000000;if(mintFrom<0)mintFrom=0;
+      var mintLogs=[];
+      for(var mc=mintFrom;mc<curBlock;mc+=5000000){
+        var mTo=Math.min(mc+5000000,curBlock);
+        try{
+          var mR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[MINT_SIG],fromBlock:"0x"+mc.toString(16),toBlock:"0x"+mTo.toString(16)}],id:0}]);
+          if(mR&&mR[0]&&Array.isArray(mR[0].result))mintLogs=mintLogs.concat(mR[0].result);
+        }catch(e3){}
+      }
+      // Get unique tx hashes
+      var txSet={};for(var ml=0;ml<mintLogs.length;ml++){txSet[mintLogs[ml].transactionHash]=1;}
+      var txHashes=Object.keys(txSet);
+      console.log("LMAP: "+mintLogs.length+" Mint events, "+txHashes.length+" unique txs");
+      $("lmapStatus").textContent="Reading "+txHashes.length+" tx receipts...";
+      // Get receipts and find NFM Transfer events
+      var tokenIds=[];
+      for(var ti=0;ti<txHashes.length&&ti<50;ti++){
+        try{
+          var rcR=await wtRpc(null,"receipt:"+txHashes[ti]);
+          // wtRpc won't work for receipts, use direct RPC
+        }catch(e4){}
+      }
+      // Direct receipt fetch
+      var rcCalls=txHashes.slice(0,50).map(function(h,i){return{jsonrpc:"2.0",method:"eth_getTransactionReceipt",params:[h],id:i};});
+      for(var rb=0;rb<rcCalls.length;rb+=10){
+        if(rb>0)await new Promise(function(r){setTimeout(r,1000);});
+        var rcBatch=rcCalls.slice(rb,rb+10);
+        var rcRes=await batchRpc(rcBatch);
+        if(!rcRes)continue;
+        for(var rri=0;rri<rcRes.length;rri++){
+          if(!rcRes[rri]||!rcRes[rri].result||!rcRes[rri].result.logs)continue;
+          var rcLogs=rcRes[rri].result.logs;
+          for(var rli=0;rli<rcLogs.length;rli++){
+            var rl=rcLogs[rli];
+            if(rl.address&&rl.address.toLowerCase()===NFM&&rl.topics&&rl.topics.length>=4&&rl.topics[0]===XFER_SIG){
+              var from="0x"+rl.topics[1].slice(26);
+              if(from==="0x0000000000000000000000000000000000000000"){
+                var tid=BigInt(rl.topics[3]);
+                var to="0x"+rl.topics[2].slice(26);
+                tokenIds.push({id:tid,mintedTo:to});}}}}
+        $("lmapStatus").textContent="Receipts "+Math.min(rb+10,rcCalls.length)+"/"+rcCalls.length+" ("+tokenIds.length+" NFTs)";
+      }
+      console.log("LMAP: "+tokenIds.length+" NFT tokenIds found");
+      // For each tokenId: positions() + ownerOf()
+      $("lmapStatus").textContent="Reading "+tokenIds.length+" positions...";
+      var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
+      for(var pi2=0;pi2<tokenIds.length;pi2++){
+        try{
+          var posH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tokenIds[pi2].id));
+          if(!posH||posH.length<770)continue;
+          var pd=posH.slice(2);
+          var pt0="0x"+pd.slice(152,192),pt1="0x"+pd.slice(216,256);
+          if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase())continue;
+          var pLiq=BigInt("0x"+pd.slice(448,512));
+          if(pLiq<=0n)continue;
+          var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
+          var ppHi=wtTickToPrice(ptL),ppLo=wtTickToPrice(ptU);
+          // Get current owner
+          var owH=await wtRpc(WT_NFT,"0x6352211e"+wtPad(tokenIds[pi2].id));
+          var owner=owH&&owH.length>=66?"0x"+owH.slice(26,66):"unknown";
+          var isMe=owner.toLowerCase()===myD||owner.toLowerCase()===myL;
+          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq)});
+        }catch(e5){continue;}
+      }
+      console.log("LMAP: "+lpOwners.length+" active BURN/USDC LPs with owners");
+    }catch(e6){console.log("LMAP owner scan err:",e6);}
+
 
     // 5. Reconstruct liquidity per range
     var ranges=[];
@@ -1055,13 +1111,12 @@ function renderLmap(buckets){
     var barClr=bk.active?"var(--o)":bk.burn>maxB*.5?"var(--r)":"var(--g)";
     var wallTxt=bk.burn>maxB*.7?"🧱 WALL":bk.burn>maxB*.4?"▓▓▓":"";
     var bar='<div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div>';
-    // LP owners
     var ownerH="";
     if(bk.owners&&bk.owners.length>0){
       var shown=Math.min(3,bk.owners.length);
-      for(var oi=0;oi<shown;oi++){var o=bk.owners[oi];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
+      for(var oi2=0;oi2<shown;oi2++){var o=bk.owners[oi2];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
         ownerH+='<a href="https://arbiscan.io/address/'+o.owner+'" target="_blank" style="font-size:8px;color:'+(o.isMe?"var(--cy)":"var(--dm)")+'">'+(o.isMe?"⭐":"")+oS+'</a> ';}
-      if(bk.owners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+( bk.owners.length-3)+'</span>';}
+      if(bk.owners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+(bk.owners.length-3)+'</span>';}
     var rowBg=bk.active?"background:rgba(251,146,60,.06);":"";
     rows+='<tr style="'+rowBg+'"><td class="bld">'+(bk.active?"► ":"")+rng+'</td><td style="color:var(--o)">'+F(bk.burn,0)+'</td><td style="color:var(--g)">$'+F(bk.usdc,0)+'</td><td>'+bar+(wallTxt?' <span style="font-size:8px;color:var(--r)">'+wallTxt+'</span>':'')+'</td><td>'+ownerH+'</td></tr>';}
   $("lmapB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No data</td></tr>';
