@@ -278,8 +278,8 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 <div class="c">
   <div class="col" onclick="tog(this,'sec-lmap')">Pool Liquidity Map</div>
   <div id="sec-lmap" class="col-b">
-    <div id="lmapGrid" class="mg" style="margin-bottom:10px"></div>
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Price Range</th><th>BURN Liq.</th><th>USDC Equiv.</th><th style="min-width:100px">Wall</th></tr></thead><tbody id="lmapB"><tr><td colspan="4" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
+    <div id="lmapSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Price Range</th><th>BURN Liq.</th><th>USDC Equiv.</th><th style="min-width:80px">Wall</th><th>LPs</th></tr></thead><tbody id="lmapB"><tr><td colspan="5" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
     <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
   </div>
 </div>
@@ -906,246 +906,158 @@ async function fetchTradesOlder(){
   }catch(e){$("tLoadStat").textContent="Error loading";}
   $("tMore").disabled=false;}
 
-// ═══ POOL LIQUIDITY MAP (tick scanner) ═══
-var TICK_SEL="0xf30dba93",LIQ_SEL="0x1a686502",TSPACING_SEL="0xd0c93a7c";
+// ═══ POOL LIQUIDITY MAP (bitmap + subgraph) ═══
 var lmapCache=null,lmapTs=0;
-var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.40,.50,.75,1,1.5,2,3,5,10];
-
-function encTick(t){if(t>=0)return BigInt(t).toString(16).padStart(64,"0");return(2n**256n+BigInt(t)).toString(16);}
+var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
+var GOLDSKY_URL="https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum/1.0.0/gn";
 
 async function batchRpc(calls){
-  for(var ri=0;ri<RPC_LIST.length;ri++){
-    var idx=(rpcIdx+ri)%RPC_LIST.length;
-    try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},15000);
-      var r=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+  // arb1 has CORS bug with batch requests (duplicate * header) — use dedicated batch endpoints
+  var BE=["https://arbitrum.llamarpc.com","https://arbitrum-one-rpc.publicnode.com"];
+  for(var ri=0;ri<BE.length;ri++){
+    try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},20000);
+      var r=await fetch(BE[ri],{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify(calls),signal:ac.signal});
-      clearTimeout(tm);var j=await r.json();
-      if(Array.isArray(j)&&j.length>0)return j;
-    }catch(e){clearTimeout(tm);console.log("Batch RPC["+idx+"] err:",e.message);}
+      clearTimeout(tm);
+      if(r.status===429){console.log("Batch["+ri+"] 429, waiting 5s");await new Promise(function(w){setTimeout(w,5000);});continue;}
+      var j=await r.json();
+      if(Array.isArray(j)&&j.length>0){console.log("Batch OK via "+BE[ri].split("/")[2]);return j;}
+    }catch(e){clearTimeout(tm);console.log("Batch["+ri+"] err:",e.message);}
   }
   return null;}
 
+function encI256(v){if(v>=0)return BigInt(v).toString(16).padStart(64,"0");return(2n**256n+BigInt(v)).toString(16);}
 function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
 
 async function scanLiqMap(){
   if(lmapCache&&lmapTs>Date.now()-120000){renderLmap(lmapCache);return;}
-  $("lmapB").innerHTML='<tr><td colspan="4" style="text-align:center"><span class="skel" style="width:200px;height:14px"></span></td></tr>';
+  $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
   $("lmapStatus").textContent="Scanning ticks...";
   try{
-    // Get currentTick and tickSpacing
-    var s0=await rpc(POOL,"0x3850c7bd");
-    if(!s0||s0.length<130){$("lmapStatus").textContent="slot0 failed";return;}
-    var s0d=s0.slice(2);
-    var rawTick=BigInt("0x"+s0d.slice(64,128));
-    var currentTick=Number(rawTick>=2n**255n?rawTick-2n**256n:rawTick);
-    // Get current liquidity
-    var liqH=await rpc(POOL,LIQ_SEL);
-    var currentLiq=BigInt("0x"+liqH.slice(2));
-    // Get tickSpacing
-    var tsH=await rpc(POOL,TSPACING_SEL);
-    var rawTs=BigInt("0x"+tsH.slice(2));
-    var spacing=Number(rawTs>=2n**255n?rawTs-2n**256n:rawTs);
-    if(spacing<=0)spacing=60;
-    console.log("LMAP: currentTick="+currentTick+" liquidity="+currentLiq+" spacing="+spacing);
+    // 1. slot0 + tickSpacing + liquidity (3 calls)
+    var s0=await wtRpc(POOL,"0x3850c7bd");
+    if(!s0||s0.length<130)throw"slot0 fail";
+    var curTickB=BigInt("0x"+s0.slice(66,130));
+    if(curTickB>=2n**255n)curTickB-=2n**256n;
+    var curTick=Number(curTickB);
+    var tsH=await wtRpc(POOL,"0xd0c93a7c");
+    var tSpacing=60;
+    if(tsH&&tsH.length>2){var tsB=BigInt("0x"+tsH.slice(2));if(tsB>=2n**255n)tsB-=2n**256n;tSpacing=Number(tsB);}
+    if(tSpacing<=0)tSpacing=60;
+    var liqH=await wtRpc(POOL,"0x1a686502");
+    var curLiq=0;if(liqH&&liqH.length>2)curLiq=Number(BigInt("0x"+liqH.slice(2)));
+    console.log("LMAP: tick="+curTick+" spacing="+tSpacing+" liq="+curLiq);
 
-    // Scan range: currentTick ± 8000
-    var scanRange=8000;
-    var startTick=Math.floor((currentTick-scanRange)/spacing)*spacing;
-    var endTick=Math.ceil((currentTick+scanRange)/spacing)*spacing;
+    // 2. Batch bitmap scan (±8 words)
+    var curComp=Math.floor(curTick/tSpacing);
+    var curWord=curComp>=0?curComp>>8:Math.floor(curComp/256);
+    var bmCalls=[];
+    for(var w=curWord-8;w<=curWord+8;w++){
+      bmCalls.push({jsonrpc:"2.0",method:"eth_call",params:[{to:POOL,data:"0x5339c296"+encI256(w)},"latest"],id:bmCalls.length,_w:w});}
+    $("lmapStatus").textContent="Scanning "+bmCalls.length+" bitmap words...";
+    var bmResults=await batchRpc(bmCalls.map(function(c){return{jsonrpc:c.jsonrpc,method:c.method,params:c.params,id:c.id};}));
+    var initTicks=[];
+    if(bmResults){for(var bi2=0;bi2<bmResults.length;bi2++){
+      var br=bmResults[bi2];if(!br||!br.result||br.result==="0x"||br.result.length<66)continue;
+      var bm=BigInt("0x"+br.result.slice(2));if(bm===0n)continue;
+      var wordIdx=bmCalls[bi2]._w;
+      for(var bit=0;bit<256;bit++){if((bm>>BigInt(bit))&1n){initTicks.push((wordIdx*256+bit)*tSpacing);}}}}
+    initTicks.sort(function(a,b){return a-b;});
+    console.log("LMAP: "+initTicks.length+" initialized ticks");
+    await new Promise(function(r){setTimeout(r,1000);}); // cooldown after bitmap batch
 
-    // Build batch calls
-    var allCalls=[];
-    for(var t=startTick;t<=endTick;t+=spacing){
-      allCalls.push({jsonrpc:"2.0",method:"eth_call",params:[{to:POOL,data:TICK_SEL+encTick(t)},"latest"],id:allCalls.length,_tick:t});
-    }
-    console.log("LMAP: scanning "+allCalls.length+" ticks from "+startTick+" to "+endTick);
-    $("lmapStatus").textContent="Scanning "+allCalls.length+" ticks...";
-
-    // Send in batches of 60
+    // 3. Batch tick data reads (30 per batch, 500ms delay)
+    $("lmapStatus").textContent="Reading "+initTicks.length+" ticks...";
     var tickData=[];
-    for(var b=0;b<allCalls.length;b+=60){
-      var batch=allCalls.slice(b,b+60);
-      var ticks_meta=batch.map(function(c){return c._tick;});
-      var cleanBatch=batch.map(function(c){return{jsonrpc:c.jsonrpc,method:c.method,params:c.params,id:c.id};});
-      var results=await batchRpc(cleanBatch);
-      if(!results){console.log("LMAP: batch "+Math.floor(b/60)+" failed");continue;}
-      for(var ri2=0;ri2<results.length;ri2++){
-        var res=results[ri2];
-        if(!res||!res.result||res.result==="0x"||res.result.length<130)continue;
-        var rd=res.result.slice(2);
-        var liqGross=BigInt("0x"+rd.slice(0,64));
-        if(liqGross===0n)continue;
-        var liqNetRaw=BigInt("0x"+rd.slice(64,128));
-        var liqNet=liqNetRaw>=2n**255n?liqNetRaw-2n**256n:liqNetRaw;
-        tickData.push({tick:ticks_meta[ri2],liqNet:liqNet,liqGross:liqGross});
-      }
-      $("lmapStatus").textContent="Scanned "+Math.min(b+60,allCalls.length)+"/"+allCalls.length+" ticks ("+tickData.length+" active)";
-    }
-    tickData.sort(function(a,b2){return a.tick-b2.tick;});
-    console.log("LMAP: found "+tickData.length+" initialized ticks");
+    var tickCalls=initTicks.slice(0,120).map(function(t,i){
+      return{jsonrpc:"2.0",method:"eth_call",params:[{to:POOL,data:"0xf30dba93"+encI256(t)},"latest"],id:i,_tick:t};});
+    for(var b=0;b<tickCalls.length;b+=10){
+      if(b>0)await new Promise(function(r){setTimeout(r,2500);});
+      var batch=tickCalls.slice(b,b+10);
+      var tMeta=batch.map(function(c){return c._tick;});
+      var tRes=await batchRpc(batch.map(function(c){return{jsonrpc:c.jsonrpc,method:c.method,params:c.params,id:c.id};}));
+      if(!tRes)continue;
+      for(var ri=0;ri<tRes.length;ri++){
+        if(!tRes[ri]||!tRes[ri].result||tRes[ri].result.length<130)continue;
+        var lnB=BigInt("0x"+tRes[ri].result.slice(66,130));
+        if(lnB>=2n**255n)lnB-=2n**256n;
+        tickData.push({tick:tMeta[ri],liqNet:Number(lnB)});}
+      $("lmapStatus").textContent="Read "+Math.min(b+10,tickCalls.length)+"/"+tickCalls.length+" ticks ("+tickData.length+" active)";}
+    console.log("LMAP: "+tickData.length+" tick data decoded");
 
-    // Reconstruct liquidity per bucket
-    // Walk from lowest tick to highest, tracking cumulative liquidity
+    // 4. Fetch LP owners from Goldsky subgraph
+    var lpOwners=[];
+    try{
+      var gq='{"query":"{ positions(where:{pool:\\"'+POOL+'\\",liquidity_gt:\\"0\\"},first:100,orderBy:liquidity,orderDirection:desc){owner tickLower{tickIdx} tickUpper{tickIdx} liquidity}}"}';
+      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+      var gr=await fetch(GOLDSKY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:gq,signal:ac.signal});
+      clearTimeout(tm);var gj=await gr.json();
+      if(gj.data&&gj.data.positions){
+        var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
+        for(var gi=0;gi<gj.data.positions.length;gi++){
+          var gp=gj.data.positions[gi];
+          var gpLo=wtTickToPrice(parseInt(gp.tickUpper.tickIdx)),gpHi=wtTickToPrice(parseInt(gp.tickLower.tickIdx));
+          lpOwners.push({lo:gpLo,hi:gpHi,owner:gp.owner,isMe:gp.owner.toLowerCase()===myD||gp.owner.toLowerCase()===myL,liq:parseFloat(gp.liquidity)});}
+        console.log("LMAP: "+lpOwners.length+" LP owners from subgraph");}
+    }catch(e){console.log("LMAP subgraph err:",e.message);}
+
+    // 5. Reconstruct liquidity per range
+    var ranges=[];
+    var below=tickData.filter(function(t){return t.tick<=curTick;}).sort(function(a,b){return b.tick-a.tick;});
+    var L=curLiq,prev=curTick;
+    for(var b2=0;b2<below.length;b2++){
+      if(prev!==below[b2].tick)ranges.push({tL:below[b2].tick,tH:prev,liq:L});
+      L-=below[b2].liqNet;prev=below[b2].tick;}
+    var above=tickData.filter(function(t){return t.tick>curTick;}).sort(function(a,b){return a.tick-b.tick;});
+    L=curLiq;prev=curTick;
+    for(var a2=0;a2<above.length;a2++){
+      if(prev!==above[a2].tick)ranges.push({tL:prev,tH:above[a2].tick,liq:L});
+      L+=above[a2].liqNet;prev=above[a2].tick;}
+
+    // 6. Aggregate into price buckets
     var buckets=[];
     for(var bi=0;bi<LMAP_BUCKETS.length-1;bi++){
       var bLo=LMAP_BUCKETS[bi],bHi=LMAP_BUCKETS[bi+1];
-      var tHi=priceToTick(bLo),tLo=priceToTick(bHi); // inverted because higher price = lower tick
-      // Find liquidity in this tick range by summing liquidityNet crossings
-      var liq2=currentLiq;
-      // Adjust from currentTick to tLo
-      if(tLo<currentTick){for(var k=0;k<tickData.length;k++){if(tickData[k].tick>tLo&&tickData[k].tick<=currentTick)liq2-=tickData[k].liqNet;}}
-      else{for(var k2=0;k2<tickData.length;k2++){if(tickData[k2].tick>currentTick&&tickData[k2].tick<=tLo)liq2+=tickData[k2].liqNet;}}
-      var effLiq=Number(liq2<0n?0n:liq2);
-      // BURN available in this bucket
-      var sL=Math.pow(1.0001,tLo/2),sH2=Math.pow(1.0001,tHi/2);
-      var burnLiq=effLiq*(sH2-sL)/1e18;
-      var usdcEq=burnLiq*((bLo+bHi)/2);
-      var isCurrent=P>=bLo&&P<bHi;
-      buckets.push({lo:bLo,hi:bHi,burn:burnLiq,usdc:usdcEq,liq:effLiq,current:isCurrent});
-    }
+      var bkTickHi=priceToTick(bLo),bkTickLo=priceToTick(bHi);
+      var burnD=0;
+      for(var ri2=0;ri2<ranges.length;ri2++){
+        var rr=ranges[ri2];if(rr.liq<=0)continue;
+        var oL=Math.max(rr.tL,bkTickLo),oH=Math.min(rr.tH,bkTickHi);
+        if(oL>=oH)continue;
+        burnD+=rr.liq*(Math.pow(1.0001,oH/2)-Math.pow(1.0001,oL/2))/1e18;}
+      var owners=[];
+      for(var oi=0;oi<lpOwners.length;oi++){if(lpOwners[oi].hi>bLo&&lpOwners[oi].lo<bHi)owners.push(lpOwners[oi]);}
+      owners.sort(function(a,b2){return b2.liq-a.liq;});
+      buckets.push({lo:bLo,hi:bHi,burn:burnD,usdc:burnD*(bLo+bHi)/2,active:P>=bLo&&P<bHi,owners:owners});}
     lmapCache=buckets;lmapTs=Date.now();
     renderLmap(buckets);
-  }catch(e){console.log("LMAP err:",e);$("lmapB").innerHTML='<tr><td colspan="4" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';$("lmapStatus").textContent="";}
+  }catch(e){console.log("LMAP err:",e);
+    $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
+    $("lmapStatus").textContent="";}
 }
 
 function renderLmap(buckets){
   var maxB=0,tB=0,tU=0;
   for(var i=0;i<buckets.length;i++){if(buckets[i].burn>maxB)maxB=buckets[i].burn;tB+=buckets[i].burn;tU+=buckets[i].usdc;}
-  $("lmapGrid").innerHTML=MB("Active Ticks",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)");
+  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)");
   var rows="";
   for(var j=0;j<buckets.length;j++){var bk=buckets[j];
     var rng="$"+bk.lo.toFixed(bk.lo<1?2:1)+" → $"+bk.hi.toFixed(bk.hi<1?2:1);
     var pct=maxB>0?Math.round(bk.burn/maxB*100):0;
-    var barClr=bk.current?"var(--o)":bk.burn>maxB*.5?"var(--r)":"var(--g)";
+    var barClr=bk.active?"var(--o)":bk.burn>maxB*.5?"var(--r)":"var(--g)";
     var wallTxt=bk.burn>maxB*.7?"🧱 WALL":bk.burn>maxB*.4?"▓▓▓":"";
     var bar='<div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div>';
-    var rowBg=bk.current?"background:rgba(251,146,60,.06);":"";
-    rows+='<tr style="'+rowBg+'"><td class="bld">'+(bk.current?"► ":"")+rng+'</td><td style="color:var(--o)">'+F(bk.burn,0)+'</td><td style="color:var(--g)">$'+F(bk.usdc,0)+'</td><td>'+bar+(wallTxt?' <span style="font-size:8px;color:var(--r)">'+wallTxt+'</span>':'')+'</td></tr>';}
-  $("lmapB").innerHTML=rows||'<tr><td colspan="4" style="color:var(--dm)">No data</td></tr>';
+    // LP owners
+    var ownerH="";
+    if(bk.owners&&bk.owners.length>0){
+      var shown=Math.min(3,bk.owners.length);
+      for(var oi=0;oi<shown;oi++){var o=bk.owners[oi];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
+        ownerH+='<a href="https://arbiscan.io/address/'+o.owner+'" target="_blank" style="font-size:8px;color:'+(o.isMe?"var(--cy)":"var(--dm)")+'">'+(o.isMe?"⭐":"")+oS+'</a> ';}
+      if(bk.owners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+( bk.owners.length-3)+'</span>';}
+    var rowBg=bk.active?"background:rgba(251,146,60,.06);":"";
+    rows+='<tr style="'+rowBg+'"><td class="bld">'+(bk.active?"► ":"")+rng+'</td><td style="color:var(--o)">'+F(bk.burn,0)+'</td><td style="color:var(--g)">$'+F(bk.usdc,0)+'</td><td>'+bar+(wallTxt?' <span style="font-size:8px;color:var(--r)">'+wallTxt+'</span>':'')+'</td><td>'+ownerH+'</td></tr>';}
+  $("lmapB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No data</td></tr>';
   $("lmapStatus").textContent=buckets.length+" price buckets · "+new Date().toLocaleTimeString();
-}
-
-// ═══ POOL LIQUIDITY MAP (on-chain tick scanner) ═══
-var TICK_SEL="0xf30dba93",BITMAP_SEL="0x5339c296",SPACING_SEL="0xd0c93a7c",LIQ_SEL="0x1a686502";
-function encodeI(v){var bi=BigInt(v);if(bi<0n)bi=(1n<<256n)+bi;return bi.toString(16).padStart(64,"0");}
-function sqT(t){return Math.exp(t*4.99975e-5);} // sqrt(1.0001^t) = 1.0001^(t/2)
-function tickToP(t){return 1e12/Math.pow(1.0001,t);}
-function pToTick(p){return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
-
-var LMAP_BKT=[
-  {lo:0.05,hi:0.10},{lo:0.10,hi:0.12},{lo:0.12,hi:0.14},{lo:0.14,hi:0.16},
-  {lo:0.16,hi:0.18},{lo:0.18,hi:0.20},{lo:0.20,hi:0.25},{lo:0.25,hi:0.30},
-  {lo:0.30,hi:0.50},{lo:0.50,hi:1.00},{lo:1.00,hi:2.00},{lo:2.00,hi:5.00}
-];
-
-async function scanLiquidity(){
-  $("lmapB").innerHTML='<tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
-  $("lmapChart").innerHTML='';
-  $("lmapStatus").textContent="Scanning ticks...";
-  try{
-    // 1. Get current tick + spacing + liquidity
-    var s0=await rpc(POOL,"0x3850c7bd");
-    if(!s0||s0.length<130){lmapErr();return;}
-    var rawTick=BigInt("0x"+s0.slice(66,130));
-    if(rawTick>=(1n<<255n))rawTick-=(1n<<256n);
-    var curTick=Number(rawTick);
-    var tsH=await rpc(POOL,SPACING_SEL);var tSpac=parseInt(tsH,16)||60;
-    var liqH=await rpc(POOL,LIQ_SEL);var curLiq=Number(BigInt("0x"+(liqH||"0x0").slice(2)));
-    console.log("LMap: tick="+curTick+" spacing="+tSpac+" liq="+curLiq);
-
-    // 2. Scan bitmap words for initialized ticks
-    var comp=Math.floor(curTick/tSpac);
-    var minW=Math.floor((comp-3000)/256),maxW=Math.floor((comp+3000)/256);
-    var initT=[];
-    $("lmapStatus").textContent="Scanning bitmap words "+minW+".."+maxW;
-    for(var w=minW;w<=maxW;w++){
-      var bmH=await rpc(POOL,BITMAP_SEL+encodeI(w));
-      var bm=BigInt("0x"+(bmH||"0x0").slice(2));
-      if(bm===0n)continue;
-      for(var bit=0;bit<256;bit++){if((bm>>BigInt(bit))&1n)initT.push((w*256+bit)*tSpac);}
-    }
-    initT.sort(function(a,b){return a-b;});
-    console.log("LMap: "+initT.length+" initialized ticks");
-    if(initT.length===0){lmapErr();return;}
-
-    // 3. Query liquidityNet for each tick
-    var tickNet={};
-    $("lmapStatus").textContent="Reading "+initT.length+" ticks...";
-    for(var ti=0;ti<initT.length&&ti<60;ti++){
-      var tH2=await wtRpc(POOL,TICK_SEL+encodeI(initT[ti]));
-      if(!tH2||tH2.length<130)continue;
-      var d2=tH2.slice(2);
-      var netBig=BigInt("0x"+d2.slice(64,128));
-      if(netBig>=(1n<<127n))netBig-=(1n<<128n);
-      tickNet[initT[ti]]=Number(netBig);
-    }
-    var sorted=Object.keys(tickNet).map(Number).sort(function(a,b){return a-b;});
-    console.log("LMap: "+sorted.length+" ticks with net data");
-
-    // 4. Build liquidity profile: walk from below to above current tick
-    // Start at current tick with known liquidity, walk down to find base
-    var liq=curLiq;
-    var below=sorted.filter(function(t){return t<=curTick;}).sort(function(a,b){return b-a;});
-    for(var bi=0;bi<below.length;bi++)liq-=tickNet[below[bi]];
-    // Now liq = liquidity at the bottom of our range. Walk up.
-    var segs=[];
-    var runLiq=liq;
-    for(var ui=0;ui<sorted.length;ui++){
-      runLiq+=tickNet[sorted[ui]];
-      var next=ui<sorted.length-1?sorted[ui+1]:sorted[ui]+tSpac*100;
-      if(runLiq>0)segs.push({from:sorted[ui],to:next,liq:runLiq});
-    }
-
-    // 5. For each price bucket, compute BURN liquidity
-    var results=[];
-    for(var bi2=0;bi2<LMAP_BKT.length;bi2++){
-      var bkt=LMAP_BKT[bi2];
-      var tHi=pToTick(bkt.lo),tLo=pToTick(bkt.hi); // higher price = lower tick
-      // Find average liquidity overlapping this tick range
-      var totLiq=0,totW=0;
-      for(var si=0;si<segs.length;si++){
-        var o0=Math.max(segs[si].from,tLo),o1=Math.min(segs[si].to,tHi);
-        if(o1>o0){totLiq+=segs[si].liq*(o1-o0);totW+=(o1-o0);}
-      }
-      var avgL=totW>0?totLiq/totW:0;
-      // BURN in this range = L * (sqT(tHi) - sqT(tLo)) / 1e18
-      var burn=avgL>0?avgL*(sqT(tHi)-sqT(tLo))/1e18:0;
-      var usdc=burn*(bkt.lo+bkt.hi)/2;
-      var active=P>=bkt.lo&&P<bkt.hi;
-      results.push({lo:bkt.lo,hi:bkt.hi,burn:Math.abs(burn),usdc:Math.abs(usdc),liq:avgL,active:active});
-    }
-    renderLmap(results);
-    $("lmapStatus").textContent=sorted.length+" ticks scanned · "+new Date().toLocaleTimeString();
-  }catch(e){console.log("LMap err:",e);lmapErr();}
-}
-
-function lmapErr(){
-  $("lmapB").innerHTML='<tr><td colspan="4" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiquidity()">retry</button></td></tr>';
-  $("lmapChart").innerHTML='';$("lmapStatus").textContent="";}
-
-function renderLmap(res){
-  // Bar chart
-  var maxB=0;for(var i=0;i<res.length;i++)if(res[i].burn>maxB)maxB=res[i].burn;
-  var bars="";
-  for(var i=0;i<res.length;i++){
-    var r=res[i],h=maxB>0?Math.max(2,Math.round(r.burn/maxB*70)):2;
-    var clr=r.active?"var(--o)":P>0&&r.lo>P?"var(--cy)":"var(--g)";
-    var label="$"+r.lo.toFixed(2);
-    bars+='<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:80px">';
-    bars+='<div style="width:100%;height:'+h+'px;background:'+clr+';border-radius:3px 3px 0 0;min-width:8px;opacity:'+(r.active?1:.6)+';transition:height .3s"></div>';
-    bars+='<div style="font-size:7px;color:var(--dm);margin-top:2px;white-space:nowrap;transform:rotate(-45deg);transform-origin:top left">'+label+'</div></div>';
-  }
-  $("lmapChart").innerHTML=bars;
-  // Table
-  var rows="";
-  for(var j=0;j<res.length;j++){
-    var r=res[j],rng="$"+r.lo.toFixed(2)+" → $"+r.hi.toFixed(2);
-    var wallLvl=maxB>0?r.burn/maxB:0;
-    var wall=wallLvl>0.6?'<span style="color:var(--r)">███ HIGH</span>':wallLvl>0.2?'<span style="color:var(--o)">██ MED</span>':r.burn>0?'<span style="color:var(--dm)">█ LOW</span>':'<span style="color:var(--dm)">—</span>';
-    var bg=r.active?"background:rgba(251,146,60,.06);":"";
-    rows+='<tr style="'+bg+'"><td class="bld">'+(r.active?"▸ ":"")+rng+'</td><td style="color:var(--o)">'+F(r.burn,0)+'</td><td style="color:var(--g)">$'+F(r.usdc,0)+'</td><td>'+wall+'</td></tr>';
-  }
-  $("lmapB").innerHTML=rows||'<tr><td colspan="4" style="color:var(--dm)">No liquidity found</td></tr>';
 }
 
 // ═══ WALLET TRACKER (isolated module) ═══
