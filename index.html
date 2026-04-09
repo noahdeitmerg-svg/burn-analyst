@@ -307,7 +307,7 @@ var STAKE_VAULT="0x9ae5453F156a1f7AC297781C15C77b622E42C12c";
 var CONTRIB_VAULT="0x5b08D24EfcB4B485fa34bBdCed6d63205100afd6";
 var CLIENT_VAULT="0x2e9237771d0AE73B7D9a2C791209EfD5a1Ea9513";
 var DAO_VAULT="0x72aDe1298731f057796ECAb891F623Ae4C18E7c1";
-var RPC_LIST=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://arbitrum.llamarpc.com"];
+var RPC_LIST=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://arbitrum.drpc.org"];
 var rpcIdx=0,rpcFails=[0,0,0];
 
 async function rpcCall(to,data){
@@ -909,11 +909,15 @@ async function fetchTradesOlder(){
 // ═══ POOL LIQUIDITY MAP (bitmap + subgraph) ═══
 var lmapCache=null,lmapTs=0;
 var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
-var GOLDSKY_URL="https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum/1.0.0/gn";
+var SUBGRAPH_URLS=[
+  "https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum-one/1.0.0/gn",
+  "https://api.goldsky.com/api/public/project_clhk16b61ay9t49vm6ntn4mkz/subgraphs/uniswap-v3-arbitrum/1.0.0/gn",
+  "https://api.thegraph.com/subgraphs/name/revert-finance/uniswap-v3-arbitrum"
+];
 
 async function batchRpc(calls){
   // arb1 has CORS bug with batch requests (duplicate * header) — use dedicated batch endpoints
-  var BE=["https://arbitrum.llamarpc.com","https://arbitrum-one-rpc.publicnode.com"];
+  var BE=RPC_LIST;
   for(var ri=0;ri<BE.length;ri++){
     try{var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},20000);
       var r=await fetch(BE[ri],{method:"POST",headers:{"Content-Type":"application/json"},
@@ -985,21 +989,25 @@ async function scanLiqMap(){
       $("lmapStatus").textContent="Read "+Math.min(b+10,tickCalls.length)+"/"+tickCalls.length+" ticks ("+tickData.length+" active)";}
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
-    // 4. Fetch LP owners from Goldsky subgraph
+    // 4. Fetch LP owners from subgraph (try multiple)
     var lpOwners=[];
-    try{
-      var gq='{"query":"{ positions(where:{pool:\\"'+POOL+'\\",liquidity_gt:\\"0\\"},first:100,orderBy:liquidity,orderDirection:desc){owner tickLower{tickIdx} tickUpper{tickIdx} liquidity}}"}';
-      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-      var gr=await fetch(GOLDSKY_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:gq,signal:ac.signal});
-      clearTimeout(tm);var gj=await gr.json();
-      if(gj.data&&gj.data.positions){
-        var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
-        for(var gi=0;gi<gj.data.positions.length;gi++){
-          var gp=gj.data.positions[gi];
-          var gpLo=wtTickToPrice(parseInt(gp.tickUpper.tickIdx)),gpHi=wtTickToPrice(parseInt(gp.tickLower.tickIdx));
-          lpOwners.push({lo:gpLo,hi:gpHi,owner:gp.owner,isMe:gp.owner.toLowerCase()===myD||gp.owner.toLowerCase()===myL,liq:parseFloat(gp.liquidity)});}
-        console.log("LMAP: "+lpOwners.length+" LP owners from subgraph");}
-    }catch(e){console.log("LMAP subgraph err:",e.message);}
+    var gq='{"query":"{ positions(where:{pool:\\"'+POOL+'\\",liquidity_gt:\\"0\\"},first:100,orderBy:liquidity,orderDirection:desc){owner tickLower{tickIdx} tickUpper{tickIdx} liquidity}}"}';
+    for(var si=0;si<SUBGRAPH_URLS.length&&lpOwners.length===0;si++){
+      try{
+        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+        var gr=await fetch(SUBGRAPH_URLS[si],{method:"POST",headers:{"Content-Type":"application/json"},body:gq,signal:ac.signal});
+        clearTimeout(tm);
+        if(!gr.ok){console.log("Subgraph["+si+"] HTTP "+gr.status);continue;}
+        var gj=await gr.json();
+        if(gj.data&&gj.data.positions){
+          var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
+          for(var gi=0;gi<gj.data.positions.length;gi++){
+            var gp=gj.data.positions[gi];
+            var gpLo=wtTickToPrice(parseInt(gp.tickUpper.tickIdx)),gpHi=wtTickToPrice(parseInt(gp.tickLower.tickIdx));
+            lpOwners.push({lo:gpLo,hi:gpHi,owner:gp.owner,isMe:gp.owner.toLowerCase()===myD||gp.owner.toLowerCase()===myL,liq:parseFloat(gp.liquidity)});}
+          console.log("LMAP: "+lpOwners.length+" LP owners from "+SUBGRAPH_URLS[si].split("/").pop());}
+      }catch(e){console.log("Subgraph["+si+"] err:",e.message);}
+    }
 
     // 5. Reconstruct liquidity per range
     var ranges=[];
