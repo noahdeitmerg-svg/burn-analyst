@@ -1338,7 +1338,7 @@ function drawSimChart(days,mom,inf,liq){
   function toY(v){return 10+ph-(v-mn)/(mx-mn)*ph;}
   function line(pts,clr){
     var d="";for(var i=0;i<pts.length;i++){d+=(i===0?"M":"L")+toX(i).toFixed(1)+","+toY(pts[i]).toFixed(1);}
-    return'<polyline points="" d="'+d+'" fill="none" stroke="'+clr+'" stroke-width="1.5" opacity=".8"/>';}
+    return'<path d="'+d+'" fill="none" stroke="'+clr+'" stroke-width="1.5" opacity=".8"/>';}
 
   // Price line at current
   var curY=toY(P);
