@@ -949,7 +949,7 @@ function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math
 
 async function scanLiqMap(){
   if(lmapCache&&lmapTs>Date.now()-120000){renderLmap(lmapCache);return;}
-  $("lmapB").innerHTML='<tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
+  $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
   $("lmapStatus").textContent="Scanning ticks...";
   try{
     // 1. slot0 + tickSpacing + liquidity (3 calls)
@@ -1018,13 +1018,17 @@ async function scanLiqMap(){
       for(var sw=0;sw<allTrades.length;sw++){if(allTrades[sw].wallet)walSet[allTrades[sw].wallet.toLowerCase()]=1;}
       // Scan BURN token Transfer events to find all holders (~30 days)
       $("lmapStatus").textContent="Scanning BURN transfers...";
+      console.log("LMAP owners: starting Transfer event scan on BURN token "+BURN_TK);
       var bnRes=await batchRpc([{jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:0}]);
       var headBlk=0;if(bnRes&&bnRes[0]&&bnRes[0].result)headBlk=parseInt(bnRes[0].result,16);
+      console.log("LMAP owners: head block = "+headBlk);
       if(headBlk>0){
         var xfrFrom=headBlk-12000000; // ~35 days on Arbitrum
+        var xChunkN=0;
         for(var xc=xfrFrom;xc<headBlk;xc+=5000000){
           try{
             var xTo=Math.min(xc+5000000,headBlk);
+            console.log("LMAP owners: chunk "+xChunkN+" requesting blocks 0x"+xc.toString(16)+"..0x"+xTo.toString(16));
             var xR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:BURN_TK,topics:[XFER_T],fromBlock:"0x"+xc.toString(16),toBlock:"0x"+xTo.toString(16)}],id:0}]);
             if(xR&&xR[0]&&Array.isArray(xR[0].result)){
               for(var xi=0;xi<xR[0].result.length;xi++){
@@ -1034,49 +1038,80 @@ async function scanLiqMap(){
                 var xFrom="0x"+xl.topics[1].slice(26);
                 if(xFrom!=="0x0000000000000000000000000000000000000000")walSet[xFrom.toLowerCase()]=1;
               }
-              console.log("LMAP: Transfer scan chunk "+Math.round((xc-xfrFrom)/5000000)+": "+xR[0].result.length+" events");
+              console.log("LMAP owners: chunk "+xChunkN+": "+xR[0].result.length+" events, "+Object.keys(walSet).length+" unique addrs so far");
+            }else{
+              console.log("LMAP owners: chunk "+xChunkN+": no results or unexpected format",xR&&xR[0]?xR[0]:"null");
             }
-          }catch(e3){}
+          }catch(e3){console.log("LMAP owners: chunk "+xChunkN+" error:",e3.message||e3);}
+          xChunkN++;
           await new Promise(function(r){setTimeout(r,500);});
         }
-      }
+      }else{console.log("LMAP owners: could not get head block, skipping Transfer scan");}
       // Remove known non-LP addresses (contracts, dead, pool, NFM)
+      var preFilterCount=Object.keys(walSet).length;
       delete walSet[POOL.toLowerCase()];delete walSet[DEAD_ADDR.toLowerCase()];
       delete walSet[STAKE_VAULT.toLowerCase()];delete walSet[WT_NFT.toLowerCase()];
       delete walSet[BURN_TK.toLowerCase()];delete walSet[STBURN_TK.toLowerCase()];
-      var scanAddrs=Object.keys(walSet);
-      console.log("LMAP: found "+scanAddrs.length+" unique holder addresses");
+      delete walSet["0x0000000000000000000000000000000000000000"];
+      console.log("LMAP owners: filtered "+preFilterCount+" → "+Object.keys(walSet).length+" wallets (removed "+(preFilterCount-Object.keys(walSet).length)+" contracts)");
+      console.log("LMAP: DAO in list="+walSet.hasOwnProperty(DAO_VAULT.toLowerCase()));
+
+      // FIX: Priority ordering — known addresses first, then others
+      var priorityList=[W_DEFI,W_LEDGER,DAO_VAULT,CONTRIB_VAULT,CLIENT_VAULT].map(function(a){return a.toLowerCase();}).filter(function(a){return walSet.hasOwnProperty(a);});
+      var otherAddrs=Object.keys(walSet).filter(function(a){return priorityList.indexOf(a)===-1;});
+      if(otherAddrs.length>75){console.log("LMAP: truncating others from "+otherAddrs.length+" to 75");otherAddrs=otherAddrs.slice(0,75);}
+      var scanAddrs=priorityList.concat(otherAddrs);
+      console.log("LMAP: "+priorityList.length+" priority + "+otherAddrs.length+" other = "+scanAddrs.length+" wallets to scan");
+      console.log("LMAP: scanAddrs count="+scanAddrs.length);
       $("lmapStatus").textContent="Checking "+scanAddrs.length+" wallets for LP NFTs...";
 
       // For each wallet: check NFT balance, then scan positions
+      var walletsScanned=0,walletsWithNFTs=0;
       for(var wi=0;wi<scanAddrs.length;wi++){
+        // FIX: Rate limiting — 500ms delay every 3 wallets
+        if(wi>0&&wi%3===0)await new Promise(function(r){setTimeout(r,500);});
         try{
-          var nfH=await rpc(NFM,bof(scanAddrs[wi]));
-          var nfC=parseInt(nfH,16);if(nfC<=0||nfC>100)continue;
-          console.log("LMAP: "+scanAddrs[wi].slice(0,8)+"… has "+nfC+" NFTs");
+          walletsScanned++;
+          var wAddr=scanAddrs[wi];
+          var nfH=await rpc(NFM,bof(wAddr));
+          var nfC=parseInt(nfH,16);
+          if(isNaN(nfC)||nfC<=0){console.log("LMAP: "+wAddr.slice(0,8)+"…"+wAddr.slice(-4)+" — balanceOf returned 0 or NaN (raw:"+nfH+")");continue;}
+          if(nfC>100){console.log("LMAP: "+wAddr.slice(0,8)+"…"+wAddr.slice(-4)+" — balanceOf returned "+nfC+" (>100, skipping)");continue;}
+          walletsWithNFTs++;
+          console.log("LMAP: "+wAddr.slice(0,8)+"…"+wAddr.slice(-4)+" has "+nfC+" NFTs");
           for(var ni=0;ni<nfC&&ni<30;ni++){
             try{
-              var tiH=await wtRpc(NFM,"0x2f745c59"+scanAddrs[wi].slice(2).padStart(64,"0")+wtPad(ni));
-              if(!tiH)continue;
+              var tiH=await wtRpc(NFM,"0x2f745c59"+wAddr.slice(2).padStart(64,"0")+wtPad(ni));
+              if(!tiH){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+": tokenOfOwnerByIndex failed (null)");continue;}
               var tId2=BigInt("0x"+tiH.slice(2));
               var psH=await wtRpc(NFM,"0x99fbab88"+wtPad(tId2));
-              if(!psH||psH.length<770)continue;
+              if(!psH||psH.length<770){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): positions() too short ("+((psH&&psH.length)||0)+")");continue;}
               var pd=psH.slice(2);
               var pt0="0x"+pd.slice(152,192),pt1="0x"+pd.slice(216,256);
-              if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase())continue;
+              if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase()){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): not BURN/USDC (t0="+pt0.slice(0,10)+", t1="+pt1.slice(0,10)+")");continue;}
               var pLiq=BigInt("0x"+pd.slice(448,512));
-              if(pLiq<=0n)continue;
+              if(pLiq<=0n){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): zero liquidity");continue;}
               var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
-              var ppHi=wtTickToPrice(ptL),ppLo=wtTickToPrice(ptU);
-              var isMe=scanAddrs[wi]===myD||scanAddrs[wi]===myL;
-              lpOwners.push({lo:ppLo,hi:ppHi,owner:scanAddrs[wi],isMe:isMe,liq:Number(pLiq)});
-            }catch(e5){continue;}
+              // FIX: Full Range detection — extreme ticks cause float underflow
+              var isFullRange=Math.abs(ptU-ptL)>800000;
+              var ppHi,ppLo;
+              if(isFullRange){
+                ppLo=0.0001;ppHi=999999;
+                console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): FULL RANGE detected (tL="+ptL+", tU="+ptU+")");
+              }else{
+                ppHi=wtTickToPrice(ptL);ppLo=wtTickToPrice(ptU);
+              }
+              if(ppLo<=0||ppHi<=ppLo){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): invalid prices (lo="+ppLo+", hi="+ppHi+")");continue;}
+              var isMe=wAddr===myD||wAddr===myL;
+              console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" (id:"+tId2+"): MATCHED "+(isFullRange?"FULL RANGE":"range:$"+ppLo.toFixed(4)+"-$"+ppHi.toFixed(4))+" liq="+pLiq+(isMe?" ⭐ME":""));
+              lpOwners.push({lo:ppLo,hi:ppHi,owner:wAddr,isMe:isMe,liq:Number(pLiq)});
+            }catch(e5){console.log("LMAP: "+wAddr.slice(0,8)+"… — NFT "+ni+" error:",e5.message||e5);continue;}
           }
-        }catch(e4){continue;}
+        }catch(e4){console.log("LMAP: wallet "+scanAddrs[wi].slice(0,8)+"… scan error:",e4.message||e4);continue;}
         if(wi%5===0)$("lmapStatus").textContent="Scanned "+wi+"/"+scanAddrs.length+" wallets ("+lpOwners.length+" LPs found)";
       }
-      console.log("LMAP: "+lpOwners.length+" active BURN/USDC LPs with owners");
-    }catch(e6){console.log("LMAP owner scan err:",e6);}
+      console.log("LMAP owners: scanned="+walletsScanned+" withNFTs="+walletsWithNFTs+" LPs="+lpOwners.length);
+    }catch(e6){console.log("LMAP owner scan err:",e6.message||e6);console.log("LMAP: owner scan failed — map will render without LP owners");}
 
 
     // 5. Reconstruct liquidity per range
@@ -1107,6 +1142,8 @@ async function scanLiqMap(){
       for(var oi=0;oi<lpOwners.length;oi++){if(lpOwners[oi].hi>bLo&&lpOwners[oi].lo<bHi)owners.push(lpOwners[oi]);}
       owners.sort(function(a,b2){return b2.liq-a.liq;});
       buckets.push({lo:bLo,hi:bHi,burn:burnD,usdc:burnD*(bLo+bHi)/2,active:P>=bLo&&P<bHi,owners:owners});}
+    var bucketsWithOwners=0;for(var boi=0;boi<buckets.length;boi++){if(buckets[boi].owners&&buckets[boi].owners.length>0)bucketsWithOwners++;}
+    console.log("LMAP: "+buckets.length+" buckets, "+bucketsWithOwners+" have LP owners assigned");
     lmapCache=buckets;lmapTs=Date.now();
     renderLmap(buckets);
   }catch(e){console.log("LMAP err:",e);
