@@ -274,23 +274,12 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
-<!-- ═══ COLLAPSIBLE: Pool Liquidity ═══ -->
-<div class="c">
-  <div class="col" onclick="tog(this,'sec-pliq')">Pool Liquidity — All LPs</div>
-  <div id="sec-pliq" class="col-b">
-    <div id="pliqStatus" style="font-size:9px;color:var(--dm);margin-bottom:8px"></div>
-    <div id="pliqGrid" class="mg" style="margin-bottom:10px"></div>
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Range</th><th>BURN</th><th>USDC</th><th>Filled</th><th>Owner</th></tr></thead><tbody id="pliqB"><tr><td colspan="5" style="text-align:center"><button class="btn" onclick="fetchPoolLiq()">Load Pool LPs</button></td></tr></tbody></table></div>
-  </div>
-</div>
-
 <!-- ═══ COLLAPSIBLE: Pool Liquidity Map ═══ -->
 <div class="c">
   <div class="col" onclick="tog(this,'sec-lmap')">Pool Liquidity Map — On-Chain</div>
   <div id="sec-lmap" class="col-b">
     <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-bottom:8px"></div>
-    <div id="lmapSummary" class="mg" style="margin-bottom:10px"></div>
-    <div id="lmapChart" style="margin-bottom:10px"></div>
+    <div id="lmapGrid" class="mg" style="margin-bottom:10px"></div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Price Range</th><th>BURN Liq.</th><th>USDC Equiv.</th><th style="min-width:100px">Wall</th></tr></thead><tbody id="lmapB"><tr><td colspan="4" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
   </div>
 </div>
@@ -916,66 +905,6 @@ async function fetchTradesOlder(){
     $("tLoadStat").textContent=allTrades.length+" trades · ~"+days+"d history";
   }catch(e){$("tLoadStat").textContent="Error loading";}
   $("tMore").disabled=false;}
-
-// ═══ POOL LIQUIDITY — All LPs via Subgraph ═══
-var SUBGRAPH_URLS=[
-  "https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-v3-arbitrum",
-  "https://api.thegraph.com/subgraphs/name/messari/uniswap-v3-arbitrum"
-];
-var pliqCache=null,pliqTs=0;
-
-async function fetchPoolLiq(){
-  if(pliqCache&&pliqTs>Date.now()-120000){renderPliq(pliqCache);return;}
-  $("pliqB").innerHTML='<tr><td colspan="5" style="text-align:center"><span class="skel" style="width:200px;height:14px"></span></td></tr>';
-  $("pliqStatus").textContent="Loading...";
-  var query='{"query":"{ positions(where:{pool:\\"'+POOL+'\\",liquidity_gt:\\"0\\"},first:100,orderBy:liquidity,orderDirection:desc){owner liquidity tickLower{tickIdx} tickUpper{tickIdx}}}"}';
-  var data=null;
-  for(var i=0;i<SUBGRAPH_URLS.length&&!data;i++){
-    try{
-      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-      var r=await fetch(SUBGRAPH_URLS[i],{method:"POST",headers:{"Content-Type":"application/json"},body:query,signal:ac.signal});
-      clearTimeout(tm);
-      var j=await r.json();
-      if(j.data&&j.data.positions&&j.data.positions.length>0){data=j.data.positions;$("pliqStatus").textContent="via "+SUBGRAPH_URLS[i].split("/").pop();}
-    }catch(e){clearTimeout(tm);console.log("Subgraph["+i+"] err:",e.message);}
-  }
-  if(!data){$("pliqB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Subgraph unavailable — <button class="btn" onclick="fetchPoolLiq()">retry</button></td></tr>';$("pliqStatus").textContent="";return;}
-  // Process
-  var positions=[];
-  var myDefi=W_DEFI.toLowerCase(),myLedger=W_LEDGER.toLowerCase();
-  for(var pi=0;pi<data.length;pi++){
-    var pos=data[pi];
-    var tL=parseInt(pos.tickLower.tickIdx),tU=parseInt(pos.tickUpper.tickIdx);
-    var liq=parseFloat(pos.liquidity);if(liq<=0)continue;
-    var pHi=wtTickToPrice(tL),pLo=wtTickToPrice(tU);
-    if(pLo<=0||pHi<=pLo)continue;
-    var bDep=wtLiqToBurn(liq,tL,tU);if(bDep<=0)continue;
-    var cv=v3(bDep,pLo,pHi,P);
-    var owner=pos.owner.toLowerCase();
-    var isMe=owner===myDefi||owner===myLedger;
-    positions.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,owner:pos.owner,isMe:isMe});
-  }
-  positions.sort(function(a,b){return a.lo-b.lo;});
-  pliqCache=positions;pliqTs=Date.now();
-  renderPliq(positions);
-}
-
-function renderPliq(pos){
-  // Summary
-  var tB=0,tU=0,tLP=pos.length,myLP=0;
-  for(var i=0;i<pos.length;i++){tB+=pos[i].burn;tU+=pos[i].usdc;if(pos[i].isMe)myLP++;}
-  $("pliqGrid").innerHTML=MB("Total LPs",tLP,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)")+MB("My LPs",myLP+"/"+tLP,"var(--cy)");
-  // Table
-  var rows="";
-  for(var j=0;j<pos.length;j++){var p=pos[j];
-    var rng="$"+p.lo.toFixed(p.lo<1?3:2)+" → $"+p.hi.toFixed(2);
-    var oS=p.owner.slice(0,6)+"…"+p.owner.slice(-4);
-    var oClr=p.isMe?"var(--cy)":"var(--dm)";
-    var rowBg=p.isMe?"background:rgba(34,211,238,.04);":"";
-    rows+='<tr style="'+rowBg+'"><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(p.burn,0)+'</td><td style="color:var(--g)">$'+F(p.usdc,0)+'</td><td style="color:var(--cy)">'+p.pct.toFixed(0)+'%</td><td><a href="https://arbiscan.io/address/'+p.owner+'" target="_blank" style="font-size:9px;color:'+oClr+'">'+(p.isMe?"⭐ ":"")+oS+'</a></td></tr>';}
-  $("pliqB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No positions found</td></tr>';
-  $("pliqStatus").textContent=pos.length+" positions · "+new Date().toLocaleTimeString();
-}
 
 // ═══ POOL LIQUIDITY MAP (tick scanner) ═══
 var TICK_SEL="0xf30dba93",LIQ_SEL="0x1a686502",TSPACING_SEL="0xd0c93a7c";
