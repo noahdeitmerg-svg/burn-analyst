@@ -203,6 +203,64 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
+<!-- ═══ COLLAPSIBLE: Altcoin Portfolio ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-ptf')">Altcoin Portfolio</div>
+  <div id="sec-ptf" class="col-b">
+    <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov">
+      <table class="mkt-tbl">
+        <thead><tr><th>Asset</th><th>Amount</th><th>Entry</th><th>Price</th><th>Value</th><th>P&L</th><th>%</th><th></th></tr></thead>
+        <tbody id="ptfTableB"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px">
+      <div class="col" onclick="tog(this,'sec-ptf-add')" style="font-size:10px">+ Add Asset</div>
+      <div id="sec-ptf-add" class="col-b" style="padding:8px 0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+          <div><div style="font-size:8px;color:var(--dm)">SYMBOL</div><input class="inp" id="ptfAddSym" placeholder="BTC" style="width:60px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">COINGECKO ID</div><input class="inp" id="ptfAddGecko" placeholder="bitcoin" style="width:80px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfAddAmt" placeholder="0.15" style="width:70px;font-size:10px" type="number" step="any"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AVG ENTRY $</div><input class="inp" id="ptfAddEntry" placeholder="42000" style="width:80px;font-size:10px" type="number" step="any"></div>
+          <button class="btn" onclick="ptfAddAsset()" style="font-size:10px">Add</button>
+        </div>
+        <div id="ptfAddErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-ledger')" style="font-size:10px">Cost Basis Ledger</div>
+    <div id="sec-ptf-ledger" class="col-b">
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Date</th><th>Asset</th><th>Amount</th><th>Price</th><th>Total</th><th>Wallet</th><th></th></tr></thead>
+          <tbody id="ptfLedgerB"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div><div style="font-size:8px;color:var(--dm)">ASSET</div><select class="inp" id="ptfBuyAsset" style="width:70px;font-size:10px"></select></div>
+        <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfBuyAmt" placeholder="0.05" style="width:70px;font-size:10px" type="number" step="any"></div>
+        <div><div style="font-size:8px;color:var(--dm)">PRICE $</div><input class="inp" id="ptfBuyPrice" placeholder="40000" style="width:80px;font-size:10px" type="number" step="any"></div>
+        <div><div style="font-size:8px;color:var(--dm)">DATE</div><input class="inp" id="ptfBuyDate" style="width:90px;font-size:10px" type="date"></div>
+        <div><div style="font-size:8px;color:var(--dm)">WALLET</div><input class="inp" id="ptfBuyWallet" placeholder="Ledger" style="width:70px;font-size:10px"></div>
+        <button class="btn" onclick="ptfAddPurchase()" style="font-size:10px">Add</button>
+      </div>
+      <div id="ptfBuyErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-sim')">Bullrun Simulation</div>
+    <div id="sec-ptf-sim" class="col-b">
+      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Scenario projection — not financial advice</div>
+      <div id="ptfSimSummary" class="mg" style="margin-bottom:10px"></div>
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Asset</th><th>Amount</th><th>Current</th><th>Target</th><th>Projected</th><th>Gain</th></tr></thead>
+          <tbody id="ptfSimTableB"><tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Loading prices...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ TRADES ═══ -->
 <div class="c">
   <div class="lb">Last Trade</div>
@@ -310,63 +368,6 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
-<!-- ═══ COLLAPSIBLE: Portfolio Terminal ═══ -->
-<div class="c">
-  <div class="col" onclick="tog(this,'sec-ptf')">Portfolio Terminal</div>
-  <div id="sec-ptf" class="col-b">
-    <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
-    <div class="ov">
-      <table class="mkt-tbl">
-        <thead><tr><th>Asset</th><th>Amount</th><th>Entry</th><th>Price</th><th>Value</th><th>P&L</th><th>%</th><th></th></tr></thead>
-        <tbody id="ptfTableB"></tbody>
-      </table>
-    </div>
-    <div style="margin-top:10px">
-      <div class="col" onclick="tog(this,'sec-ptf-add')" style="font-size:10px">+ Add Asset</div>
-      <div id="sec-ptf-add" class="col-b" style="padding:8px 0">
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
-          <div><div style="font-size:8px;color:var(--dm)">SYMBOL</div><input class="inp" id="ptfAddSym" placeholder="BTC" style="width:60px;font-size:10px"></div>
-          <div><div style="font-size:8px;color:var(--dm)">COINGECKO ID</div><input class="inp" id="ptfAddGecko" placeholder="bitcoin" style="width:80px;font-size:10px"></div>
-          <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfAddAmt" placeholder="0.15" style="width:70px;font-size:10px" type="number" step="any"></div>
-          <div><div style="font-size:8px;color:var(--dm)">AVG ENTRY $</div><input class="inp" id="ptfAddEntry" placeholder="42000" style="width:80px;font-size:10px" type="number" step="any"></div>
-          <button class="btn" onclick="ptfAddAsset()" style="font-size:10px">Add</button>
-        </div>
-        <div id="ptfAddErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
-      </div>
-    </div>
-    <div class="sep" style="margin:10px 0"></div>
-    <div class="col" onclick="tog(this,'sec-ptf-ledger')" style="font-size:10px">Cost Basis Ledger</div>
-    <div id="sec-ptf-ledger" class="col-b">
-      <div class="ov">
-        <table class="mkt-tbl">
-          <thead><tr><th>Date</th><th>Asset</th><th>Amount</th><th>Price</th><th>Total</th><th>Wallet</th><th></th></tr></thead>
-          <tbody id="ptfLedgerB"></tbody>
-        </table>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
-        <div><div style="font-size:8px;color:var(--dm)">ASSET</div><select class="inp" id="ptfBuyAsset" style="width:70px;font-size:10px"></select></div>
-        <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfBuyAmt" placeholder="0.05" style="width:70px;font-size:10px" type="number" step="any"></div>
-        <div><div style="font-size:8px;color:var(--dm)">PRICE $</div><input class="inp" id="ptfBuyPrice" placeholder="40000" style="width:80px;font-size:10px" type="number" step="any"></div>
-        <div><div style="font-size:8px;color:var(--dm)">DATE</div><input class="inp" id="ptfBuyDate" style="width:90px;font-size:10px" type="date"></div>
-        <div><div style="font-size:8px;color:var(--dm)">WALLET</div><input class="inp" id="ptfBuyWallet" placeholder="Ledger" style="width:70px;font-size:10px"></div>
-        <button class="btn" onclick="ptfAddPurchase()" style="font-size:10px">Add</button>
-      </div>
-      <div id="ptfBuyErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
-    </div>
-    <div class="sep" style="margin:10px 0"></div>
-    <div class="col" onclick="tog(this,'sec-ptf-sim')">Bullrun Simulation</div>
-    <div id="sec-ptf-sim" class="col-b">
-      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Scenario projection — not financial advice</div>
-      <div id="ptfSimSummary" class="mg" style="margin-bottom:10px"></div>
-      <div class="ov">
-        <table class="mkt-tbl">
-          <thead><tr><th>Asset</th><th>Amount</th><th>Current</th><th>Target</th><th>Projected</th><th>Gain</th></tr></thead>
-          <tbody id="ptfSimTableB"><tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Loading prices...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
 
 </div>
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">BURN Terminal</div>
@@ -895,7 +896,6 @@ function render(){
   prevPrice=P;
 
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
-  try{ptfSyncBurn();ptfRenderTable();}catch(e){}
 }
 
 // ═══ TRADES: On-Chain Swap Events ═══
@@ -1810,7 +1810,7 @@ function updateSysStatus(){
   $("foot").innerHTML="BURN Terminal · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
 loadOffline();
-ptfLoad();ptfSyncBurn();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
+ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 try{ptfFetchPrices();}catch(e){}
