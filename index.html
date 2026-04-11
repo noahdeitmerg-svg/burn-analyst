@@ -310,6 +310,64 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
+<!-- ═══ COLLAPSIBLE: Portfolio Terminal ═══ -->
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-ptf')">Portfolio Terminal</div>
+  <div id="sec-ptf" class="col-b">
+    <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov">
+      <table class="mkt-tbl">
+        <thead><tr><th>Asset</th><th>Amount</th><th>Entry</th><th>Price</th><th>Value</th><th>P&L</th><th>%</th><th></th></tr></thead>
+        <tbody id="ptfTableB"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px">
+      <div class="col" onclick="tog(this,'sec-ptf-add')" style="font-size:10px">+ Add Asset</div>
+      <div id="sec-ptf-add" class="col-b" style="padding:8px 0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+          <div><div style="font-size:8px;color:var(--dm)">SYMBOL</div><input class="inp" id="ptfAddSym" placeholder="BTC" style="width:60px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">COINGECKO ID</div><input class="inp" id="ptfAddGecko" placeholder="bitcoin" style="width:80px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfAddAmt" placeholder="0.15" style="width:70px;font-size:10px" type="number"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AVG ENTRY $</div><input class="inp" id="ptfAddEntry" placeholder="42000" style="width:80px;font-size:10px" type="number"></div>
+          <button class="btn" onclick="ptfAddAsset()" style="font-size:10px">Add</button>
+        </div>
+        <div id="ptfAddErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-ledger')" style="font-size:10px">Cost Basis Ledger</div>
+    <div id="sec-ptf-ledger" class="col-b">
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Date</th><th>Asset</th><th>Amount</th><th>Price</th><th>Total</th><th>Wallet</th><th></th></tr></thead>
+          <tbody id="ptfLedgerB"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div><div style="font-size:8px;color:var(--dm)">ASSET</div><select class="inp" id="ptfBuyAsset" style="width:70px;font-size:10px"></select></div>
+        <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfBuyAmt" placeholder="0.05" style="width:70px;font-size:10px" type="number"></div>
+        <div><div style="font-size:8px;color:var(--dm)">PRICE $</div><input class="inp" id="ptfBuyPrice" placeholder="40000" style="width:80px;font-size:10px" type="number"></div>
+        <div><div style="font-size:8px;color:var(--dm)">DATE</div><input class="inp" id="ptfBuyDate" style="width:90px;font-size:10px" type="date"></div>
+        <div><div style="font-size:8px;color:var(--dm)">WALLET</div><input class="inp" id="ptfBuyWallet" placeholder="Ledger" style="width:70px;font-size:10px"></div>
+        <button class="btn" onclick="ptfAddPurchase()" style="font-size:10px">Add</button>
+      </div>
+      <div id="ptfBuyErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-sim')">Bullrun Simulation</div>
+    <div id="sec-ptf-sim" class="col-b">
+      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Scenario projection — not financial advice</div>
+      <div id="ptfSimSummary" class="mg" style="margin-bottom:10px"></div>
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Asset</th><th>Amount</th><th>Current</th><th>Target</th><th>Projected</th><th>Gain</th></tr></thead>
+          <tbody id="ptfSimTableB"><tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Add assets to simulate</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
 </div>
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">BURN Terminal</div>
 </div>
@@ -355,6 +413,9 @@ var W_DEFI="0x505042fF781eA1689e44e1d200eFD691C30Db86C";
 var TGT=[.20,.30,.50,1,2,5], SEL=[10000,50000,100000,180000];
 var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
+
+// ═══ PORTFOLIO TERMINAL ═══
+var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={};
 
 // ═══ LP POSITIONS (fallback — overwritten by on-chain if available) ═══
 var LP_FALLBACK=[
@@ -812,6 +873,7 @@ function render(){
   prevPrice=P;
 
   $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
+  try{ptfSyncBurn();ptfRenderTable();}catch(e){}
 }
 
 // ═══ TRADES: On-Chain Swap Events ═══
@@ -1424,13 +1486,258 @@ document.addEventListener("touchmove",function(e){if(ptrY>0&&window.scrollY===0)
   if(dy>50&&!ptrActive){ptrActive=true;$("ptr").classList.add("show");}}},{passive:true});
 document.addEventListener("touchend",function(){if(ptrActive){ptrActive=false;$("ptr").classList.remove("show");go();fetchSt();fetchTrades();}ptrY=0;});
 
+// ═══ PORTFOLIO TERMINAL FUNCTIONS ═══
+function ptfSave(){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){console.log("PTF save err:",e);}}
+function ptfLoad(){try{var a=localStorage.getItem("ptf_assets");var l=localStorage.getItem("ptf_ledger");if(a)ptfAssets=JSON.parse(a);if(l)ptfLedger=JSON.parse(l);ptfSimLoad();}catch(e){console.log("PTF load err:",e);}}
+
+function ptfSyncBurn(){
+  try{
+    var autos=[
+      {id:"burn",symbol:"BURN",name:"BURN Token",geckoId:"",amount:MY_BURN,avgEntry:AVG_ENTRY,totalCost:INVESTED,source:"auto",decimals:0},
+      {id:"stburn",symbol:"stBURN",name:"stBURN Token",geckoId:"",amount:MY_STBURN,avgEntry:0,totalCost:0,source:"auto",decimals:0},
+      {id:"burn_lp",symbol:"LP",name:"BURN LP Deposits",geckoId:"",amount:ALP,avgEntry:AVG_ENTRY,totalCost:0,source:"auto",decimals:0}
+    ];
+    for(var i=0;i<autos.length;i++){
+      var au=autos[i],found=false;
+      for(var j=0;j<ptfAssets.length;j++){
+        if(ptfAssets[j].id===au.id){ptfAssets[j].amount=au.amount;found=true;break;}
+      }
+      if(!found)ptfAssets.push(au);
+    }
+  }catch(e){console.log("PTF sync err:",e);}
+}
+
+function ptfFetchPrices(){
+  try{
+    if(Date.now()-ptfLastFetch<60000)return;
+    var ids=[];
+    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="manual"&&ptfAssets[i].geckoId)ids.push(ptfAssets[i].geckoId);}
+    if(ids.length===0)return;
+    ptfLastFetch=Date.now();
+    fetch("https://api.coingecko.com/api/v3/simple/price?ids="+ids.join(",")+"&vs_currencies=usd&include_24hr_change=true")
+      .then(function(r){return r.json();})
+      .then(function(data){
+        for(var k in data){if(data.hasOwnProperty(k))ptfPrices[k]={usd:data[k].usd||0,change:data[k].usd_24h_change||0};}
+        ptfRenderTable();
+      }).catch(function(e){console.log("PTF CoinGecko err:",e);});
+  }catch(e){console.log("PTF fetchPrices err:",e);}
+}
+
+function ptfGetPrice(a){
+  if(a.source==="auto"){
+    if(a.id==="burn"||a.id==="burn_lp")return P;
+    if(a.id==="stburn")return P*stR;
+  }
+  if(a.geckoId&&ptfPrices[a.geckoId])return ptfPrices[a.geckoId].usd;
+  return 0;
+}
+function ptfGetChange(a){
+  if(a.source==="auto")return null;
+  if(a.geckoId&&ptfPrices[a.geckoId])return ptfPrices[a.geckoId].change;
+  return null;
+}
+
+function ptfRenderTable(){
+  try{
+    var rows=[],totVal=0,totCost=0;
+    var sorted=ptfAssets.slice().sort(function(a,b){return(b.amount*ptfGetPrice(b))-(a.amount*ptfGetPrice(a));});
+    for(var i=0;i<sorted.length;i++){
+      var a=sorted[i],price=ptfGetPrice(a);
+      var val=a.amount*price;
+      var pnl=a.totalCost>0?(val-a.totalCost):0;
+      var pnlPct=a.totalCost>0?(pnl/a.totalCost*100):0;
+      totVal+=val;if(a.totalCost>0)totCost+=a.totalCost;
+      var chg=ptfGetChange(a);
+      var chgH=chg!==null?'<span style="font-size:8px;color:'+(chg>=0?"var(--g)":"var(--r)")+'">'+( chg>=0?"+":"")+chg.toFixed(1)+'%</span>':"";
+      var entryH=a.avgEntry>0?"$"+F(a.avgEntry,a.avgEntry>=1?2:6):"—";
+      var pnlClr=pnl>=0?"var(--g)":"var(--r)";
+      var pnlH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnl>=0?"+":"")+F(pnl,0)+'</span>':"—";
+      var pctH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnlPct>=0?"+":"")+pnlPct.toFixed(1)+'%</span>':"—";
+      var actH=a.source==="auto"?'<span class="tg" style="background:rgba(96,165,250,.1);color:var(--b)">auto</span>':'<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
+      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:var(--dm)">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+( price>0?"$"+F(price,price>=1?2:6):"—")+' '+chgH+'</td><td style="color:var(--g)">$'+F(val,0)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
+    }
+    $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="8" style="color:var(--dm);text-align:center">No assets — add one below</td></tr>';
+    var totPnl=totCost>0?(totVal-totCost):0;
+    var totPnlPct=totCost>0?(totPnl/totCost*100):0;
+    var tc=totPnl>=0?"var(--g)":"var(--r)";
+    $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,0),"var(--br)")+MB("Total Cost","$"+F(totCost,0),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+":"")+F(totPnl,0),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc);
+  }catch(e){console.log("PTF renderTable err:",e);}
+  try{ptfSimRender();}catch(e){}
+}
+
+function ptfRenderLedger(){
+  try{
+    var sorted=ptfLedger.slice().sort(function(a,b){return b.date>a.date?1:(b.date<a.date?-1:0);});
+    var rows=[];
+    for(var i=0;i<sorted.length;i++){
+      var e=sorted[i];
+      rows.push('<tr><td>'+e.date+'</td><td class="bld">'+e.asset.toUpperCase()+'</td><td>'+F(e.amount,4)+'</td><td>$'+F(e.price,e.price>=1?2:6)+'</td><td style="color:var(--g)">$'+F(e.total,2)+'</td><td>'+( e.wallet||"")+'</td><td><span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemovePurchase(\''+e.id+'\')" title="Delete">×</span></td></tr>');
+    }
+    $("ptfLedgerB").innerHTML=rows.join("")||'<tr><td colspan="7" style="color:var(--dm);text-align:center">No entries</td></tr>';
+  }catch(e){console.log("PTF renderLedger err:",e);}
+}
+
+function ptfUpdateDropdown(){
+  try{
+    var sel=$("ptfBuyAsset"),opts="";
+    for(var i=0;i<ptfAssets.length;i++){
+      var a=ptfAssets[i];
+      opts+='<option value="'+a.id+'">'+a.symbol+'</option>';
+    }
+    sel.innerHTML=opts;
+  }catch(e){}
+}
+
+function ptfRecalcAsset(assetId){
+  var entries=ptfLedger.filter(function(e){return e.asset===assetId;});
+  var asset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===assetId){asset=ptfAssets[i];break;}}
+  if(!asset)return;
+  var totalCost=0,totalAmt=0;
+  for(var j=0;j<entries.length;j++){totalCost+=entries[j].total;totalAmt+=entries[j].amount;}
+  asset.totalCost=totalCost;
+  asset.avgEntry=totalAmt>0?totalCost/totalAmt:0;
+  if(asset.source==="manual")asset.amount=totalAmt;
+}
+
+function ptfAddAsset(){
+  try{
+    var sym=($("ptfAddSym").value||"").trim().toUpperCase();
+    var gecko=($("ptfAddGecko").value||"").trim().toLowerCase();
+    var amt=parseFloat($("ptfAddAmt").value)||0;
+    var entry=parseFloat($("ptfAddEntry").value)||0;
+    if(!sym){$("ptfAddErr").textContent="Symbol required";return;}
+    if(!gecko){$("ptfAddErr").textContent="CoinGecko ID required";return;}
+    if(amt<=0){$("ptfAddErr").textContent="Amount must be > 0";return;}
+    var id=sym.toLowerCase();
+    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===id){$("ptfAddErr").textContent="Asset already exists";return;}}
+    if(ptfAssets.length>=50){$("ptfAddErr").textContent="Max 50 assets";return;}
+    var dec=entry>100?4:(entry>1?2:0);
+    ptfAssets.push({id:id,symbol:sym,name:sym,geckoId:gecko,amount:amt,avgEntry:entry,totalCost:amt*entry,source:"manual",decimals:dec});
+    // Create implicit first ledger entry
+    if(amt>0&&entry>0){
+      ptfLedger.push({id:"ptx_"+Date.now(),asset:id,amount:amt,price:entry,total:amt*entry,date:new Date().toISOString().split("T")[0],wallet:"",note:"Initial"});
+    }
+    $("ptfAddSym").value="";$("ptfAddGecko").value="";$("ptfAddAmt").value="";$("ptfAddEntry").value="";$("ptfAddErr").textContent="";
+    ptfSave();ptfFetchPrices();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
+  }catch(e){console.log("PTF addAsset err:",e);}
+}
+
+function ptfRemoveAsset(id){
+  try{
+    for(var i=0;i<ptfAssets.length;i++){
+      if(ptfAssets[i].id===id){
+        if(ptfAssets[i].source==="auto")return;
+        ptfAssets.splice(i,1);break;
+      }
+    }
+    ptfLedger=ptfLedger.filter(function(e){return e.asset!==id;});
+    ptfSave();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
+  }catch(e){console.log("PTF removeAsset err:",e);}
+}
+
+function ptfAddPurchase(){
+  try{
+    var assetId=$("ptfBuyAsset").value;
+    var amt=parseFloat($("ptfBuyAmt").value)||0;
+    var price=parseFloat($("ptfBuyPrice").value)||0;
+    var date=$("ptfBuyDate").value||new Date().toISOString().split("T")[0];
+    var wallet=($("ptfBuyWallet").value||"").trim();
+    if(!assetId){$("ptfBuyErr").textContent="Select an asset";return;}
+    if(amt<=0){$("ptfBuyErr").textContent="Amount must be > 0";return;}
+    if(price<=0){$("ptfBuyErr").textContent="Price must be > 0";return;}
+    if(ptfLedger.length>=500){$("ptfBuyErr").textContent="Max 500 entries";return;}
+    ptfLedger.push({id:"ptx_"+Date.now(),asset:assetId,amount:amt,price:price,total:amt*price,date:date,wallet:wallet,note:""});
+    ptfRecalcAsset(assetId);
+    $("ptfBuyAmt").value="";$("ptfBuyPrice").value="";$("ptfBuyWallet").value="";$("ptfBuyErr").textContent="";
+    ptfSave();ptfRenderTable();ptfRenderLedger();
+  }catch(e){console.log("PTF addPurchase err:",e);}
+}
+
+function ptfRemovePurchase(id){
+  try{
+    var assetId="";
+    for(var i=0;i<ptfLedger.length;i++){if(ptfLedger[i].id===id){assetId=ptfLedger[i].asset;ptfLedger.splice(i,1);break;}}
+    if(assetId)ptfRecalcAsset(assetId);
+    ptfSave();ptfRenderTable();ptfRenderLedger();
+  }catch(e){console.log("PTF removePurchase err:",e);}
+}
+
+// ═══ BULLRUN SIMULATION ═══
+function ptfSimSave(){try{localStorage.setItem("ptf_targets",JSON.stringify(ptfSimTargets));}catch(e){console.log("ptfSim save err:",e);}}
+function ptfSimLoad(){try{var t=localStorage.getItem("ptf_targets");if(t)ptfSimTargets=JSON.parse(t);}catch(e){console.log("ptfSim load err:",e);}}
+
+function ptfSimRender(){
+  try{
+    if(!Array.isArray(ptfAssets)||ptfAssets.length===0)return;
+    var manuals=[];
+    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="manual")manuals.push(ptfAssets[i]);}
+    if(manuals.length===0){
+      $("ptfSimSummary").innerHTML="";
+      $("ptfSimTableB").innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Add assets in Portfolio Terminal to simulate</td></tr>';
+      return;
+    }
+    var rows=[],simCurVal=0,simBullVal=0;
+    for(var j=0;j<manuals.length;j++){
+      var a=manuals[j];
+      var cur=0;
+      if(ptfPrices[a.geckoId])cur=ptfPrices[a.geckoId].usd;
+      else if(a.avgEntry>0)cur=a.avgEntry;
+      if(cur<=0)continue;
+      var tgt=ptfSimTargets[a.id]||cur;
+      if(tgt<0)tgt=0;
+      var projVal=a.amount*tgt;
+      var gain=cur>0?((tgt-cur)/cur*100):0;
+      var gainClr=gain>=0?"var(--g)":"var(--r)";
+      simCurVal+=a.amount*cur;
+      simBullVal+=a.amount*tgt;
+      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:var(--dm)">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td style="color:var(--dm)">$'+F(cur,cur>=1?2:6)+'</td><td><input class="inp" type="number" id="ptfSimT_'+a.id+'" value="'+tgt+'" oninput="ptfSimCalc()" style="width:80px;font-size:11px;text-align:right"></td><td><span id="ptfSimV_'+a.id+'" style="color:var(--g)">$'+F(projVal,0)+'</span></td><td><span id="ptfSimG_'+a.id+'" style="color:'+gainClr+'">'+(gain>=0?"+":"")+gain.toFixed(1)+'%</span></td></tr>');
+    }
+    $("ptfSimTableB").innerHTML=rows.join("")||'<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">No assets with prices available</td></tr>';
+    var simProfit=simBullVal-simCurVal;
+    var simMult=simCurVal>0?simBullVal/simCurVal:0;
+    var pc=simProfit>=0?"var(--g)":"var(--r)";
+    $("ptfSimSummary").innerHTML=MB("Current Value","$"+F(simCurVal,0),"var(--dm)")+MB("Bullrun Value","$"+F(simBullVal,0),"var(--g)")+MB("Projected Profit",(simProfit>=0?"+$":"-$")+F(Math.abs(simProfit),0),pc)+MB("Multiplier",simMult.toFixed(1)+"×","var(--cy)");
+  }catch(e){console.log("ptfSim render err:",e);}
+}
+
+function ptfSimCalc(){
+  try{
+    var manuals=[];
+    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="manual")manuals.push(ptfAssets[i]);}
+    var simCurVal=0,simBullVal=0;
+    for(var j=0;j<manuals.length;j++){
+      var a=manuals[j];
+      var cur=0;
+      if(ptfPrices[a.geckoId])cur=ptfPrices[a.geckoId].usd;
+      else if(a.avgEntry>0)cur=a.avgEntry;
+      if(cur<=0)continue;
+      var inp=$("ptfSimT_"+a.id);
+      var tgt=cur;
+      if(inp){var v=parseFloat(inp.value);if(v>0){tgt=v;ptfSimTargets[a.id]=v;}else{tgt=0;delete ptfSimTargets[a.id];}}
+      var projVal=a.amount*tgt;
+      var gain=cur>0?((tgt-cur)/cur*100):0;
+      var gainClr=gain>=0?"var(--g)":"var(--r)";
+      simCurVal+=a.amount*cur;
+      simBullVal+=a.amount*tgt;
+      var vEl=$("ptfSimV_"+a.id);if(vEl)vEl.innerHTML="$"+F(projVal,0);
+      var gEl=$("ptfSimG_"+a.id);if(gEl){gEl.style.color=gainClr;gEl.innerHTML=(gain>=0?"+":"")+gain.toFixed(1)+"%";}
+    }
+    var simProfit=simBullVal-simCurVal;
+    var simMult=simCurVal>0?simBullVal/simCurVal:0;
+    var pc=simProfit>=0?"var(--g)":"var(--r)";
+    $("ptfSimSummary").innerHTML=MB("Current Value","$"+F(simCurVal,0),"var(--dm)")+MB("Bullrun Value","$"+F(simBullVal,0),"var(--g)")+MB("Projected Profit",(simProfit>=0?"+$":"-$")+F(Math.abs(simProfit),0),pc)+MB("Multiplier",simMult.toFixed(1)+"×","var(--cy)");
+    ptfSimSave();
+  }catch(e){console.log("ptfSim calc err:",e);}
+}
+
 // ═══ START ═══
 var _refreshId=null,_refreshCount=0;
 function startRefresh(){
   if(_refreshId)clearInterval(_refreshId);
   _refreshId=setInterval(function(){if(document.hidden)return;_refreshCount++;
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
-    if(_refreshCount%5===0)fetchLPs(); // LP refresh every 5 min
+    if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();}catch(e){}} // LP + PTF refresh every 5 min
     saveOffline();updateSysStatus();},60000);
 }
 function updateSysStatus(){
@@ -1442,7 +1749,10 @@ function updateSysStatus(){
   $("foot").innerHTML="BURN Terminal · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
 loadOffline();
+ptfLoad();ptfSyncBurn();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
+try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
+try{ptfFetchPrices();}catch(e){}
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
 </script>
