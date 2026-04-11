@@ -426,19 +426,20 @@ var PTF_DEFAULTS=[
   {id:"cfg",symbol:"CFG",name:"Centrifuge",geckoId:"centrifuge",amount:462.3868,avgEntry:0.1254,totalCost:58,source:"ledger",decimals:4,contract:null},
   {id:"fet",symbol:"FET",name:"Fetch.ai",geckoId:"fetch-ai",amount:389.1441,avgEntry:0.2133,totalCost:83,source:"ledger",decimals:4,contract:"0x3A8B787f78159D8Ff2b5AfD1862F3F4bC5347209"},
   {id:"aave",symbol:"AAVE",name:"Aave",geckoId:"aave",amount:0.9077,avgEntry:179.59,totalCost:163,source:"ledger",decimals:4,contract:"0xba5DdD1f9d7F570dc94a51479a000E3BCE967196"},
-  {id:"sky",symbol:"SKY",name:"SKY Governance",geckoId:"sky-protocol",amount:852.1203,avgEntry:0.0645,totalCost:55,source:"ledger",decimals:4,contract:null},
+  {id:"sky",symbol:"SKY",name:"SKY Governance",geckoId:"sky",amount:852.1203,avgEntry:0.0645,totalCost:55,source:"ledger",decimals:4,contract:null},
   {id:"cro",symbol:"CRO",name:"Cronos",geckoId:"crypto-com-chain",amount:655.7000,avgEntry:0.093,totalCost:61,source:"ledger",decimals:4,contract:null},
   {id:"uni",symbol:"UNI",name:"Uniswap",geckoId:"uniswap",amount:9.8139,avgEntry:5.605,totalCost:55,source:"ledger",decimals:4,contract:"0xFa7F8980b0f1E64A2062791cc3b0871572f1F7f0"},
   {id:"arb",symbol:"ARB",name:"Arbitrum",geckoId:"arbitrum",amount:263.1431,avgEntry:0.209,totalCost:55,source:"ledger",decimals:4,contract:"0x912CE59144191C1204E64559FE8253a0e49E6548"},
-  {id:"syrup",symbol:"SYRUP",name:"Syrup",geckoId:"maple-finance",amount:77.6098,avgEntry:0.425,totalCost:33,source:"ledger",decimals:4,contract:null},
+  {id:"syrup",symbol:"SYRUP",name:"Syrup",geckoId:"syrup",amount:77.6098,avgEntry:0.425,totalCost:33,source:"ledger",decimals:4,contract:null},
   {id:"eigen",symbol:"EIGEN",name:"EigenLayer",geckoId:"eigenlayer",amount:135.127,avgEntry:0.407,totalCost:55,source:"manual",decimals:2,contract:null},
   {id:"ar",symbol:"AR",name:"Arweave",geckoId:"arweave",amount:31.920,avgEntry:3.60,totalCost:115,source:"manual",decimals:2,contract:null},
-  {id:"btc",symbol:"BTC",name:"Bitcoin",geckoId:"bitcoin",amount:0.00692908,avgEntry:41492,totalCost:287.50,source:"manual",decimals:8,contract:null},
+  {id:"btc",symbol:"BTC",name:"Bitcoin",geckoId:"bitcoin",amount:0.00692908,avgEntry:68000,totalCost:471.18,source:"ledger",decimals:8,contract:null},
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
-  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.832427,avgEntry:2342.49,totalCost:1950,source:"manual",decimals:6,contract:null}
+  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.832427,avgEntry:2342.49,totalCost:1950,source:"ledger",decimals:6,contract:null}
 ];
+var PTF_VERSION=3;
 
 // ═══ LP POSITIONS (fallback — overwritten by on-chain if available) ═══
 var LP_FALLBACK=[
@@ -1515,6 +1516,13 @@ function ptfLoad(){try{
   if(a)ptfAssets=JSON.parse(a); else ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
   if(l)ptfLedger=JSON.parse(l);
   if(t)ptfSimTargets=JSON.parse(t);
+  var storedVer=localStorage.getItem("ptf_version");
+  if(!storedVer||parseInt(storedVer)<PTF_VERSION){
+    ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
+    localStorage.setItem("ptf_version",String(PTF_VERSION));
+    ptfSave();
+    console.log("PTF: defaults reset to v"+PTF_VERSION);
+  }
 }catch(e){console.log("PTF load err:",e);ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));}}
 function ptfSimSave(){try{localStorage.setItem("ptf_targets",JSON.stringify(ptfSimTargets));}catch(e){}}
 
