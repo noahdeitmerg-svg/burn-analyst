@@ -1518,29 +1518,11 @@ function ptfLoad(){try{
 }catch(e){console.log("PTF load err:",e);ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));}}
 function ptfSimSave(){try{localStorage.setItem("ptf_targets",JSON.stringify(ptfSimTargets));}catch(e){}}
 
-function ptfSyncBurn(){
-  try{
-    if(typeof P==="undefined"||P<=0)return;
-    var autos=[
-      {id:"burn",symbol:"BURN",name:"BURN Token",geckoId:"",amount:MY_BURN,avgEntry:AVG_ENTRY,totalCost:INVESTED,source:"auto",decimals:0,contract:null},
-      {id:"stburn",symbol:"stBURN",name:"stBURN Token",geckoId:"",amount:MY_STBURN,avgEntry:0,totalCost:0,source:"auto",decimals:0,contract:null},
-      {id:"burn_lp",symbol:"LP",name:"BURN LP Deposits",geckoId:"",amount:ALP,avgEntry:0,totalCost:0,source:"auto",decimals:0,contract:null}
-    ];
-    for(var i=0;i<autos.length;i++){
-      var au=autos[i],found=false;
-      for(var j=0;j<ptfAssets.length;j++){
-        if(ptfAssets[j].id===au.id){ptfAssets[j].amount=au.amount;found=true;break;}
-      }
-      if(!found)ptfAssets.push(au);
-    }
-  }catch(e){console.log("PTF sync err:",e);}
-}
-
 function ptfFetchPrices(){
   try{
     if(Date.now()-ptfLastFetch<60000)return;
     var ids=[];
-    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source!=="auto"&&ptfAssets[i].geckoId)ids.push(ptfAssets[i].geckoId);}
+    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].geckoId)ids.push(ptfAssets[i].geckoId);}
     if(ids.length===0)return;
     var unique={};for(var u=0;u<ids.length;u++)unique[ids[u]]=1;ids=Object.keys(unique);
     ptfLastFetch=Date.now();
@@ -1588,15 +1570,10 @@ function ptfFetchBalances(){
 function ptfFP(p){if(p>=1000)return F(p,0);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
 
 function ptfGetPrice(a){
-  if(a.source==="auto"){
-    if(a.id==="burn"||a.id==="burn_lp")return P;
-    if(a.id==="stburn")return P*stR;
-  }
   if(a.geckoId&&ptfPrices[a.geckoId])return ptfPrices[a.geckoId].usd;
   return 0;
 }
 function ptfGetChange(a){
-  if(a.source==="auto")return null;
   if(a.geckoId&&ptfPrices[a.geckoId])return ptfPrices[a.geckoId].change;
   return null;
 }
@@ -1617,10 +1594,8 @@ function ptfRenderTable(){
       var pnlClr=pnl>=0?"var(--g)":"var(--r)";
       var pnlH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnl>=0?"+$":"-$")+F(Math.abs(pnl),0)+'</span>':"—";
       var pctH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnlPct>=0?"+":"")+pnlPct.toFixed(1)+'%</span>':"—";
-      var srcClr=a.source==="auto"?"var(--b)":a.source==="ledger"?"var(--cy)":"var(--dm)";
-      var srcBg=a.source==="auto"?"rgba(96,165,250,.1)":a.source==="ledger"?"rgba(34,211,238,.1)":"rgba(71,85,105,.15)";
-      var actH='<span class="tg" style="background:'+srcBg+';color:'+srcClr+'">'+a.source+'</span>';
-      if(a.source==="manual")actH='<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
+      var srcClr=a.source==="ledger"?"var(--cy)":"var(--dm)";
+      var actH=a.source==="ledger"?'<span class="tg" style="background:rgba(34,211,238,.1);color:var(--cy)">ledger</span>':'<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
       rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--g)">$'+F(val,0)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
     }
     $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="8" style="color:var(--dm);text-align:center">No assets</td></tr>';
@@ -1648,7 +1623,7 @@ function ptfUpdateDropdown(){
   try{
     var sel=$("ptfBuyAsset"),opts="";
     for(var i=0;i<ptfAssets.length;i++){
-      if(ptfAssets[i].source!=="auto")opts+='<option value="'+ptfAssets[i].id+'">'+ptfAssets[i].symbol+'</option>';
+      opts+='<option value="'+ptfAssets[i].id+'">'+ptfAssets[i].symbol+'</option>';
     }
     sel.innerHTML=opts;
   }catch(e){}
@@ -1692,7 +1667,6 @@ function ptfRemoveAsset(id){
   try{
     for(var i=0;i<ptfAssets.length;i++){
       if(ptfAssets[i].id===id){
-        if(ptfAssets[i].source==="auto"){$("ptfAddErr").textContent="Cannot delete auto-synced asset";return;}
         if(ptfAssets[i].source==="ledger"){$("ptfAddErr").textContent="Cannot delete — tracked via wallet";return;}
         ptfAssets.splice(i,1);break;
       }
@@ -1733,11 +1707,10 @@ function ptfRemovePurchase(id){
 function ptfSimRender(){
   try{
     if(!Array.isArray(ptfAssets)||ptfAssets.length===0)return;
-    var sims=[];
-    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source!=="auto")sims.push(ptfAssets[i]);}
+    var sims=ptfAssets.slice();
     if(sims.length===0){
       $("ptfSimSummary").innerHTML="";
-      $("ptfSimTableB").innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Add assets in Portfolio Terminal to simulate</td></tr>';
+      $("ptfSimTableB").innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Add assets to simulate</td></tr>';
       return;
     }
     var rows=[],simCurVal=0,simBullVal=0;
@@ -1765,8 +1738,7 @@ function ptfSimRender(){
 
 function ptfSimCalc(){
   try{
-    var sims=[];
-    for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source!=="auto")sims.push(ptfAssets[i]);}
+    var sims=ptfAssets.slice();
     var simCurVal=0,simBullVal=0;
     for(var j=0;j<sims.length;j++){
       var a=sims[j];
