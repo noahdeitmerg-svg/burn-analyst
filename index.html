@@ -272,6 +272,15 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
         </table>
       </div>
     </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-io')" style="font-size:10px">Export / Import</div>
+    <div id="sec-ptf-io" class="col-b">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn" onclick="ptfExport()" style="font-size:10px">Export JSON</button>
+        <button class="btn" onclick="ptfImport()" style="font-size:10px">Import JSON</button>
+      </div>
+      <div id="ptfImportErr" style="font-size:9px;margin-top:6px"></div>
+    </div>
   </div>
 </div>
 
@@ -1559,17 +1568,36 @@ function ptfFetchPrices(){
   }catch(e){console.log("PTF fetchPrices err:",e);}
 }
 
-function ptfFetchBalances(){
+var ptfLastBalanceCheck=0;
+function ptfDetectBalances(){
   try{
-    var changed=false;
+    if(Date.now()-ptfLastBalanceCheck<300000)return;
+    ptfLastBalanceCheck=Date.now();
+    var changed=false,updates=0;
     var ledgerAssets=[];
     for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="ledger"&&ptfAssets[i].contract)ledgerAssets.push(ptfAssets[i]);}
-    if(ledgerAssets.length===0)return;
+    // Find ETH asset for eth_getBalance
+    var ethAsset=null;
+    for(var e=0;e<ptfAssets.length;e++){if(ptfAssets[e].id==="eth"&&ptfAssets[e].source==="ledger"){ethAsset=ptfAssets[e];break;}}
     var idx=0;
     function nextBalance(){
       if(idx>=ledgerAssets.length){
-        if(changed){ptfSave();ptfRenderTable();}
-        console.log("PTF: balance check done, changed="+changed);
+        // After ERC-20s, check ETH balance
+        if(ethAsset){
+          try{
+            batchRpc([{jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:0}]).then(function(res){
+              if(res&&res[0]&&res[0].result){
+                var bal=parseInt(res[0].result,16)/1e18;
+                if(bal<=0&&ethAsset.amount>0){console.log("PTF balance: ETH returned 0, keeping stored "+ethAsset.amount);}
+                else if(bal>0&&Math.abs(bal-ethAsset.amount)/Math.max(ethAsset.amount,0.0001)>0.001){
+                  console.log("PTF balance: ETH updated "+ethAsset.amount+" → "+bal);
+                  ethAsset.amount=bal;changed=true;updates++;
+                }
+              }
+              finishBalances();
+            }).catch(function(){finishBalances();});
+          }catch(e3){finishBalances();}
+        }else{finishBalances();}
         return;
       }
       var a=ledgerAssets[idx];idx++;
@@ -1577,17 +1605,23 @@ function ptfFetchBalances(){
         rpc(a.contract,bof(PTF_LEDGER_WALLET)).then(function(hex){
           if(hex&&hex!=="0x"){
             var bal=h2n(hex);
-            if(bal>0&&Math.abs(bal-a.amount)/Math.max(a.amount,0.0001)>0.001){
-              console.log("PTF: "+a.symbol+" balance updated "+a.amount+" → "+bal);
-              a.amount=bal;changed=true;
+            if(bal<=0&&a.amount>0){console.log("PTF balance: "+a.symbol+" returned 0, keeping stored "+a.amount);}
+            else if(bal>0&&Math.abs(bal-a.amount)/Math.max(a.amount,0.0001)>0.001){
+              console.log("PTF balance: "+a.symbol+" updated "+a.amount+" → "+bal);
+              a.amount=bal;changed=true;updates++;
             }
           }
           nextBalance();
         }).catch(function(){nextBalance();});
       }catch(e2){nextBalance();}
     }
+    function finishBalances(){
+      if(changed){ptfSave();ptfRenderTable();}
+      console.log("PTF: balance check complete, "+updates+" updates");
+    }
+    if(ledgerAssets.length===0&&!ethAsset){console.log("PTF: no ledger assets with contracts");return;}
     nextBalance();
-  }catch(e){console.log("PTF fetchBalances err:",e);}
+  }catch(e){console.log("PTF detectBalances err:",e);}
 }
 
 function ptfFP(p){if(p>=1000)return F(p,2);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
@@ -1921,13 +1955,69 @@ function ptfSimCalc(){
   }catch(e){console.log("ptfSim calc err:",e);}
 }
 
+// ═══ EXPORT / IMPORT ═══
+var ptfPendingImport=null;
+function ptfExport(){
+  try{
+    var data={version:PTF_VERSION,exportDate:new Date().toISOString(),assets:ptfAssets,ledger:ptfLedger,targets:ptfSimTargets,snapshots:ptfSnapshots||[]};
+    var json=JSON.stringify(data,null,2);
+    var blob=new Blob([json],{type:"application/json"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url;a.download="altcoin-portfolio-"+new Date().toISOString().split("T")[0]+".json";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("PTF export err:",e);}
+}
+
+function ptfImport(){
+  try{
+    var input=document.createElement("input");
+    input.type="file";input.accept=".json";
+    input.onchange=function(){
+      if(!input.files||!input.files[0])return;
+      var reader=new FileReader();
+      reader.onload=function(){
+        try{
+          var data=JSON.parse(reader.result);
+          if(!data.assets||!Array.isArray(data.assets)){$("ptfImportErr").innerHTML='<span style="color:var(--r)">Invalid file: missing assets array</span>';return;}
+          for(var i=0;i<data.assets.length;i++){
+            var a=data.assets[i];
+            if(!a.id||!a.symbol||typeof a.amount==="undefined"){$("ptfImportErr").innerHTML='<span style="color:var(--r)">Invalid asset at index '+i+'</span>';return;}
+          }
+          ptfPendingImport=data;
+          $("ptfImportErr").innerHTML='<span style="color:var(--o)">Import '+data.assets.length+' assets and '+(data.ledger?data.ledger.length:0)+' ledger entries? <button class="btn" onclick="ptfImportConfirm()" style="font-size:9px">Confirm</button></span>';
+        }catch(e2){$("ptfImportErr").innerHTML='<span style="color:var(--r)">Invalid JSON file</span>';}
+      };
+      reader.readAsText(input.files[0]);
+    };
+    input.click();
+  }catch(e){console.log("PTF import err:",e);}
+}
+
+function ptfImportConfirm(){
+  try{
+    if(!ptfPendingImport)return;
+    ptfAssets=ptfPendingImport.assets;
+    ptfLedger=ptfPendingImport.ledger||[];
+    ptfSimTargets=ptfPendingImport.targets||{};
+    ptfSnapshots=ptfPendingImport.snapshots||[];
+    ptfSave();
+    try{localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));}catch(e){}
+    try{localStorage.setItem("ptf_targets",JSON.stringify(ptfSimTargets));}catch(e){}
+    ptfPendingImport=null;
+    $("ptfImportErr").innerHTML='<span style="color:var(--g)">Imported successfully!</span>';
+    ptfRenderTable();ptfRenderLedger();
+  }catch(e){console.log("PTF importConfirm err:",e);}
+}
+
 // ═══ START ═══
 var _refreshId=null,_refreshCount=0;
 function startRefresh(){
   if(_refreshId)clearInterval(_refreshId);
   _refreshId=setInterval(function(){if(document.hidden)return;_refreshCount++;
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
-    if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfFetchBalances();}catch(e){}} // LP + PTF refresh every 5 min
+    if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}} // LP + PTF refresh every 5 min
     saveOffline();updateSysStatus();},60000);
 }
 function updateSysStatus(){
@@ -1942,7 +2032,7 @@ loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
-try{ptfFetchPrices();}catch(e){}
+try{ptfFetchPrices();ptfDetectBalances();}catch(e){}
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
 </script>
