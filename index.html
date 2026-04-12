@@ -210,6 +210,18 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   <div class="col" onclick="tog(this,'sec-ptf')">Altcoin Portfolio</div>
   <div id="sec-ptf" class="col-b">
     <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">Portfolio Charts</div>
+    <div id="sec-ptf-charts" class="col-b">
+      <div class="lb" style="margin-top:4px">Value Timeline</div>
+      <div id="ptfChartTimeline" style="margin-bottom:12px"><span style="color:var(--dm);font-size:10px">Collecting data — chart appears after first refresh cycle</span></div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="lb">P&L Distribution</div>
+      <div id="ptfChartPnl" style="margin-bottom:12px"></div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="lb">Allocation</div>
+      <div id="ptfChartAlloc" style="margin-bottom:4px"></div>
+    </div>
+    <div class="sep" style="margin:8px 0"></div>
     <div class="ov">
       <table class="mkt-tbl">
         <thead><tr><th>Asset</th><th>Amount</th><th>Entry</th><th>Price</th><th>Value</th><th>P&L</th><th>%</th><th></th></tr></thead>
@@ -418,7 +430,7 @@ var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ PORTFOLIO TERMINAL ═══
-var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={};
+var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={},ptfSnapshots=[];
 var PTF_LEDGER_WALLET="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
 var PTF_DEFAULTS=[
   {id:"link",symbol:"LINK",name:"Chainlink",geckoId:"chainlink",amount:32.0574,avgEntry:10.30,totalCost:330,source:"ledger",decimals:4,contract:"0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"},
@@ -1518,6 +1530,7 @@ function ptfLoad(){try{
   if(a)ptfAssets=JSON.parse(a); else ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
   if(l)ptfLedger=JSON.parse(l);
   if(t)ptfSimTargets=JSON.parse(t);
+  try{var sn=localStorage.getItem("ptf_snapshots");if(sn)ptfSnapshots=JSON.parse(sn);}catch(e){}
   var storedVer=localStorage.getItem("ptf_version");
   if(!storedVer||parseInt(storedVer)<PTF_VERSION){
     ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
@@ -1614,6 +1627,7 @@ function ptfRenderTable(){
     var tc=totPnl>=0?"var(--g)":"var(--r)";
     $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,0),"var(--br)")+MB("Total Cost","$"+F(totCost,0),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+$":"-$")+F(Math.abs(totPnl),0),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc);
   }catch(e){console.log("PTF renderTable err:",e);}
+  try{ptfSaveSnapshot(totVal);ptfRenderTimeline();ptfRenderPnlBars();ptfRenderAllocation();}catch(e){}
   try{ptfSimRender();ptfUpdateDropdown();}catch(e){}
 }
 
@@ -1711,6 +1725,139 @@ function ptfRemovePurchase(id){
     if(assetId)ptfRecalcAsset(assetId);
     ptfSave();ptfRenderTable();ptfRenderLedger();
   }catch(e){console.log("PTF removePurchase err:",e);}
+}
+
+// ═══ PORTFOLIO CHARTS ═══
+var PTF_COLORS=["#22d3ee","#34d399","#fb923c","#f87171","#c084fc","#60a5fa","#fbbf24","#a78bfa","#e879f9","#2dd4bf","#94a3b8"];
+
+function ptfSaveSnapshot(tv){
+  try{
+    if(tv<=0)return;
+    if(ptfSnapshots.length>0&&Date.now()-ptfSnapshots[ptfSnapshots.length-1].ts<3600000)return;
+    ptfSnapshots.push({ts:Date.now(),value:tv});
+    if(ptfSnapshots.length>365)ptfSnapshots.shift();
+    localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));
+  }catch(e){}
+}
+
+function ptfRenderTimeline(){
+  var el=$("ptfChartTimeline");if(!el)return;
+  if(ptfSnapshots.length<2){el.innerHTML='<span style="color:var(--dm);font-size:10px">Not enough data yet — chart appears after 2+ snapshots</span>';return;}
+  var d=ptfSnapshots,minV=d[0].value,maxV=d[0].value;
+  for(var i=1;i<d.length;i++){if(d[i].value<minV)minV=d[i].value;if(d[i].value>maxV)maxV=d[i].value;}
+  var vRange=maxV-minV||1;
+  var W=700,H=200,px=50,py=20,cw=W-px-10,ch=H-py*2;
+  var pts=[];
+  for(var j=0;j<d.length;j++){
+    var x=px+j/(d.length-1)*cw;
+    var y=py+ch-(d[j].value-minV)/vRange*ch;
+    pts.push(x.toFixed(1)+","+y.toFixed(1));
+  }
+  var path="M"+pts.join("L");
+  var fillPath=path+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z";
+  var grid="";
+  for(var g=0;g<5;g++){
+    var gy=py+ch/4*g;
+    var gv=maxV-(maxV-minV)/4*g;
+    grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-10)+'" y2="'+gy+'" stroke="rgba(30,41,59,.3)" stroke-dasharray="4,4"/>';
+    grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#64748b" font-size="8" text-anchor="end">$'+F(gv,0)+'</text>';
+  }
+  var xLabels="";
+  for(var xl=0;xl<5;xl++){
+    var xi=Math.round(xl/(4)*(d.length-1));
+    var dt=new Date(d[xi].ts);
+    var lbl=(dt.getMonth()+1)+"/"+dt.getDate();
+    var xx=px+xi/(d.length-1)*cw;
+    xLabels+='<text x="'+xx+'" y="'+(H-4)+'" fill="#64748b" font-size="8" text-anchor="middle">'+lbl+'</text>';
+  }
+  var last=pts[pts.length-1].split(",");
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
+    grid+xLabels+
+    '<defs><linearGradient id="ptfTlFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.15)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
+    '<path d="'+fillPath+'" fill="url(#ptfTlFill)"/>'+
+    '<path d="'+path+'" fill="none" stroke="#22d3ee" stroke-width="2"/>'+
+    '<circle cx="'+last[0]+'" cy="'+last[1]+'" r="4" fill="#22d3ee"/>'+
+    '</svg>';
+}
+
+function ptfRenderPnlBars(){
+  var el=$("ptfChartPnl");if(!el)return;
+  var items=[];
+  for(var i=0;i<ptfAssets.length;i++){
+    var a=ptfAssets[i],price=ptfGetPrice(a),val=a.amount*price;
+    if(a.totalCost<=0)continue;
+    var pnlPct=(val-a.totalCost)/a.totalCost*100;
+    items.push({sym:a.symbol,pct:pnlPct});
+  }
+  if(items.length===0){el.innerHTML='<span style="color:var(--dm);font-size:10px">No P&L data available</span>';return;}
+  items.sort(function(a,b){return b.pct-a.pct;});
+  var maxPct=0;for(var m=0;m<items.length;m++){if(Math.abs(items[m].pct)>maxPct)maxPct=Math.abs(items[m].pct);}
+  if(maxPct===0)maxPct=1;
+  var rh=28,W=700,cx=350,H=items.length*rh+20;
+  var bars='<line x1="'+cx+'" y1="10" x2="'+cx+'" y2="'+(H-10)+'" stroke="rgba(30,41,59,.5)" stroke-width="1"/>';
+  for(var j=0;j<items.length;j++){
+    var it=items[j],y=14+j*rh;
+    var bw=Math.abs(it.pct)/maxPct*280;
+    var clr=it.pct>=0?"#34d399":"#f87171";
+    if(it.pct>=0){
+      bars+='<rect x="'+cx+'" y="'+y+'" width="'+bw+'" height="18" rx="3" fill="'+clr+'" opacity=".7"/>';
+      bars+='<text x="'+(cx+bw+6)+'" y="'+(y+13)+'" fill="'+clr+'" font-size="8">+'+it.pct.toFixed(1)+'%</text>';
+    }else{
+      bars+='<rect x="'+(cx-bw)+'" y="'+y+'" width="'+bw+'" height="18" rx="3" fill="'+clr+'" opacity=".7"/>';
+      bars+='<text x="'+(cx-bw-6)+'" y="'+(y+13)+'" fill="'+clr+'" font-size="8" text-anchor="end">'+it.pct.toFixed(1)+'%</text>';
+    }
+    bars+='<text x="'+(it.pct>=0?cx-6:cx+6)+'" y="'+(y+13)+'" fill="#e2e8f0" font-size="10" text-anchor="'+(it.pct>=0?"end":"start")+'">'+it.sym+'</text>';
+  }
+  el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+bars+'</svg>';
+}
+
+function ptfArc(cx,cy,r,sa,ea){
+  var x1=cx+r*Math.cos(sa),y1=cy+r*Math.sin(sa);
+  var x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
+  var lg=(ea-sa)>Math.PI?1:0;
+  return"M"+x1.toFixed(2)+","+y1.toFixed(2)+"A"+r+","+r+" 0 "+lg+" 1 "+x2.toFixed(2)+","+y2.toFixed(2);
+}
+
+function ptfRenderAllocation(){
+  var el=$("ptfChartAlloc");if(!el)return;
+  var items=[],totVal=0;
+  for(var i=0;i<ptfAssets.length;i++){
+    var a=ptfAssets[i],price=ptfGetPrice(a),val=a.amount*price;
+    if(val<=0)continue;
+    items.push({sym:a.symbol,val:val});totVal+=val;
+  }
+  if(items.length===0||totVal<=0){el.innerHTML='<span style="color:var(--dm);font-size:10px">No allocation data</span>';return;}
+  items.sort(function(a,b){return b.val-a.val;});
+  var slices=items.slice(0,10),otherVal=0;
+  for(var o=10;o<items.length;o++)otherVal+=items[o].val;
+  if(otherVal>0)slices.push({sym:"Others",val:otherVal});
+
+  var cx=150,cy=150,ro=130,ri=80;
+  var angle=-Math.PI/2,paths="";
+  for(var s=0;s<slices.length;s++){
+    var pct=slices[s].val/totVal;
+    var sweep=Math.max(pct*Math.PI*2,0.03);
+    var ea=angle+sweep;
+    var outerArc=ptfArc(cx,cy,ro,angle,ea);
+    var innerArc=ptfArc(cx,cy,ri,ea,angle);
+    var ix1=cx+ri*Math.cos(ea),iy1=cy+ri*Math.sin(ea);
+    var ox2=cx+ro*Math.cos(angle),oy2=cy+ro*Math.sin(angle);
+    var d=outerArc+"L"+ix1.toFixed(2)+","+iy1.toFixed(2)+innerArc.replace("M","")+"L"+ox2.toFixed(2)+","+oy2.toFixed(2)+"Z";
+    paths+='<path d="'+d+'" fill="'+PTF_COLORS[s%PTF_COLORS.length]+'" opacity=".85"/>';
+    angle=ea;
+  }
+  var center='<text x="'+cx+'" y="'+(cy-6)+'" fill="#64748b" font-size="8" text-anchor="middle">Total</text>';
+  center+='<text x="'+cx+'" y="'+(cy+12)+'" fill="#e2e8f0" font-size="16" font-weight="600" text-anchor="middle">$'+F(totVal,0)+'</text>';
+
+  var legend="";
+  for(var lg=0;lg<slices.length;lg++){
+    var sl=slices[lg],pc=(sl.val/totVal*100).toFixed(1);
+    legend+='<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--tx)"><span style="width:8px;height:8px;border-radius:50%;background:'+PTF_COLORS[lg%PTF_COLORS.length]+';flex-shrink:0"></span>'+sl.sym+' <span style="color:var(--dm)">'+pc+'%</span></div>';
+  }
+
+  el.innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">'+
+    '<svg viewBox="0 0 300 300" style="width:100%;max-width:240px;height:auto">'+paths+center+'</svg>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">'+legend+'</div></div>';
 }
 
 // ═══ BULLRUN SIMULATION ═══
