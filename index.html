@@ -462,7 +462,7 @@ var PTF_DEFAULTS=[
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
   {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.832427,avgEntry:2342.49,totalCost:1950,source:"ledger",decimals:6,contract:null}
 ];
-var PTF_VERSION=3;
+var PTF_VERSION=4;
 
 // ═══ LP POSITIONS (fallback — overwritten by on-chain if available) ═══
 var LP_FALLBACK=[
@@ -1569,37 +1569,18 @@ function ptfFetchPrices(){
 }
 
 var ptfLastBalanceCheck=0;
+var PTF_ETH_RPC=["https://eth.llamarpc.com","https://ethereum-rpc.publicnode.com","https://1rpc.io/eth"];
 function ptfDetectBalances(){
   try{
     if(Date.now()-ptfLastBalanceCheck<300000)return;
     ptfLastBalanceCheck=Date.now();
     var changed=false,updates=0;
+    // Step 1: Arbitrum ERC-20 tokens
     var ledgerAssets=[];
     for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="ledger"&&ptfAssets[i].contract)ledgerAssets.push(ptfAssets[i]);}
-    // Find ETH asset for eth_getBalance
-    var ethAsset=null;
-    for(var e=0;e<ptfAssets.length;e++){if(ptfAssets[e].id==="eth"&&ptfAssets[e].source==="ledger"){ethAsset=ptfAssets[e];break;}}
     var idx=0;
     function nextBalance(){
-      if(idx>=ledgerAssets.length){
-        // After ERC-20s, check ETH balance
-        if(ethAsset){
-          try{
-            batchRpc([{jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:0}]).then(function(res){
-              if(res&&res[0]&&res[0].result){
-                var bal=parseInt(res[0].result,16)/1e18;
-                if(bal<=0&&ethAsset.amount>0){console.log("PTF balance: ETH returned 0, keeping stored "+ethAsset.amount);}
-                else if(bal>0&&Math.abs(bal-ethAsset.amount)/Math.max(ethAsset.amount,0.0001)>0.001){
-                  console.log("PTF balance: ETH updated "+ethAsset.amount+" → "+bal);
-                  ethAsset.amount=bal;changed=true;updates++;
-                }
-              }
-              finishBalances();
-            }).catch(function(){finishBalances();});
-          }catch(e3){finishBalances();}
-        }else{finishBalances();}
-        return;
-      }
+      if(idx>=ledgerAssets.length){checkEthMainnet();return;}
       var a=ledgerAssets[idx];idx++;
       try{
         rpc(a.contract,bof(PTF_LEDGER_WALLET)).then(function(hex){
@@ -1615,11 +1596,37 @@ function ptfDetectBalances(){
         }).catch(function(){nextBalance();});
       }catch(e2){nextBalance();}
     }
+    // Step 2: ETH via Mainnet RPC (separate from Arbitrum)
+    function checkEthMainnet(){
+      var ethAsset=null;
+      for(var e=0;e<ptfAssets.length;e++){if(ptfAssets[e].id==="eth"){ethAsset=ptfAssets[e];break;}}
+      if(!ethAsset){finishBalances();return;}
+      var tried=0;
+      function tryEthRpc(){
+        if(tried>=PTF_ETH_RPC.length){console.log("PTF: all Mainnet RPCs failed for ETH");finishBalances();return;}
+        var url=PTF_ETH_RPC[tried];tried++;
+        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},6000);
+        fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:1}),signal:ac.signal})
+          .then(function(r){clearTimeout(tm);return r.json();})
+          .then(function(j){
+            if(j.result){
+              var bal=parseInt(j.result,16)/1e18;
+              if(bal<=0&&ethAsset.amount>0){console.log("PTF balance: ETH mainnet returned 0, keeping stored "+ethAsset.amount);}
+              else if(bal>0&&Math.abs(bal-ethAsset.amount)/Math.max(ethAsset.amount,0.0001)>0.001){
+                console.log("PTF balance: ETH mainnet updated "+ethAsset.amount+" → "+bal);
+                ethAsset.amount=bal;changed=true;updates++;
+              }
+              finishBalances();
+            }else{tryEthRpc();}
+          }).catch(function(){clearTimeout(tm);tryEthRpc();});
+      }
+      tryEthRpc();
+    }
     function finishBalances(){
       if(changed){ptfSave();ptfRenderTable();}
       console.log("PTF: balance check complete, "+updates+" updates");
     }
-    if(ledgerAssets.length===0&&!ethAsset){console.log("PTF: no ledger assets with contracts");return;}
     nextBalance();
   }catch(e){console.log("PTF detectBalances err:",e);}
 }
@@ -1898,17 +1905,10 @@ function ptfRenderAllocation(){
 function ptfSimRender(){
   try{
     if(!Array.isArray(ptfAssets)||ptfAssets.length===0)return;
-    var sims=ptfAssets.slice();
-    if(sims.length===0){
-      $("ptfSimSummary").innerHTML="";
-      $("ptfSimTableB").innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Add assets to simulate</td></tr>';
-      return;
-    }
     var rows=[],simCurVal=0,simBullVal=0;
-    for(var j=0;j<sims.length;j++){
-      var a=sims[j];
+    for(var j=0;j<ptfAssets.length;j++){
+      var a=ptfAssets[j];
       var cur=ptfGetPrice(a);
-      if(cur<=0&&a.avgEntry>0)cur=a.avgEntry;
       if(cur<=0)continue;
       var tgt=ptfSimTargets[a.id]||cur;
       if(tgt<0)tgt=0;
@@ -1919,7 +1919,7 @@ function ptfSimRender(){
       simBullVal+=a.amount*tgt;
       rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:var(--dm)">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td style="color:var(--dm)">$'+ptfFP(cur)+'</td><td><input class="inp" type="number" step="any" id="ptfSimT_'+a.id+'" value="'+tgt+'" oninput="ptfSimCalc()" style="width:80px;font-size:11px;text-align:right"></td><td><span id="ptfSimV_'+a.id+'" style="color:var(--g)">$'+F(projVal,2)+'</span></td><td><span id="ptfSimG_'+a.id+'" style="color:'+gainClr+'">'+(gain>=0?"+":"")+gain.toFixed(1)+'%</span></td></tr>');
     }
-    $("ptfSimTableB").innerHTML=rows.join("")||'<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">No assets with prices available</td></tr>';
+    $("ptfSimTableB").innerHTML=rows.join("")||'<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Waiting for prices...</td></tr>';
     var simProfit=simBullVal-simCurVal;
     var simMult=simCurVal>0?simBullVal/simCurVal:0;
     var pc=simProfit>=0?"var(--g)":"var(--r)";
@@ -1929,12 +1929,10 @@ function ptfSimRender(){
 
 function ptfSimCalc(){
   try{
-    var sims=ptfAssets.slice();
     var simCurVal=0,simBullVal=0;
-    for(var j=0;j<sims.length;j++){
-      var a=sims[j];
+    for(var j=0;j<ptfAssets.length;j++){
+      var a=ptfAssets[j];
       var cur=ptfGetPrice(a);
-      if(cur<=0&&a.avgEntry>0)cur=a.avgEntry;
       if(cur<=0)continue;
       var inp=$("ptfSimT_"+a.id);
       var tgt=cur;
