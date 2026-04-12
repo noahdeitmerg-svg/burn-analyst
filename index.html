@@ -1770,6 +1770,7 @@ function ptfRemovePurchase(id){
 
 // ═══ PORTFOLIO CHARTS ═══
 var PTF_COLORS=["#22d3ee","#34d399","#fb923c","#f87171","#c084fc","#60a5fa","#fbbf24","#a78bfa","#e879f9","#2dd4bf","#94a3b8"];
+var PTF_BULLRUN_TARGETS={eth:8000,btc:150000,link:50,ondo:3,rndr:15,mon:1.50,cfg:1.20,fet:3,aave:500,sky:0.50,cro:0.30,uni:25,arb:2,syrup:1.50,eigen:5,ar:20,tia:10,tao:1500,akt:5};
 
 function ptfSaveSnapshot(tv){
   try{
@@ -1910,7 +1911,7 @@ function ptfSimRender(){
       var a=ptfAssets[j];
       var cur=ptfGetPrice(a);
       if(cur<=0)continue;
-      var tgt=ptfSimTargets[a.id]||cur;
+      var tgt=ptfSimTargets[a.id]||PTF_BULLRUN_TARGETS[a.id]||cur;
       if(tgt<0)tgt=0;
       var projVal=a.amount*tgt;
       var gain=cur>0?((tgt-cur)/cur*100):0;
