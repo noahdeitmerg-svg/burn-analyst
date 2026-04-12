@@ -2065,15 +2065,19 @@ function ptfRenderPnlBars(){
   el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+bars+'</svg>';
 }
 
-function ptfArc(cx,cy,r,sa,ea){
-  var x1=cx+r*Math.cos(sa),y1=cy+r*Math.sin(sa);
-  var x2=cx+r*Math.cos(ea),y2=cy+r*Math.sin(ea);
+function ptfDonutArc(cx,cy,rO,rI,sa,ea){
+  if(ea-sa>=2*Math.PI)ea=sa+1.9999*Math.PI;
+  var x1o=cx+rO*Math.sin(sa),y1o=cy-rO*Math.cos(sa);
+  var x2o=cx+rO*Math.sin(ea),y2o=cy-rO*Math.cos(ea);
+  var x1i=cx+rI*Math.sin(ea),y1i=cy-rI*Math.cos(ea);
+  var x2i=cx+rI*Math.sin(sa),y2i=cy-rI*Math.cos(sa);
   var lg=(ea-sa)>Math.PI?1:0;
-  return"M"+x1.toFixed(2)+","+y1.toFixed(2)+"A"+r+","+r+" 0 "+lg+" 1 "+x2.toFixed(2)+","+y2.toFixed(2);
+  return"M"+x1o.toFixed(2)+","+y1o.toFixed(2)+" A"+rO+","+rO+" 0 "+lg+" 1 "+x2o.toFixed(2)+","+y2o.toFixed(2)+" L"+x1i.toFixed(2)+","+y1i.toFixed(2)+" A"+rI+","+rI+" 0 "+lg+" 0 "+x2i.toFixed(2)+","+y2i.toFixed(2)+" Z";
 }
 
 function ptfRenderAllocation(){
   var el=$("ptfChartAlloc");if(!el)return;
+  try{
   var items=[],totVal=0;
   for(var i=0;i<ptfAssets.length;i++){
     var a=ptfAssets[i],price=ptfGetPrice(a),val=a.amount*price;
@@ -2086,32 +2090,29 @@ function ptfRenderAllocation(){
   for(var o=10;o<items.length;o++)otherVal+=items[o].val;
   if(otherVal>0)slices.push({sym:"Others",val:otherVal});
 
-  var cx=150,cy=150,ro=130,ri=80;
-  var angle=-Math.PI/2,paths="";
+  var cx=150,cy=150,rO=120,rI=70,gap=0.02,minAng=0.05;
+  var angle=0,paths="";
   for(var s=0;s<slices.length;s++){
     var pct=slices[s].val/totVal;
-    var sweep=Math.max(pct*Math.PI*2,0.03);
-    var ea=angle+sweep;
-    var outerArc=ptfArc(cx,cy,ro,angle,ea);
-    var innerArc=ptfArc(cx,cy,ri,ea,angle);
-    var ix1=cx+ri*Math.cos(ea),iy1=cy+ri*Math.sin(ea);
-    var ox2=cx+ro*Math.cos(angle),oy2=cy+ro*Math.sin(angle);
-    var d=outerArc+"L"+ix1.toFixed(2)+","+iy1.toFixed(2)+innerArc.replace("M","")+"L"+ox2.toFixed(2)+","+oy2.toFixed(2)+"Z";
-    paths+='<path d="'+d+'" fill="'+PTF_COLORS[s%PTF_COLORS.length]+'" opacity=".85"/>';
-    angle=ea;
+    var sweep=Math.max(pct*Math.PI*2-gap,minAng);
+    var sa=angle+gap/2,ea=angle+gap/2+sweep;
+    paths+='<path d="'+ptfDonutArc(cx,cy,rO,rI,sa,ea)+'" fill="'+PTF_COLORS[s%PTF_COLORS.length]+'" opacity=".85"/>';
+    angle+=pct*Math.PI*2;
   }
-  var center='<text x="'+cx+'" y="'+(cy-6)+'" fill="#64748b" font-size="8" text-anchor="middle">Total</text>';
-  center+='<text x="'+cx+'" y="'+(cy+12)+'" fill="#e2e8f0" font-size="16" font-weight="600" text-anchor="middle">$'+F(totVal,2)+'</text>';
-
+  // Center text on top of slices
+  var center='<text x="'+cx+'" y="'+(cy-4)+'" fill="#64748b" font-size="9" text-anchor="middle" font-family="Inter,sans-serif">Total</text>';
+  center+='<text x="'+cx+'" y="'+(cy+14)+'" fill="#e2e8f0" font-size="16" font-weight="600" text-anchor="middle" font-family="JetBrains Mono,monospace">$'+Math.round(totVal).toLocaleString()+'</text>';
+  // Legend inside SVG right side
   var legend="";
+  var col1x=290,col2x=355,startY=60;
   for(var lg=0;lg<slices.length;lg++){
     var sl=slices[lg],pc=(sl.val/totVal*100).toFixed(1);
-    legend+='<div style="display:flex;align-items:center;gap:4px;font-size:9px;color:var(--tx)"><span style="width:8px;height:8px;border-radius:50%;background:'+PTF_COLORS[lg%PTF_COLORS.length]+';flex-shrink:0"></span>'+sl.sym+' <span style="color:var(--dm)">'+pc+'%</span></div>';
+    var lx=lg<6?col1x:col2x,ly=startY+(lg<6?lg:lg-6)*22;
+    legend+='<circle cx="'+(lx)+'" cy="'+(ly-3)+'" r="4" fill="'+PTF_COLORS[lg%PTF_COLORS.length]+'"/>';
+    legend+='<text x="'+(lx+8)+'" y="'+ly+'" fill="#94a3b8" font-size="9" font-family="Inter,sans-serif">'+sl.sym+' <tspan fill="#64748b">'+pc+'%</tspan></text>';
   }
-
-  el.innerHTML='<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center">'+
-    '<svg viewBox="0 0 300 300" style="width:100%;max-width:240px;height:auto">'+paths+center+'</svg>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">'+legend+'</div></div>';
+  el.innerHTML='<svg viewBox="0 0 430 300" style="width:100%;height:auto">'+paths+center+legend+'</svg>';
+  }catch(e){console.log("PTF alloc err:",e);}
 }
 
 // ═══ CYCLE SCENARIO SIMULATION ═══
