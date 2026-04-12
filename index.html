@@ -1991,9 +1991,9 @@ function ptfRenderTimeline(){
   }
   var minV=filtered[0][1],maxV=filtered[0][1];
   for(var i=1;i<filtered.length;i++){if(filtered[i][1]<minV)minV=filtered[i][1];if(filtered[i][1]>maxV)maxV=filtered[i][1];}
-  var pad=(maxV-minV)*0.05||10;minV=Math.max(0,minV-pad);maxV+=pad;
+  if(maxV-minV<20){minV=Math.max(0,minV-10);maxV+=10;}else{var pad2=(maxV-minV)*0.02;minV=Math.floor(Math.max(0,minV-pad2));maxV=Math.ceil(maxV+pad2);}
   var vRange=maxV-minV||1;
-  var W=700,H=220,px=50,py=10,cw=W-px-10,ch=180;
+  var W=700,H=220,px=55,py=10,cw=W-px-10,ch=180;
   var pts=[];
   for(var j=0;j<filtered.length;j++){
     var x=px+j/(filtered.length-1)*cw;
@@ -2003,11 +2003,11 @@ function ptfRenderTimeline(){
   var path="M"+pts.join("L");
   var fillPath=path+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z";
   var grid="";
-  for(var g=0;g<5;g++){
-    var gy=py+ch/4*g;
-    var gv=maxV-(maxV-minV)/4*g;
+  for(var g=0;g<=5;g++){
+    var gy=py+ch-ch*g/5;
+    var gv=minV+(maxV-minV)*g/5;
     grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-10)+'" y2="'+gy+'" stroke="rgba(30,41,59,.3)" stroke-dasharray="4,4"/>';
-    grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#64748b" font-size="8" text-anchor="end">$'+F(gv,0)+'</text>';
+    grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#64748b" font-size="8" text-anchor="end">$'+Math.round(gv).toLocaleString()+'</text>';
   }
   var xLabels="";
   for(var xl=0;xl<5;xl++){
@@ -2015,12 +2015,13 @@ function ptfRenderTimeline(){
     var xx=px+xi/(filtered.length-1)*cw;
     xLabels+='<text x="'+xx+'" y="'+(H-2)+'" fill="#64748b" font-size="8" text-anchor="middle">'+ptfFmtDate(filtered[xi][0],ptfChartRange)+'</text>';
   }
-  // Change indicator
   var firstV=filtered[0][1],lastV=filtered[filtered.length-1][1];
   var chgAmt=lastV-firstV,chgPct=firstV>0?(chgAmt/firstV*100):0;
   var chgClr=chgAmt>=0?"#34d399":"#f87171";
   var chgTxt=(chgAmt>=0?"+$":"-$")+F(Math.abs(chgAmt),2)+" ("+(chgPct>=0?"+":"")+chgPct.toFixed(1)+"%)";
   var lastPt=pts[pts.length-1].split(",");
+  var valLbl="$"+Math.round(lastV).toLocaleString();
+  var valY=parseFloat(lastPt[1])-8;if(valY<16)valY=parseFloat(lastPt[1])+14;
   el.innerHTML='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
     grid+xLabels+
     '<text x="'+(W-10)+'" y="16" fill="'+chgClr+'" font-size="11" text-anchor="end">'+chgTxt+'</text>'+
@@ -2028,6 +2029,7 @@ function ptfRenderTimeline(){
     '<path d="'+fillPath+'" fill="url(#ptfTlFill)"/>'+
     '<path d="'+path+'" fill="none" stroke="#22d3ee" stroke-width="2"/>'+
     '<circle cx="'+lastPt[0]+'" cy="'+lastPt[1]+'" r="4" fill="#22d3ee"/>'+
+    '<text x="'+(parseFloat(lastPt[0])-6)+'" y="'+valY+'" fill="#22d3ee" font-size="9" text-anchor="end">'+valLbl+'</text>'+
     '</svg>';
   }catch(e){console.log("PTF timeline err:",e);}
 }
