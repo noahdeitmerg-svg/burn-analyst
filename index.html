@@ -214,7 +214,13 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">Portfolio Charts</div>
     <div id="sec-ptf-charts" class="col-b">
       <div class="lb" style="margin-top:4px">Value Timeline</div>
-      <div id="ptfChartTimeline" style="margin-bottom:12px"><span style="color:var(--dm);font-size:10px">Collecting data — chart appears after first refresh cycle</span></div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="btn" id="ptfTR1d" onclick="ptfSetChartRange('1d')" style="font-size:9px;padding:2px 8px">1D</button>
+        <button class="btn" id="ptfTR7d" onclick="ptfSetChartRange('7d')" style="font-size:9px;padding:2px 8px;border-color:var(--cy)">7D</button>
+        <button class="btn" id="ptfTR1m" onclick="ptfSetChartRange('1m')" style="font-size:9px;padding:2px 8px">1M</button>
+        <button class="btn" id="ptfTR1y" onclick="ptfSetChartRange('1y')" style="font-size:9px;padding:2px 8px">1Y</button>
+      </div>
+      <div id="ptfChartTimeline" style="margin-bottom:12px"><span style="color:var(--dm);font-size:10px">Collecting data points...</span></div>
       <div class="sep" style="margin:8px 0"></div>
       <div class="lb">P&L Distribution</div>
       <div id="ptfChartPnl" style="margin-bottom:12px"></div>
@@ -1792,7 +1798,15 @@ function ptfRenderTable(){
     var totPnl=totCost>0?(totVal-totCost):0;
     var totPnlPct=totCost>0?(totPnl/totCost*100):0;
     var tc=totPnl>=0?"var(--g)":"var(--r)";
-    $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,2),"var(--br)")+MB("Total Cost","$"+F(totCost,2),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+$":"-$")+F(Math.abs(totPnl),2),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc);
+    // 24h portfolio change
+    var val24ago=0;
+    for(var ci=0;ci<sorted.length;ci++){
+      var ca=sorted[ci],cp=ptfGetPrice(ca),cc=ptfGetChange(ca);
+      if(cp>0&&cc!==null&&cc!==undefined){val24ago+=ca.amount*(cp/(1+cc/100));}else{val24ago+=ca.amount*cp;}
+    }
+    var chg24=totVal-val24ago,chg24p=val24ago>0?(chg24/val24ago*100):0;
+    var c24c=chg24>=0?"var(--g)":"var(--r)";
+    $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,2),"var(--br)")+MB("Total Cost","$"+F(totCost,2),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+$":"-$")+F(Math.abs(totPnl),2),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc)+MB("24h Change",(chg24>=0?"+$":"-$")+F(Math.abs(chg24),2)+'<div style="font-size:9px">'+(chg24p>=0?"+":"")+chg24p.toFixed(1)+"%</div>",c24c);
   }catch(e){console.log("PTF renderTable err:",e);}
   try{ptfSaveSnapshot(totVal);ptfRenderTimeline();ptfRenderPnlBars();ptfRenderAllocation();}catch(e){}
   try{ptfSimRender();ptfUpdateDropdown();}catch(e){}
@@ -1906,9 +1920,9 @@ var PTF_ETH_RATIO={bear:0.045,base:0.055,super:0.07};
 function ptfSaveSnapshot(tv){
   try{
     if(tv<=0)return;
-    if(ptfSnapshots.length>0&&Date.now()-ptfSnapshots[ptfSnapshots.length-1].ts<3600000)return;
+    if(ptfSnapshots.length>0&&Date.now()-ptfSnapshots[ptfSnapshots.length-1].ts<300000)return;
     ptfSnapshots.push({ts:Date.now(),value:tv});
-    if(ptfSnapshots.length>365)ptfSnapshots.shift();
+    if(ptfSnapshots.length>2000)ptfSnapshots.shift();
     localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));
   }catch(e){}
 }
@@ -1916,7 +1930,10 @@ function ptfSaveSnapshot(tv){
 function ptfRenderTimeline(){
   var el=$("ptfChartTimeline");if(!el)return;
   if(ptfSnapshots.length<2){el.innerHTML='<span style="color:var(--dm);font-size:10px">Not enough data yet — chart appears after 2+ snapshots</span>';return;}
-  var d=ptfSnapshots,minV=d[0].value,maxV=d[0].value;
+  // Downsample if too many points
+  var d=ptfSnapshots;
+  if(d.length>200){var step=Math.ceil(d.length/200);var ds=[d[0]];for(var si=step;si<d.length-1;si+=step)ds.push(d[si]);ds.push(d[d.length-1]);d=ds;}
+  var minV=d[0].value,maxV=d[0].value;
   for(var i=1;i<d.length;i++){if(d[i].value<minV)minV=d[i].value;if(d[i].value>maxV)maxV=d[i].value;}
   var vRange=maxV-minV||1;
   var W=700,H=200,px=50,py=20,cw=W-px-10,ch=H-py*2;
