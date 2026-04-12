@@ -209,6 +209,7 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 <div class="c" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-ptf')">Altcoin Portfolio</div>
   <div id="sec-ptf" class="col-b">
+    <div id="ptfDetectDiv"></div>
     <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
     <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">Portfolio Charts</div>
     <div id="sec-ptf-charts" class="col-b">
@@ -441,6 +442,8 @@ var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 // ═══ PORTFOLIO TERMINAL ═══
 var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={},ptfSnapshots=[];
 var PTF_LEDGER_WALLET="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
+var PTF_LEDGER_BTC_ADDR="bc1qj79tmeql5m8wqxac5wvsdkwnkns7ztyehyv5t4";
+var ptfLastBalances={eth:0,btc:0},ptfPendingDetection=null;
 var PTF_DEFAULTS=[
   {id:"link",symbol:"LINK",name:"Chainlink",geckoId:"chainlink",amount:32.0574,avgEntry:10.30,totalCost:330,source:"ledger",decimals:4,contract:"0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"},
   {id:"ondo",symbol:"ONDO",name:"Ondo Finance",geckoId:"ondo-finance",amount:650.7351,avgEntry:0.329,totalCost:214,source:"ledger",decimals:4,contract:"0x4A03F37e7d3fC243e3f99341d36f4b829BEe5E03"},
@@ -1540,6 +1543,7 @@ function ptfLoad(){try{
   if(l)ptfLedger=JSON.parse(l);
   if(t)ptfSimTargets=JSON.parse(t);
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn)ptfSnapshots=JSON.parse(sn);}catch(e){}
+  try{var lb=localStorage.getItem("ptf_last_balances");if(lb)ptfLastBalances=JSON.parse(lb);}catch(e){}
   var storedVer=localStorage.getItem("ptf_version");
   if(!storedVer||parseInt(storedVer)<PTF_VERSION){
     ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
@@ -1570,17 +1574,22 @@ function ptfFetchPrices(){
 
 var ptfLastBalanceCheck=0;
 var PTF_ETH_RPC=["https://eth.llamarpc.com","https://ethereum-rpc.publicnode.com","https://1rpc.io/eth"];
+
+// Arbitrum ERC-20 balance check (silent update, no dialog)
 function ptfDetectBalances(){
   try{
     if(Date.now()-ptfLastBalanceCheck<300000)return;
     ptfLastBalanceCheck=Date.now();
     var changed=false,updates=0;
-    // Step 1: Arbitrum ERC-20 tokens
     var ledgerAssets=[];
     for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].source==="ledger"&&ptfAssets[i].contract)ledgerAssets.push(ptfAssets[i]);}
     var idx=0;
     function nextBalance(){
-      if(idx>=ledgerAssets.length){checkEthMainnet();return;}
+      if(idx>=ledgerAssets.length){
+        if(changed){ptfSave();ptfRenderTable();}
+        console.log("PTF: arb balance check complete, "+updates+" updates");
+        return;
+      }
       var a=ledgerAssets[idx];idx++;
       try{
         rpc(a.contract,bof(PTF_LEDGER_WALLET)).then(function(hex){
@@ -1596,39 +1605,123 @@ function ptfDetectBalances(){
         }).catch(function(){nextBalance();});
       }catch(e2){nextBalance();}
     }
-    // Step 2: ETH via Mainnet RPC (separate from Arbitrum)
-    function checkEthMainnet(){
-      var ethAsset=null;
-      for(var e=0;e<ptfAssets.length;e++){if(ptfAssets[e].id==="eth"){ethAsset=ptfAssets[e];break;}}
-      if(!ethAsset){finishBalances();return;}
-      var tried=0;
-      function tryEthRpc(){
-        if(tried>=PTF_ETH_RPC.length){console.log("PTF: all Mainnet RPCs failed for ETH");finishBalances();return;}
-        var url=PTF_ETH_RPC[tried];tried++;
-        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},6000);
-        fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:1}),signal:ac.signal})
-          .then(function(r){clearTimeout(tm);return r.json();})
-          .then(function(j){
-            if(j.result){
-              var bal=parseInt(j.result,16)/1e18;
-              if(bal<=0&&ethAsset.amount>0){console.log("PTF balance: ETH mainnet returned 0, keeping stored "+ethAsset.amount);}
-              else if(bal>0&&Math.abs(bal-ethAsset.amount)/Math.max(ethAsset.amount,0.0001)>0.001){
-                console.log("PTF balance: ETH mainnet updated "+ethAsset.amount+" → "+bal);
-                ethAsset.amount=bal;changed=true;updates++;
-              }
-              finishBalances();
-            }else{tryEthRpc();}
-          }).catch(function(){clearTimeout(tm);tryEthRpc();});
-      }
-      tryEthRpc();
-    }
-    function finishBalances(){
-      if(changed){ptfSave();ptfRenderTable();}
-      console.log("PTF: balance check complete, "+updates+" updates");
-    }
     nextBalance();
   }catch(e){console.log("PTF detectBalances err:",e);}
+}
+
+// ETH (Mainnet) + BTC detection with change dialog
+var ptfLastLedgerDetect=0;
+function ptfDetectLedgerBalances(){
+  try{
+    if(Date.now()-ptfLastLedgerDetect<600000)return;
+    ptfLastLedgerDetect=Date.now();
+    // Step 1: Fetch ETH via Mainnet
+    var tried=0;
+    function fetchEth(cb){
+      if(tried>=PTF_ETH_RPC.length){cb(0);return;}
+      var url=PTF_ETH_RPC[tried];tried++;
+      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},8000);
+      fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:1}),signal:ac.signal})
+        .then(function(r){clearTimeout(tm);return r.json();})
+        .then(function(j){if(j.result){cb(parseInt(j.result,16)/1e18);}else{fetchEth(cb);}})
+        .catch(function(){clearTimeout(tm);fetchEth(cb);});
+    }
+    // Step 2: Fetch BTC via Mempool
+    function fetchBtc(cb){
+      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+      fetch("https://mempool.space/api/address/"+PTF_LEDGER_BTC_ADDR,{signal:ac.signal})
+        .then(function(r){clearTimeout(tm);return r.json();})
+        .then(function(d){
+          if(d&&d.chain_stats){
+            var sat=(d.chain_stats.funded_txo_sum||0)-(d.chain_stats.spent_txo_sum||0);
+            cb(sat/100000000);
+          }else{cb(0);}
+        }).catch(function(){clearTimeout(tm);cb(0);});
+    }
+    fetchEth(function(newEth){
+      fetchBtc(function(newBtc){
+        console.log("PTF detect: ETH="+newEth.toFixed(6)+" BTC="+newBtc.toFixed(8));
+        // Calibrate on first run
+        if(ptfLastBalances.eth===0&&ptfLastBalances.btc===0){
+          var ea=null,ba=null;
+          for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="eth")ea=ptfAssets[i];if(ptfAssets[i].id==="btc")ba=ptfAssets[i];}
+          ptfLastBalances.eth=ea?ea.amount:0;
+          ptfLastBalances.btc=ba?ba.amount:0;
+          try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
+          // Still update amounts silently on first run
+          if(ea&&newEth>0)ea.amount=newEth;
+          if(ba&&newBtc>0)ba.amount=newBtc;
+          ptfSave();ptfRenderTable();
+          console.log("PTF detect: calibrated (first run)");
+          return;
+        }
+        var changed=false;
+        // Check ETH delta
+        var ethDelta=newEth-ptfLastBalances.eth;
+        if(newEth>0&&Math.abs(ethDelta)>0.001){
+          ptfShowDetection("ETH",ethDelta,newEth);
+        }
+        // Check BTC delta
+        var btcDelta=newBtc-ptfLastBalances.btc;
+        if(newBtc>0&&Math.abs(btcDelta)>0.00001){
+          if(!ptfPendingDetection){ptfShowDetection("BTC",btcDelta,newBtc);}
+        }
+        // Update stored balances + asset amounts
+        var ea2=null,ba2=null;
+        for(var j=0;j<ptfAssets.length;j++){if(ptfAssets[j].id==="eth")ea2=ptfAssets[j];if(ptfAssets[j].id==="btc")ba2=ptfAssets[j];}
+        if(newEth>0){ptfLastBalances.eth=newEth;if(ea2)ea2.amount=newEth;}
+        if(newBtc>0){ptfLastBalances.btc=newBtc;if(ba2)ba2.amount=newBtc;}
+        ptfSave();ptfRenderTable();
+        try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
+      });
+    });
+  }catch(e){console.log("PTF detectLedger err:",e);}
+}
+
+function ptfShowDetection(symbol,delta,newBalance){
+  var isBuy=delta>0;var absDelta=Math.abs(delta);
+  var label=isBuy?"New "+symbol+" detected":symbol+" sent";
+  var sign=isBuy?"+":"-";var color=isBuy?"var(--g)":"var(--r)";
+  var bClr=isBuy?"rgba(52,211,153,.3)":"rgba(248,113,113,.3)";
+  ptfPendingDetection={symbol:symbol.toLowerCase(),delta:absDelta,isBuy:isBuy,newBalance:newBalance};
+  $("ptfDetectDiv").innerHTML=
+    '<div style="background:rgba(14,20,35,.95);border:1px solid '+bClr+';border-radius:10px;padding:14px;margin-bottom:10px">'+
+      '<div style="font-size:11px;font-weight:600;color:'+color+'">'+label+'</div>'+
+      '<div style="font-size:16px;font-weight:700;color:'+color+';margin:6px 0">'+sign+absDelta.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</div>'+
+      '<div style="display:flex;gap:6px;align-items:flex-end;margin-top:8px">'+
+        '<div><div style="font-size:8px;color:var(--dm)">'+(isBuy?'PURCHASE':'SELL')+' PRICE $</div>'+
+          '<input class="inp" id="ptfDetectPrice" type="number" step="any" style="width:100px;font-size:11px" placeholder="'+(symbol==="BTC"?'68000':'2300')+'"></div>'+
+        '<button class="btn" onclick="ptfConfirmDetection()" style="font-size:10px">'+(isBuy?'Confirm Purchase':'Confirm Sell')+'</button>'+
+        '<button class="btn" onclick="ptfDismissDetection()" style="font-size:10px;opacity:.5">Dismiss</button>'+
+      '</div>'+
+    '</div>';
+}
+
+function ptfConfirmDetection(){
+  if(!ptfPendingDetection)return;
+  var price=parseFloat($("ptfDetectPrice").value);
+  if(!price||price<=0){$("ptfDetectPrice").style.borderColor="var(--r)";return;}
+  var d=ptfPendingDetection;
+  ptfLedger.push({id:"ptx_"+Date.now(),asset:d.symbol,amount:d.delta,price:price,total:d.delta*price,
+    date:new Date().toISOString().split("T")[0],wallet:"Ledger",note:d.isBuy?"Auto detected transfer":"Auto detected outflow"});
+  // Recalc avgEntry
+  var asset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===d.symbol){asset=ptfAssets[i];break;}}
+  if(asset){
+    var entries=ptfLedger.filter(function(e){return e.asset===d.symbol;});
+    var sumCost=0,sumAmt=0;
+    for(var j=0;j<entries.length;j++){sumCost+=entries[j].total;sumAmt+=entries[j].amount;}
+    if(sumAmt>0){asset.avgEntry=sumCost/sumAmt;asset.totalCost=sumCost;}
+    asset.amount=d.newBalance;
+  }
+  ptfSave();ptfRenderTable();ptfRenderLedger();
+  console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price);
+  ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
+}
+
+function ptfDismissDetection(){
+  ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
 }
 
 function ptfFP(p){if(p>=1000)return F(p,2);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
@@ -2016,7 +2109,8 @@ function startRefresh(){
   if(_refreshId)clearInterval(_refreshId);
   _refreshId=setInterval(function(){if(document.hidden)return;_refreshCount++;
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
-    if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}} // LP + PTF refresh every 5 min
+    if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}}
+    if(_refreshCount%10===0){try{ptfDetectLedgerBalances();}catch(e){}}
     saveOffline();updateSysStatus();},60000);
 }
 function updateSysStatus(){
@@ -2031,7 +2125,7 @@ loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
-try{ptfFetchPrices();ptfDetectBalances();}catch(e){}
+try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
 </script>
