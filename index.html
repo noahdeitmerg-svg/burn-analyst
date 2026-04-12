@@ -191,15 +191,17 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 </div>
 
 <!-- ═══ WALLET TRACKER ═══ -->
-<div class="c" style="padding:10px 14px">
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <span class="lb" style="margin:0;white-space:nowrap">Wallet Tracker</span>
-    <input class="inp" id="wtInput" placeholder="0x..." style="flex:1;min-width:180px;font-size:10px;padding:4px 8px">
-    <button class="btn" id="wtBtn" onclick="wtLoad()">Load</button>
-  </div>
-  <div class="col" onclick="tog(this,'sec-wt')" style="margin-top:8px" id="wtCol">Wallet Portfolio</div>
-  <div id="sec-wt" class="col-b">
-    <div id="wtResult" style="font-size:11px"><span style="color:var(--dm)">Enter a wallet address to load portfolio</span></div>
+<div class="c">
+  <div class="col" onclick="tog(this,'sec-wt-wrap')">Wallet Tracker</div>
+  <div id="sec-wt-wrap" class="col-b">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 8px">
+      <input class="inp" id="wtInput" placeholder="0x..." style="flex:1;min-width:180px;font-size:10px;padding:4px 8px">
+      <button class="btn" id="wtBtn" onclick="wtLoad()">Load</button>
+    </div>
+    <div class="col" onclick="tog(this,'sec-wt')" style="font-size:10px" id="wtCol">Wallet Portfolio</div>
+    <div id="sec-wt" class="col-b">
+      <div id="wtResult" style="font-size:11px"><span style="color:var(--dm)">Enter a wallet address to load portfolio</span></div>
+    </div>
   </div>
 </div>
 
@@ -1575,7 +1577,7 @@ function ptfFetchBalances(){
   }catch(e){console.log("PTF fetchBalances err:",e);}
 }
 
-function ptfFP(p){if(p>=1000)return F(p,0);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
+function ptfFP(p){if(p>=1000)return F(p,2);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
 
 function ptfGetPrice(a){
   if(a.geckoId&&ptfPrices[a.geckoId])return ptfPrices[a.geckoId].usd;
