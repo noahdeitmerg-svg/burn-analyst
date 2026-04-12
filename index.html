@@ -225,7 +225,7 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     <div class="sep" style="margin:8px 0"></div>
     <div class="ov">
       <table class="mkt-tbl">
-        <thead><tr><th>Asset</th><th>Amount</th><th>Entry</th><th>Price</th><th>Value</th><th>P&L</th><th>%</th><th></th></tr></thead>
+        <thead><tr><th style="cursor:pointer" onclick="ptfSort('symbol')">Asset</th><th style="cursor:pointer" onclick="ptfSort('amount')">Amount</th><th style="cursor:pointer" onclick="ptfSort('entry')">Entry</th><th style="cursor:pointer" onclick="ptfSort('price')">Price</th><th style="cursor:pointer" onclick="ptfSort('value')">Value</th><th style="cursor:pointer" onclick="ptfSort('pnl')">P&L</th><th style="cursor:pointer" onclick="ptfSort('pct')">%</th><th></th></tr></thead>
         <tbody id="ptfTableB"></tbody>
       </table>
     </div>
@@ -262,15 +262,26 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
       <div id="ptfBuyErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
     </div>
     <div class="sep" style="margin:10px 0"></div>
-    <div class="col" onclick="tog(this,'sec-ptf-sim')">Bullrun Simulation</div>
+    <div class="col" onclick="tog(this,'sec-ptf-sim')">Cycle Scenario Simulation</div>
     <div id="sec-ptf-sim" class="col-b">
-      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Scenario projection — not financial advice</div>
+      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Risk-adjusted cycle projections — not financial advice</div>
       <div id="ptfSimSummary" class="mg" style="margin-bottom:10px"></div>
       <div class="ov">
         <table class="mkt-tbl">
-          <thead><tr><th>Asset</th><th>Amount</th><th>Current</th><th>Target</th><th>Projected</th><th>Gain</th></tr></thead>
+          <thead><tr><th>Asset</th><th style="width:30px"></th><th>Current</th><th>Bear</th><th>Base</th><th>Super</th></tr></thead>
           <tbody id="ptfSimTableB"><tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Loading prices...</td></tr></tbody>
         </table>
+      </div>
+      <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.4">Risk-adjusted = raw target × survival + current × 0.3 × (1−survival).<br>L=Large Cap M=Mid Cap S=Small Cap ?=Speculative</div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="col" onclick="tog(this,'sec-ptf-override')" style="font-size:10px">Manual Override</div>
+      <div id="sec-ptf-override" class="col-b">
+        <div class="ov">
+          <table class="mkt-tbl">
+            <thead><tr><th>Asset</th><th>Bear $</th><th>Base $</th><th>Super $</th></tr></thead>
+            <tbody id="ptfSimOverrideB"></tbody>
+          </table>
+        </div>
       </div>
     </div>
     <div class="sep" style="margin:10px 0"></div>
@@ -441,6 +452,7 @@ var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ PORTFOLIO TERMINAL ═══
 var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={},ptfSnapshots=[];
+var ptfSortCol="value",ptfSortAsc=false;
 var PTF_LEDGER_WALLET="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
 var PTF_LEDGER_BTC_ADDR="bc1qj79tmeql5m8wqxac5wvsdkwnkns7ztyehyv5t4";
 var ptfLastBalances={eth:0,btc:0},ptfPendingDetection=null;
@@ -1735,10 +1747,31 @@ function ptfGetChange(a){
   return null;
 }
 
+function ptfSort(col){
+  if(ptfSortCol===col){ptfSortAsc=!ptfSortAsc;}else{ptfSortCol=col;ptfSortAsc=col==="symbol";}
+  ptfRenderTable();
+}
+
 function ptfRenderTable(){
   try{
     var rows=[],totVal=0,totCost=0;
-    var sorted=ptfAssets.slice().sort(function(a,b){return(b.amount*ptfGetPrice(b))-(a.amount*ptfGetPrice(a));});
+    var dir=ptfSortAsc?1:-1;
+    var sorted=ptfAssets.slice().sort(function(a,b){
+      var pa=ptfGetPrice(a),pb=ptfGetPrice(b);
+      var va=a.amount*pa,vb=b.amount*pb;
+      var pnlA=a.totalCost>0?(va-a.totalCost):0,pnlB=b.totalCost>0?(vb-b.totalCost):0;
+      var pctA=a.totalCost>0?(pnlA/a.totalCost*100):0,pctB=b.totalCost>0?(pnlB/b.totalCost*100):0;
+      switch(ptfSortCol){
+        case"symbol":return dir*(a.symbol<b.symbol?-1:a.symbol>b.symbol?1:0);
+        case"amount":return dir*(a.amount-b.amount);
+        case"entry":return dir*(a.avgEntry-b.avgEntry);
+        case"price":return dir*(pa-pb);
+        case"value":return dir*(va-vb);
+        case"pnl":return dir*(pnlA-pnlB);
+        case"pct":return dir*(pctA-pctB);
+        default:return dir*(va-vb);
+      }
+    });
     for(var i=0;i<sorted.length;i++){
       var a=sorted[i],price=ptfGetPrice(a);
       var val=a.amount*price;
@@ -1863,7 +1896,12 @@ function ptfRemovePurchase(id){
 
 // ═══ PORTFOLIO CHARTS ═══
 var PTF_COLORS=["#22d3ee","#34d399","#fb923c","#f87171","#c084fc","#60a5fa","#fbbf24","#a78bfa","#e879f9","#2dd4bf","#94a3b8"];
-var PTF_BULLRUN_TARGETS={eth:8000,btc:150000,link:50,ondo:3,rndr:15,mon:1.50,cfg:1.20,fet:3,aave:500,sky:0.50,cro:0.30,uni:25,arb:2,syrup:1.50,eigen:5,ar:20,tia:10,tao:1500,akt:5};
+var PTF_CATEGORIES={btc:"large",eth:"large",link:"mid",aave:"mid",uni:"mid",arb:"small",ondo:"small",rndr:"small",fet:"small",tia:"small",tao:"mid",ar:"small",akt:"small",cro:"small",eigen:"small",cfg:"spec",mon:"spec",sky:"spec",syrup:"spec"};
+var PTF_CYCLE_MULT={large:{bear:2,base:4,super:7},mid:{bear:3,base:6,super:12},small:{bear:4,base:10,super:20},spec:{bear:2,base:15,super:40}};
+var PTF_SURVIVAL={large:0.95,mid:0.75,small:0.55,spec:0.30};
+var PTF_BTC_SCENARIOS={bear:110000,base:180000,super:300000};
+var PTF_BTC_ADJUST={bear:0.75,base:1.0,super:1.3};
+var PTF_ETH_RATIO={bear:0.045,base:0.055,super:0.07};
 
 function ptfSaveSnapshot(tv){
   try{
@@ -1995,56 +2033,76 @@ function ptfRenderAllocation(){
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px">'+legend+'</div></div>';
 }
 
-// ═══ BULLRUN SIMULATION ═══
+// ═══ CYCLE SCENARIO SIMULATION ═══
+function ptfCalcTarget(id,cur,scenario){
+  if(id==="btc")return PTF_BTC_SCENARIOS[scenario];
+  if(id==="eth")return PTF_BTC_SCENARIOS[scenario]*PTF_ETH_RATIO[scenario];
+  var cat=PTF_CATEGORIES[id]||"mid";
+  var mult=PTF_CYCLE_MULT[cat];
+  var surv=PTF_SURVIVAL[cat];
+  var adj=PTF_BTC_ADJUST[scenario];
+  var raw=cur*mult[scenario]*adj;
+  return raw*surv+cur*0.3*(1-surv);
+}
+
 function ptfSimRender(){
   try{
     if(!Array.isArray(ptfAssets)||ptfAssets.length===0)return;
-    var rows=[],simCurVal=0,simBullVal=0;
+    var rows=[],curVal=0,bearVal=0,baseVal=0,superVal=0;
+    var items=[];
     for(var j=0;j<ptfAssets.length;j++){
-      var a=ptfAssets[j];
-      var cur=ptfGetPrice(a);
+      var a=ptfAssets[j],cur=ptfGetPrice(a);
       if(cur<=0)continue;
-      var tgt=ptfSimTargets[a.id]||PTF_BULLRUN_TARGETS[a.id]||cur;
-      if(tgt<0)tgt=0;
-      var projVal=a.amount*tgt;
-      var gain=cur>0?((tgt-cur)/cur*100):0;
-      var gainClr=gain>=0?"var(--g)":"var(--r)";
-      simCurVal+=a.amount*cur;
-      simBullVal+=a.amount*tgt;
-      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:var(--dm)">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td style="color:var(--dm)">$'+ptfFP(cur)+'</td><td><input class="inp" type="number" step="any" id="ptfSimT_'+a.id+'" value="'+tgt+'" oninput="ptfSimCalc()" style="width:80px;font-size:11px;text-align:right"></td><td><span id="ptfSimV_'+a.id+'" style="color:var(--g)">$'+F(projVal,2)+'</span></td><td><span id="ptfSimG_'+a.id+'" style="color:'+gainClr+'">'+(gain>=0?"+":"")+gain.toFixed(1)+'%</span></td></tr>');
+      var cat=PTF_CATEGORIES[a.id]||"mid";
+      var tb=ptfSimTargets[a.id+"_bear"]||ptfCalcTarget(a.id,cur,"bear");
+      var tbs=ptfSimTargets[a.id+"_base"]||ptfCalcTarget(a.id,cur,"base");
+      var ts=ptfSimTargets[a.id+"_super"]||ptfCalcTarget(a.id,cur,"super");
+      var cv=a.amount*cur;
+      curVal+=cv;bearVal+=a.amount*tb;baseVal+=a.amount*tbs;superVal+=a.amount*ts;
+      items.push({a:a,cur:cur,cat:cat,bear:tb,base:tbs,super:ts,baseVal:a.amount*tbs});
+    }
+    items.sort(function(x,y){return y.baseVal-x.baseVal;});
+    var catLabels={large:"L",mid:"M",small:"S",spec:"?"};
+    var catClrs={large:"var(--cy)",mid:"var(--g)",small:"var(--o)",spec:"var(--p)"};
+    for(var i=0;i<items.length;i++){
+      var it=items[i],a2=it.a;
+      var isBtcEth=a2.id==="btc"||a2.id==="eth";
+      var bg=isBtcEth?"background:rgba(34,211,238,.04);":"";
+      var obear=ptfSimTargets[a2.id+"_bear"]?"✎ ":"";
+      var obase=ptfSimTargets[a2.id+"_base"]?"✎ ":"";
+      var osuper=ptfSimTargets[a2.id+"_super"]?"✎ ":"";
+      rows.push('<tr style="'+bg+'"><td class="bld">'+a2.symbol+'<div style="font-size:8px;color:var(--dm)">'+a2.name+'</div></td>'+
+        '<td><span class="tg" style="background:rgba(30,41,59,.4);color:'+catClrs[it.cat]+'">'+catLabels[it.cat]+'</span></td>'+
+        '<td style="color:var(--dm)">$'+ptfFP(it.cur)+'</td>'+
+        '<td style="color:var(--o)">'+obear+'$'+ptfFP(it.bear)+'<div style="font-size:8px;color:var(--dm)">×'+(it.bear/it.cur).toFixed(1)+'</div></td>'+
+        '<td style="color:var(--g)">'+obase+'$'+ptfFP(it.base)+'<div style="font-size:8px;color:var(--dm)">×'+(it.base/it.cur).toFixed(1)+'</div></td>'+
+        '<td style="color:var(--cy)">'+osuper+'$'+ptfFP(it.super)+'<div style="font-size:8px;color:var(--dm)">×'+(it.super/it.cur).toFixed(1)+'</div></td></tr>');
     }
     $("ptfSimTableB").innerHTML=rows.join("")||'<tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Waiting for prices...</td></tr>';
-    var simProfit=simBullVal-simCurVal;
-    var simMult=simCurVal>0?simBullVal/simCurVal:0;
-    var pc=simProfit>=0?"var(--g)":"var(--r)";
-    $("ptfSimSummary").innerHTML=MB("Current Value","$"+F(simCurVal,2),"var(--dm)")+MB("Bullrun Value","$"+F(simBullVal,2),"var(--g)")+MB("Projected Profit",(simProfit>=0?"+$":"-$")+F(Math.abs(simProfit),2),pc)+MB("Multiplier",simMult.toFixed(1)+"×","var(--cy)");
+    var bearM=curVal>0?bearVal/curVal:0,baseM=curVal>0?baseVal/curVal:0,superM=curVal>0?superVal/curVal:0;
+    $("ptfSimSummary").innerHTML=
+      MB("Current","$"+F(curVal,2),"var(--dm)")+
+      MB("Bear","$"+F(bearVal,2)+" · "+bearM.toFixed(1)+"×","var(--o)")+
+      MB("Base","$"+F(baseVal,2)+" · "+baseM.toFixed(1)+"×","var(--g)")+
+      MB("Super","$"+F(superVal,2)+" · "+superM.toFixed(1)+"×","var(--cy)");
+    // Override table
+    var oRows="";
+    for(var k=0;k<items.length;k++){
+      var oi=items[k],oa=oi.a;
+      oRows+='<tr><td class="bld">'+oa.symbol+'</td>'+
+        '<td><input class="inp" type="number" step="any" value="'+(ptfSimTargets[oa.id+"_bear"]||oi.bear).toFixed(2)+'" oninput="ptfSimOverride(\''+oa.id+'\',\'bear\',this.value)" style="width:70px;font-size:10px"></td>'+
+        '<td><input class="inp" type="number" step="any" value="'+(ptfSimTargets[oa.id+"_base"]||oi.base).toFixed(2)+'" oninput="ptfSimOverride(\''+oa.id+'\',\'base\',this.value)" style="width:70px;font-size:10px"></td>'+
+        '<td><input class="inp" type="number" step="any" value="'+(ptfSimTargets[oa.id+"_super"]||oi.super).toFixed(2)+'" oninput="ptfSimOverride(\''+oa.id+'\',\'super\',this.value)" style="width:70px;font-size:10px"></td></tr>';
+    }
+    $("ptfSimOverrideB").innerHTML=oRows;
   }catch(e){console.log("ptfSim render err:",e);}
 }
 
-function ptfSimCalc(){
-  try{
-    var simCurVal=0,simBullVal=0;
-    for(var j=0;j<ptfAssets.length;j++){
-      var a=ptfAssets[j];
-      var cur=ptfGetPrice(a);
-      if(cur<=0)continue;
-      var inp=$("ptfSimT_"+a.id);
-      var tgt=cur;
-      if(inp){var v=parseFloat(inp.value);if(v>0){tgt=v;ptfSimTargets[a.id]=v;}else{tgt=0;delete ptfSimTargets[a.id];}}
-      var projVal=a.amount*tgt;
-      var gain=cur>0?((tgt-cur)/cur*100):0;
-      var gainClr=gain>=0?"var(--g)":"var(--r)";
-      simCurVal+=a.amount*cur;
-      simBullVal+=a.amount*tgt;
-      var vEl=$("ptfSimV_"+a.id);if(vEl)vEl.innerHTML="$"+F(projVal,2);
-      var gEl=$("ptfSimG_"+a.id);if(gEl){gEl.style.color=gainClr;gEl.innerHTML=(gain>=0?"+":"")+gain.toFixed(1)+"%";}
-    }
-    var simProfit=simBullVal-simCurVal;
-    var simMult=simCurVal>0?simBullVal/simCurVal:0;
-    var pc=simProfit>=0?"var(--g)":"var(--r)";
-    $("ptfSimSummary").innerHTML=MB("Current Value","$"+F(simCurVal,2),"var(--dm)")+MB("Bullrun Value","$"+F(simBullVal,2),"var(--g)")+MB("Projected Profit",(simProfit>=0?"+$":"-$")+F(Math.abs(simProfit),2),pc)+MB("Multiplier",simMult.toFixed(1)+"×","var(--cy)");
-    ptfSimSave();
-  }catch(e){console.log("ptfSim calc err:",e);}
+function ptfSimOverride(assetId,scenario,value){
+  var price=parseFloat(value);
+  if(price>0){ptfSimTargets[assetId+"_"+scenario]=price;}
+  else{delete ptfSimTargets[assetId+"_"+scenario];}
+  ptfSimSave();ptfSimRender();
 }
 
 // ═══ EXPORT / IMPORT ═══
