@@ -210,6 +210,7 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   <div class="col" onclick="tog(this,'sec-ptf')">Altcoin Portfolio</div>
   <div id="sec-ptf" class="col-b">
     <div id="ptfDetectDiv"></div>
+    <div id="ptfPerformers" style="text-align:center;font-size:11px;margin-bottom:8px"></div>
     <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
     <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">Portfolio Charts</div>
     <div id="sec-ptf-charts" class="col-b">
@@ -231,7 +232,7 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     <div class="sep" style="margin:8px 0"></div>
     <div class="ov">
       <table class="mkt-tbl">
-        <thead><tr><th style="cursor:pointer" onclick="ptfSort('symbol')">Asset</th><th style="cursor:pointer" onclick="ptfSort('amount')">Amount</th><th style="cursor:pointer" onclick="ptfSort('entry')">Entry</th><th style="cursor:pointer" onclick="ptfSort('price')">Price</th><th style="cursor:pointer" onclick="ptfSort('value')">Value</th><th style="cursor:pointer" onclick="ptfSort('pnl')">P&L</th><th style="cursor:pointer" onclick="ptfSort('pct')">%</th><th></th></tr></thead>
+        <thead><tr><th style="cursor:pointer" onclick="ptfSort('symbol')">Asset</th><th style="cursor:pointer" onclick="ptfSort('amount')">Amount</th><th style="cursor:pointer" onclick="ptfSort('entry')">Entry</th><th style="cursor:pointer" onclick="ptfSort('price')">Price</th><th style="cursor:pointer" onclick="ptfSort('cost')">Cost</th><th style="cursor:pointer" onclick="ptfSort('value')">Value</th><th style="cursor:pointer" onclick="ptfSort('pnl')">P&L</th><th style="cursor:pointer" onclick="ptfSort('pct')">%</th><th></th></tr></thead>
         <tbody id="ptfTableB"></tbody>
       </table>
     </div>
@@ -458,7 +459,7 @@ var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ PORTFOLIO TERMINAL ═══
 var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={},ptfSnapshots=[];
-var ptfSortCol="value",ptfSortAsc=false;
+var ptfSortCol="value",ptfSortAsc=false,ptfTotalDisplay=0;
 var PTF_LEDGER_WALLET="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
 var PTF_LEDGER_BTC_ADDR="bc1qj79tmeql5m8wqxac5wvsdkwnkns7ztyehyv5t4";
 var ptfLastBalances={eth:0,btc:0},ptfPendingDetection=null;
@@ -775,7 +776,8 @@ function render(){
   // PRICE CIRCLES
   $("dPrice").textContent=P>0?FP(P):"";
   if(P<=0)$("dPrice").innerHTML='<span class="skel" style="width:100px;height:22px"></span>';
-  document.title=P>0?FP(P)+" | BURN Terminal":"BURN Terminal";
+  var ptfPart=typeof ptfTotalDisplay==="number"&&ptfTotalDisplay>0?" | $"+F(ptfTotalDisplay,0):"";
+  document.title=P>0?FP(P)+ptfPart+" | BURN Terminal":"BURN Terminal";
   // Pulse on price change
   if(prevPrice>0&&P!==prevPrice){var orbEl=document.querySelector(".orb-main");if(orbEl){orbEl.classList.remove("orb-pulse");void orbEl.offsetWidth;orbEl.classList.add("orb-pulse");}}
   $("dPct").innerHTML=pct?(pct>=0?"▲":"▼")+" "+Math.abs(pct).toFixed(2)+"%":"";
@@ -1772,6 +1774,7 @@ function ptfRenderTable(){
         case"amount":return dir*(a.amount-b.amount);
         case"entry":return dir*(a.avgEntry-b.avgEntry);
         case"price":return dir*(pa-pb);
+        case"cost":return dir*(a.totalCost-b.totalCost);
         case"value":return dir*(va-vb);
         case"pnl":return dir*(pnlA-pnlB);
         case"pct":return dir*(pctA-pctB);
@@ -1792,12 +1795,27 @@ function ptfRenderTable(){
       var pctH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnlPct>=0?"+":"")+pnlPct.toFixed(1)+'%</span>':"—";
       var srcClr=a.source==="ledger"?"var(--cy)":"var(--dm)";
       var actH=a.source==="ledger"?'<span class="tg" style="background:rgba(34,211,238,.1);color:var(--cy)">ledger</span>':'<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
-      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
+      var costH=a.totalCost>0?'$'+F(a.totalCost,2):"—";
+      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--dm)">'+costH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
     }
-    $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="8" style="color:var(--dm);text-align:center">No assets</td></tr>';
+    $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="9" style="color:var(--dm);text-align:center">No assets</td></tr>';
+    ptfTotalDisplay=totVal;
     var totPnl=totCost>0?(totVal-totCost):0;
     var totPnlPct=totCost>0?(totPnl/totCost*100):0;
     var tc=totPnl>=0?"var(--g)":"var(--r)";
+    // Best/worst performers
+    try{
+      var bestSym="",bestPct=-Infinity,worstSym="",worstPct=Infinity;
+      for(var pi=0;pi<sorted.length;pi++){
+        var pa2=sorted[pi];if(pa2.totalCost<=0)continue;
+        var pv=pa2.amount*ptfGetPrice(pa2);
+        var pp=(pv-pa2.totalCost)/pa2.totalCost*100;
+        if(pp>bestPct){bestPct=pp;bestSym=pa2.symbol;}
+        if(pp<worstPct){worstPct=pp;worstSym=pa2.symbol;}
+      }
+      if(bestSym)$("ptfPerformers").innerHTML='<span style="color:var(--g)">🏆 '+bestSym+' '+(bestPct>=0?"+":"")+bestPct.toFixed(1)+'%</span> <span style="color:var(--dm)"> · </span> <span style="color:var(--r)">📉 '+worstSym+' '+(worstPct>=0?"+":"")+worstPct.toFixed(1)+'%</span>';
+      else $("ptfPerformers").innerHTML="";
+    }catch(e){}
     // 24h portfolio change
     var val24ago=0;
     for(var ci=0;ci<sorted.length;ci++){
@@ -1806,7 +1824,7 @@ function ptfRenderTable(){
     }
     var chg24=totVal-val24ago,chg24p=val24ago>0?(chg24/val24ago*100):0;
     var c24c=chg24>=0?"var(--g)":"var(--r)";
-    $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,2),"var(--br)")+MB("Total Cost","$"+F(totCost,2),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+$":"-$")+F(Math.abs(totPnl),2),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc)+MB("24h Change",(chg24>=0?"+$":"-$")+F(Math.abs(chg24),2)+'<div style="font-size:9px">'+(chg24p>=0?"+":"")+chg24p.toFixed(1)+"%</div>",c24c);
+    $("ptfSummary").innerHTML=MB("Total Value","$"+F(totVal,2),"var(--br)")+MB("Invested","$"+F(totCost,2),"var(--dm)")+MB("Total P&L",(totPnl>=0?"+$":"-$")+F(Math.abs(totPnl),2),tc)+MB("P&L %",(totPnlPct>=0?"+":"")+totPnlPct.toFixed(1)+"%",tc)+MB("24h Change",(chg24>=0?"+$":"-$")+F(Math.abs(chg24),2)+'<div style="font-size:9px">'+(chg24p>=0?"+":"")+chg24p.toFixed(1)+"%</div>",c24c);
   }catch(e){console.log("PTF renderTable err:",e);}
   try{ptfSaveSnapshot(totVal);ptfRenderTimeline();ptfRenderPnlBars();ptfRenderAllocation();}catch(e){}
   try{ptfSimRender();ptfUpdateDropdown();}catch(e){}
