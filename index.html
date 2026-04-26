@@ -13,7 +13,7 @@
 <title>BURN Terminal</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
-:root{--bg:#05080f;--cd:rgba(12,18,32,.85);--bd:#1e293b;--dm:#94a3b8;--mt:#94a3b8;--tx:#cbd5e1;--br:#f1f5f9;
+:root{--bg:#05080f;--cd:rgba(12,18,32,.85);--bd:#1e293b;--dm:#e0e4ea;--mt:#eaecf0;--tx:#f0f2f5;--br:#ffffff;
 --g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--p:#c084fc;--cy:#22d3ee}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono','Courier New',monospace;font-size:13px;line-height:1.5;
@@ -322,6 +322,15 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
+<!-- ═══ WHALE ACTIVITY ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-whale')">Whale Activity</div>
+  <div id="sec-whale" class="col-b">
+    <div id="whaleSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="whaleTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Loading trades...</td></tr></tbody></table></div>
+  </div>
+</div>
+
 <!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
 <div class="c" style="border-color:#34d39920;border-left:3px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
 
@@ -331,6 +340,15 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
   <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>100%</th><th>To Fill</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr></tbody></table></div>
   <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+</div>
+
+<!-- ═══ LP P&L DETAIL ═══ -->
+<div class="c" style="border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-lppnl')">LP P&L Detail</div>
+  <div id="sec-lppnl" class="col-b">
+    <div id="lpPnlSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Range</th><th>Sold</th><th>Avg Sell</th><th>Value Now</th><th>HODL Value</th><th>IL</th><th>IL%</th><th>If Filled</th></tr></thead><tbody id="lpPnlB"></tbody></table></div>
+  </div>
 </div>
 
 <!-- ═══ 4. PORTFOLIO ═══ -->
@@ -746,6 +764,8 @@ async function fetchLPs(){
       }catch(e2){continue;}
     }
     if(newLP.length>0){
+      // Detect closed LPs before overwriting LP[]
+      try{detectClosedLPs(newLP);}catch(e){console.log("detectClose err:",e);}
       // Keep DAO Full Range, replace user LPs
       var dao=null;for(var di=0;di<LP.length;di++){if(LP[di].fr)dao=LP[di];}
       newLP.sort(function(a,b){return a.lo-b.lo;});
@@ -755,6 +775,12 @@ async function fetchLPs(){
       ALP=0;for(var ai2=0;ai2<LP.length;ai2++)if(!LP[ai2].fr)ALP+=LP[ai2].b;
       lpLive=true;
       console.log("LP[] updated from chain:",newLP.length,"positions, ALP="+ALP);
+      // Save state for next close detection
+      lpPrevious=LP.filter(function(lp){return!lp.fr;}).map(function(lp){
+        var cv2=v3(lp.b,lp.lo,lp.hi,P);
+        return{b:lp.b,lo:lp.lo,hi:lp.hi,left:cv2.left,usdc:cv2.usdc,pct:cv2.pct,ts:Date.now()};
+      });
+      try{localStorage.setItem("lp_previous",JSON.stringify(lpPrevious));}catch(e){}
       if(P>0)render();
     }
   }catch(e){console.log("fetchLPs err:",e);}}
@@ -918,6 +944,7 @@ function render(){
   $("lpB").innerHTML=lpR;
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
+  try{renderLpPnl();}catch(e){}
 
   // BUYFLOW
   var bR="";for(var i=0;i<TGT.length;i++){var tp=TGT[i],ok=tp>P&&P>0,uN=ok?Math.sqrt(K*tp)-Y:0,bB=ok?X-Math.sqrt(K/tp):0,m=P>0?tp/P:0;
@@ -967,8 +994,10 @@ function tradeRow(t){
   var wS=t.wallet.length>10?t.wallet.slice(0,6)+"…"+t.wallet.slice(-4):"—";
   var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
   var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
+  var whaleTag=t.usdc>=WHALE_MIN?"🐋 ":"";
   var wLink=t.wallet?'<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)">'+wS+'</a>':'<span style="font-size:9px;color:var(--dm)">—</span>';
-  return'<tr><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+uD+'</td><td>'+FP(t.price)+'</td><td>'+wLink+'</td></tr>';}
+  var whaleBg=t.usdc>=1000?"background:rgba(251,191,36,.04);":t.usdc>=500?"background:rgba(251,191,36,.02);":"";
+  return'<tr style="'+whaleBg+'"><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+whaleTag+uD+'</td><td>'+FP(t.price)+'</td><td>'+wLink+'</td></tr>';}
 
 function renderTrades(){
   // Top 5 always visible
@@ -982,7 +1011,9 @@ function renderTrades(){
   for(var j=start;j<Math.min(start+TRADES_PP,allTrades.length);j++)rows+=tradeRow(allTrades[j]);
   $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
-  $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;}
+  $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
+  try{renderWhales();}catch(e){}
+}
 
 function tradePg(d){tradePg_+=d;renderTrades();}
 
@@ -1022,6 +1053,7 @@ async function fetchTrades(){
       logs.reverse();
       for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
       renderTrades();
+      whaleFirstLoad=false;
       $("tLoadStat").textContent="Loaded ~"+Math.round(BLOCK_CHUNK*0.26/86400)+"d";
     }else{
       // Merge: add new trades at front, dedupe by block number
@@ -1035,7 +1067,16 @@ async function fetchTrades(){
       var top1="";if(allTrades.length>0)top1=tradeRow(allTrades[0]);
       $("tradeTop").innerHTML=top1||'';
       $("tradeCnt").textContent=allTrades.length;
-      if(added>0)renderTrades(); // only re-render pages if new trades arrived
+      if(added>0){
+        renderTrades();
+        // Whale alert for new trades
+        if(!whaleFirstLoad){
+          for(var wi2=0;wi2<added;wi2++){if(allTrades[wi2].usdc>=WHALE_MIN){
+            if(typeof beep==="function"&&typeof soundOn!=="undefined"&&soundOn)beep();
+            console.log("🐋 WHALE: "+(allTrades[wi2].isBuy?"BUY":"SELL")+" $"+allTrades[wi2].usdc.toFixed(0));break;}}
+        }
+      }
+      whaleFirstLoad=false;
     }
   }catch(e){console.log("Trades err:",e);}}
 
@@ -1534,6 +1575,135 @@ function drawSimChart(days,mom,inf,liq){
   svg+='<circle cx="'+(w-140)+'" cy="36" r="3" fill="#fb923c"/><text x="'+(w-133)+'" y="39" fill="#94a3b8" font-size="8" font-family="Inter">Liquidity</text>';
   svg+='</svg>';
   $("simChart").innerHTML=svg;
+}
+
+// ═══ LP P&L DETAIL ═══
+function renderLpPnl(){
+  try{
+    if(!$("lpPnlB")||P<=0||!LP||LP.length===0)return;
+    var rows="",tVN=0,tHV=0,tIL=0,tSold=0,tUsdc=0;
+    for(var i=0;i<LP.length;i++){
+      if(LP[i].fr)continue;
+      if(LP[i].lo<=0||LP[i].hi<=0)continue;
+      var cv=v3(LP[i].b,LP[i].lo,LP[i].hi,P);
+      var sold=LP[i].b-cv.left;
+      var avgSell=sold>0?cv.usdc/sold:0;
+      var valueNow=cv.left*P+cv.usdc;
+      var hodlValue=LP[i].b*P;
+      var il=valueNow-hodlValue;
+      var ilPct=hodlValue>0?(il/hodlValue*100):0;
+      var ff=v3(LP[i].b,LP[i].lo,LP[i].hi,LP[i].hi);
+      var rng="$"+LP[i].lo.toFixed(LP[i].lo<1?3:2)+" → $"+LP[i].hi.toFixed(2);
+      var avgClr=avgSell>P?"var(--g)":avgSell>0?"var(--r)":"var(--dm)";
+      var ilClr=il>=0?"var(--g)":"var(--r)";
+      tVN+=valueNow;tHV+=hodlValue;tIL+=il;tSold+=sold;tUsdc+=cv.usdc;
+      rows+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(sold,0)+'</td>';
+      rows+='<td style="color:'+avgClr+'">'+(sold>0?"$"+avgSell.toFixed(4):"—")+'</td>';
+      rows+='<td style="color:var(--br)">$'+F(valueNow,2)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+F(hodlValue,2)+'</td>';
+      rows+='<td style="color:'+ilClr+'">'+(il>=0?"+":"-")+"$"+F(Math.abs(il),2)+'</td>';
+      rows+='<td style="color:'+ilClr+'">'+ilPct.toFixed(1)+'%</td>';
+      rows+='<td style="color:var(--g)">$'+F(ff.usdc,0)+'</td></tr>';
+    }
+    $("lpPnlB").innerHTML=rows||'<tr><td colspan="8" style="color:var(--dm)">No active LPs</td></tr>';
+    var wAvgSell=tSold>0?tUsdc/tSold:0;
+    $("lpPnlSummary").innerHTML=MB("Value Now","$"+F(tVN,0),"var(--br)")+MB("HODL Value","$"+F(tHV,0),"var(--dm)")+
+      MB("Total IL",(tIL>=0?"+":"-")+"$"+F(Math.abs(tIL),0),tIL>=0?"var(--g)":"var(--r)")+
+      MB("Avg Sell",wAvgSell>0?"$"+wAvgSell.toFixed(4):"—","var(--cy)");
+  }catch(e){console.log("lpPnl err:",e);}
+}
+
+// ═══ WHALE TRADE DETECTOR ═══
+var WHALE_MIN=200;
+var whaleFirstLoad=true;
+
+function detectWhales(){
+  if(!allTrades||allTrades.length===0)return[];
+  return allTrades.filter(function(t){return t.usdc>=WHALE_MIN;});
+}
+
+function renderWhales(){
+  try{
+    if(!$("whaleTableB"))return;
+    var whales=detectWhales();
+    if(whales.length===0){
+      $("whaleTableB").innerHTML='<tr><td colspan="6" style="color:var(--dm);text-align:center">No whale activity detected</td></tr>';
+      $("whaleSummary").innerHTML="";
+      return;
+    }
+    var buyVol=0,sellVol=0,biggest=whales[0];
+    for(var i=0;i<whales.length;i++){
+      if(whales[i].isBuy)buyVol+=whales[i].usdc;else sellVol+=whales[i].usdc;
+      if(whales[i].usdc>biggest.usdc)biggest=whales[i];
+    }
+    $("whaleSummary").innerHTML=MB("Whale Trades",whales.length,"var(--br)")+
+      MB("Buy Volume","$"+F(buyVol,0),"var(--g)")+MB("Sell Volume","$"+F(sellVol,0),"var(--r)")+
+      MB("Biggest","$"+F(biggest.usdc,0)+" "+(biggest.isBuy?"BUY":"SELL"),biggest.isBuy?"var(--g)":"var(--r)");
+    var rows="";
+    for(var j=0;j<Math.min(20,whales.length);j++){
+      var w=whales[j];
+      var agoT=w.minAgo<1?"now":w.minAgo<60?w.minAgo+"m":w.minAgo<1440?Math.round(w.minAgo/60)+"h":Math.round(w.minAgo/1440)+"d";
+      var wS=w.wallet&&w.wallet.length>10?w.wallet.slice(0,6)+"…"+w.wallet.slice(-4):"—";
+      var wLink=w.wallet?'<a href="https://arbiscan.io/address/'+w.wallet+'" target="_blank" style="font-size:9px;color:var(--b)">'+wS+'</a>':wS;
+      var rowBg=w.usdc>1000?"background:rgba(251,191,36,.06);":w.usdc>500?"background:rgba(251,191,36,.03);":"";
+      rows+='<tr style="'+rowBg+'"><td style="color:var(--mt)">'+agoT+'</td>';
+      rows+='<td style="color:'+(w.isBuy?"var(--g)":"var(--r)")+';font-weight:600">'+(w.isBuy?"BUY":"SELL")+'</td>';
+      rows+='<td style="color:var(--o)">'+F(w.burn,0)+'</td>';
+      rows+='<td style="color:var(--g)">🐋 $'+F(w.usdc,0)+'</td>';
+      rows+='<td>'+FP(w.price)+'</td><td>'+wLink+'</td></tr>';
+    }
+    $("whaleTableB").innerHTML=rows;
+  }catch(e){console.log("renderWhales err:",e);}
+}
+
+// ═══ AUTO-DETECT CLOSED LPs ═══
+var lpPrevious=[];
+try{var lpPrevStr=localStorage.getItem("lp_previous");if(lpPrevStr)lpPrevious=JSON.parse(lpPrevStr);}catch(e){}
+var clSeen={};
+try{var csStr=localStorage.getItem("cl_seen");if(csStr)clSeen=JSON.parse(csStr);}catch(e){}
+// Load auto-detected closed positions from localStorage
+try{
+  var clStored=localStorage.getItem("cl_history");
+  if(clStored){
+    var clExtra=JSON.parse(clStored);
+    for(var ci2=0;ci2<clExtra.length;ci2++){
+      var isDupe=false;
+      for(var cj=0;cj<CL.length;cj++){if(clExtra[ci2].d===CL[cj].d&&clExtra[ci2].b===CL[cj].b&&clExtra[ci2].n===CL[cj].n){isDupe=true;break;}}
+      if(!isDupe){CL.push(clExtra[ci2]);TS+=clExtra[ci2].b;TR+=clExtra[ci2].u;}
+    }
+  }
+}catch(e){}
+
+function detectClosedLPs(newLPs){
+  if(!lpPrevious||lpPrevious.length===0)return;
+  var detected=[];
+  for(var i=0;i<lpPrevious.length;i++){
+    var prev=lpPrevious[i];
+    var found=false;
+    for(var j=0;j<newLPs.length;j++){
+      if(Math.abs(newLPs[j].lo-prev.lo)<0.001&&Math.abs(newLPs[j].hi-prev.hi)<0.001&&Math.abs(newLPs[j].b-prev.b)<prev.b*0.05){found=true;break;}
+    }
+    if(!found){
+      var key=prev.b.toFixed(0)+"_"+prev.lo.toFixed(4)+"_"+prev.hi.toFixed(4);
+      if(clSeen[key])continue;
+      var entry={
+        d:new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}),
+        b:prev.b, lo:prev.lo, hi:prev.hi,
+        u:Math.round(prev.usdc*100)/100,
+        n:"🔄 $"+prev.lo.toFixed(3)+"→$"+prev.hi.toFixed(2)+" ("+prev.pct.toFixed(0)+"% filled)",
+        left:Math.round(prev.left), pct:prev.pct
+      };
+      CL.push(entry);TS+=entry.b;TR+=entry.u;
+      detected.push(entry);
+      clSeen[key]=Date.now();
+      console.log("LP CLOSED detected: "+entry.n+" USDC earned: $"+entry.u);
+    }
+  }
+  if(detected.length>0){
+    try{localStorage.setItem("cl_history",JSON.stringify(CL.filter(function(c){return c.n&&c.n.indexOf("🔄")===0;})));
+      localStorage.setItem("cl_seen",JSON.stringify(clSeen));}catch(e){}
+    if(typeof beep==="function"&&typeof soundOn!=="undefined"&&soundOn)beep();
+  }
 }
 
 // ═══ OFFLINE CACHE ═══
