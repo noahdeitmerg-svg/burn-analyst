@@ -374,6 +374,31 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
+<!-- ═══ TAX REPORT ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-tax')">Tax Report</div>
+  <div id="sec-tax" class="col-b">
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BURN Token — Veräußerungen (Ganho de Capital)</div>
+    <div id="taxSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="col" onclick="tog(this,'sec-tax-year')" style="font-size:10px">Aufschlüsselung nach Jahr</div>
+    <div id="sec-tax-year" class="col-b">
+      <div id="taxYears" class="mg" style="margin-bottom:10px"></div>
+    </div>
+    <div class="sep" style="margin:8px 0"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <th>Verkauf</th><th>Typ</th><th>BURN</th><th>Sell Ø</th><th>Erlös</th><th>Buy Ø</th><th>Kosten</th><th>Gewinn</th><th>Gewinn %</th>
+    </tr></thead><tbody id="taxTableB"></tbody></table></div>
+    <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">
+      Kaufpreis: Durchschnittsmethode (AVG_ENTRY). Brasilien: Verkäufe unter R$35.000/Monat (~$7.000) sind von Kapitalertragssteuer befreit.<br>
+      Keine Steuerberatung — konsultiere einen Steuerberater für verbindliche Auskünfte.
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="taxExportCSV()" style="font-size:10px">Export CSV</button>
+      <button class="btn" onclick="taxExportExcel()" style="font-size:10px">Export Excel (.xls)</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ 6. CHART (collapsible) ═══ -->
 <div class="c" style="border-left:3px solid #475569">
   <div class="col" onclick="tog(this,'sec-chart')">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:12px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ GeckoTerminal</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:10px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ DexScreener</a></div>
@@ -527,7 +552,7 @@ var CL=[
   {d:"21.10.25",b:1915,lo:.1122,hi:.12203,u:217,n:"Partial"},
   {d:"01.12.25",b:8264,lo:.114,hi:.115,u:949.80,n:"Filled"},
   {d:"26.01.26",b:10195,lo:.138,hi:.14,u:1420,n:"Filled"},
-  {d:"11.04.26",b:10043,lo:.149,hi:.20,u:1630,n:"Partial (10K BURN returned)"}
+  {d:"25.04.26",b:10043,lo:.149,hi:.20,u:1630,n:"Partial (10K BURN returned)"}
 ];
 var MS=[{d:"05.12.25",b:10500,u:1196,n:"Market"}];
 var TS=0,TR=0;
@@ -556,7 +581,7 @@ var cache={P:0,stR:1,sup:null};
 // ═══ HELPERS ═══
 function $(id){return document.getElementById(id)}
 function sF(v){var n=parseFloat(v);return isFinite(n)?n:0;} // safe parseFloat — never NaN
-function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(2)+"M";if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
+function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(1)+"M";if(d===0)return(Math.round(n/10)*10).toLocaleString("en");if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
@@ -916,6 +941,7 @@ function render(){
     MB("Ø Sell Price","$"+avgSell.toFixed(4),"var(--br)"),
     MB("Realized Profit","$"+closedProfit.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}),"var(--g)"),
     MB("vs Entry",realMult>0?realMult.toFixed(1)+"x":"…",realMult>=10?"var(--g)":"var(--o)")].join("");
+  try{renderTaxReport();}catch(e){}
 
   // LP TABLE
   var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
@@ -1614,7 +1640,7 @@ function renderLpPnl(){
 }
 
 // ═══ WHALE TRADE DETECTOR ═══
-var WHALE_MIN=200;
+var WHALE_MIN=501;
 var whaleFirstLoad=true;
 
 function detectWhales(){
@@ -1654,6 +1680,185 @@ function renderWhales(){
     }
     $("whaleTableB").innerHTML=rows;
   }catch(e){console.log("renderWhales err:",e);}
+}
+
+// ═══ TAX REPORT ═══
+
+function parseDateDE(d){
+  var p=d.split(".");if(p.length!==3)return null;
+  var day=parseInt(p[0]),mon=parseInt(p[1])-1,yr=parseInt(p[2]);
+  if(yr<100)yr+=2000;
+  return new Date(yr,mon,day);
+}
+
+function renderTaxReport(){
+  try{
+    if(!$("taxTableB"))return;
+    var allSales=[];
+    for(var i=0;i<CL.length;i++){
+      var c=CL[i];
+      allSales.push({date:c.d,type:c.n&&c.n.indexOf("Market")>=0?"Market":"LP",burn:c.b,usdc:c.u,note:c.n||""});
+    }
+    for(var j=0;j<MS.length;j++){
+      var m=MS[j];
+      allSales.push({date:m.d,type:"Market",burn:m.b,usdc:m.u,note:m.n||""});
+    }
+    allSales.sort(function(a,b){var da=parseDateDE(a.date),db=parseDateDE(b.date);return da&&db?da-db:0;});
+
+    var tProceeds=0,tCost=0,tProfit=0;
+    var yearData={};
+    var rows="";
+
+    for(var k=0;k<allSales.length;k++){
+      var s=allSales[k];
+      var cost=s.burn*AVG_ENTRY;
+      var profit=s.usdc-cost;
+      var profitPct=cost>0?(profit/cost*100):0;
+      var sellDate=parseDateDE(s.date);
+      tProceeds+=s.usdc;tCost+=cost;tProfit+=profit;
+      var yr=sellDate?sellDate.getFullYear():"?";
+      if(!yearData[yr])yearData[yr]={proceeds:0,cost:0,profit:0,count:0};
+      yearData[yr].proceeds+=s.usdc;yearData[yr].cost+=cost;yearData[yr].profit+=profit;
+      yearData[yr].count++;
+      var profitClr=profit>=0?"var(--g)":"var(--r)";
+      rows+='<tr>';
+      rows+='<td style="color:var(--br);white-space:nowrap">'+s.date+'</td>';
+      rows+='<td style="color:'+(s.type==="LP"?"var(--cy)":"var(--o)")+'">'+s.type+'</td>';
+      rows+='<td style="color:var(--o)">'+F(s.burn,0)+'</td>';
+      rows+='<td>$'+s.sellPrice.toFixed(4)+'</td>';
+      rows+='<td style="color:var(--g)">$'+F(s.usdc,2)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+AVG_ENTRY.toFixed(4)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+F(cost,2)+'</td>';
+      rows+='<td style="color:'+profitClr+'">'+(profit>=0?"+":"")+"$"+F(Math.abs(profit),2)+'</td>';
+      rows+='<td style="color:'+profitClr+'">'+(profitPct>=0?"+":"")+profitPct.toFixed(0)+'%</td>';
+      rows+='</tr>';
+    }
+    var tProfitClr=tProfit>=0?"var(--g)":"var(--r)";
+    rows+='<tr style="border-top:2px solid var(--bd);background:rgba(8,12,22,.5)">';
+    rows+='<td class="bld">GESAMT</td><td></td>';
+    rows+='<td style="color:var(--o);font-weight:600">'+F(TS,0)+'</td><td></td>';
+    rows+='<td style="color:var(--g);font-weight:600">$'+F(tProceeds,2)+'</td>';
+    rows+='<td></td><td style="color:var(--dm)">$'+F(tCost,2)+'</td>';
+    rows+='<td style="color:'+tProfitClr+';font-weight:600">'+(tProfit>=0?"+":"")+"$"+F(Math.abs(tProfit),2)+'</td>';
+    rows+='<td></td></tr>';
+    $("taxTableB").innerHTML=rows;
+    $("taxSummary").innerHTML=
+      MB("Erlöse","$"+F(tProceeds,0),"var(--br)")+
+      MB("Anschaffung","$"+F(tCost,0),"var(--dm)")+
+      MB("Gewinn",(tProfit>=0?"+":"")+"$"+F(Math.abs(tProfit),0),tProfit>=0?"var(--g)":"var(--r)")+
+      MB("Gewinn %",tCost>0?((tProfit/tCost)*100).toFixed(0)+"%":"—",tProfit>=0?"var(--g)":"var(--r)");
+    var yH="";
+    var years=Object.keys(yearData).sort();
+    for(var yi=0;yi<years.length;yi++){
+      var yd=yearData[years[yi]];
+      yH+='<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:600;color:var(--br);margin-bottom:4px">'+years[yi]+' ('+yd.count+' Verkäufe)</div>';
+      yH+='<div class="mg">'+
+        MB("Erlöse","$"+F(yd.proceeds,0),"var(--br)")+
+        MB("Kosten","$"+F(yd.cost,0),"var(--dm)")+
+        MB("Gewinn",(yd.profit>=0?"+":"")+"$"+F(Math.abs(yd.profit),0),yd.profit>=0?"var(--g)":"var(--r)")+
+        '</div></div>';
+    }
+    $("taxYears").innerHTML=yH||'<span style="color:var(--dm)">Keine Daten</span>';
+  }catch(e){console.log("tax report err:",e);}
+}
+
+function taxExportCSV(){
+  try{
+    var csv="Datum;Typ;BURN;Sell Preis;Erlös;Buy Preis;Kosten;Gewinn;Gewinn %\n";
+    var allSales=[];
+    for(var i=0;i<CL.length;i++){var c=CL[i];allSales.push({date:c.d,type:"LP",burn:c.b,usdc:c.u});}
+    for(var j=0;j<MS.length;j++){var m=MS[j];allSales.push({date:m.d,type:"Market",burn:m.b,usdc:m.u});}
+    allSales.sort(function(a,b){var da=parseDateDE(a.date),db=parseDateDE(b.date);return da&&db?da-db:0;});
+    for(var k=0;k<allSales.length;k++){
+      var s=allSales[k];
+      var sellPrice=s.burn>0?s.usdc/s.burn:0;
+      var cost=s.burn*AVG_ENTRY;
+      var profit=s.usdc-cost;
+      var profitPct=cost>0?(profit/cost*100):0;
+      csv+=s.date+";"+s.type+";"+s.burn.toFixed(0)+";"+sellPrice.toFixed(6)+";"+s.usdc.toFixed(2)+";"+AVG_ENTRY.toFixed(6)+";"+cost.toFixed(2)+";"+profit.toFixed(2)+";"+profitPct.toFixed(1)+"%\n";
+    }
+    var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="burn-tax-report-"+new Date().toISOString().split("T")[0]+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("tax export err:",e);}
+}
+
+function taxExportExcel(){
+  try{
+    var curYear=new Date().getFullYear();
+    var allSales=[];
+    for(var i=0;i<CL.length;i++){var c=CL[i];allSales.push({date:c.d,type:"LP",burn:c.b,usdc:c.u,note:c.n||""});}
+    for(var j=0;j<MS.length;j++){var m=MS[j];allSales.push({date:m.d,type:"Market",burn:m.b,usdc:m.u,note:m.n||""});}
+    allSales.sort(function(a,b){var da=parseDateDE(a.date),db=parseDateDE(b.date);return da&&db?da-db:0;});
+    var css='<style>td,th{padding:4px 8px;border:1px solid #ccc;font-family:Arial;font-size:11px}th{background:#1a2744;color:#fff;font-weight:bold}.g{color:#22aa55}.r{color:#cc3333}.h{background:#f0f4ff}h2{font-family:Arial;color:#1a2744}h3{font-family:Arial;color:#334155;margin-top:20px}</style>';
+    var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8">'+css+'</head><body>';
+    html+='<h2>BURN Token — Steuerreport '+curYear+'</h2>';
+    html+='<p style="font-family:Arial;font-size:10px;color:#666">Erstellt: '+new Date().toLocaleDateString("de-DE")+'<br>Durchschnittlicher Kaufpreis: $'+AVG_ENTRY.toFixed(6)+'<br>Gesamtinvestition: $'+F(INVESTED,2)+'<br>Steuerresidenz: Brasilien</p>';
+    html+='<h3>Veräußerungen (Ganho de Capital)</h3>';
+    html+='<table><tr><th>Nr</th><th>Verkaufsdatum</th><th>Typ</th><th>BURN Menge</th><th>Verkaufspreis (Ø)</th><th>Erlös (USDC)</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten</th><th>Gewinn/Verlust</th><th>Gewinn %</th><th>Bemerkung</th></tr>';
+    var tP=0,tC=0,tG=0;
+    for(var k=0;k<allSales.length;k++){
+      var s=allSales[k];
+      var sellPrice=s.burn>0?s.usdc/s.burn:0;
+      var cost=s.burn*AVG_ENTRY;
+      var profit=s.usdc-cost;
+      var profitPct=cost>0?(profit/cost*100):0;
+      tP+=s.usdc;tC+=cost;tG+=profit;
+      html+='<tr><td>'+(k+1)+'</td><td>'+s.date+'</td><td>'+s.type+'</td>';
+      html+='<td style="text-align:right">'+(Math.round(s.burn/10)*10).toLocaleString("en")+'</td>';
+      html+='<td style="text-align:right">$'+sellPrice.toFixed(6)+'</td>';
+      html+='<td style="text-align:right" class="g">$'+s.usdc.toFixed(2)+'</td>';
+      html+='<td style="text-align:right">$'+AVG_ENTRY.toFixed(6)+'</td>';
+      html+='<td style="text-align:right">$'+cost.toFixed(2)+'</td>';
+      html+='<td style="text-align:right" class="'+(profit>=0?"g":"r")+'">'+(profit>=0?"+":"")+'$'+profit.toFixed(2)+'</td>';
+      html+='<td style="text-align:right">'+(profitPct>=0?"+":"")+profitPct.toFixed(1)+'%</td>';
+      html+='<td>'+s.note+'</td></tr>';
+    }
+    html+='<tr class="h"><td colspan="3"><b>GESAMT</b></td>';
+    html+='<td style="text-align:right"><b>'+(Math.round(TS/10)*10).toLocaleString("en")+'</b></td><td></td>';
+    html+='<td style="text-align:right" class="g"><b>$'+tP.toFixed(2)+'</b></td><td></td>';
+    html+='<td style="text-align:right"><b>$'+tC.toFixed(2)+'</b></td>';
+    html+='<td style="text-align:right" class="'+(tG>=0?"g":"r")+'"><b>'+(tG>=0?"+":"")+'$'+tG.toFixed(2)+'</b></td>';
+    html+='<td colspan="2"></td></tr></table>';
+    html+='<h3>Bestand am 31.12.'+curYear+' (Declaração DIRPF)</h3>';
+    html+='<p style="font-family:Arial;font-size:10px;color:#666">Preise zum aktuellen Zeitpunkt. Für DIRPF den Kurs am 31.12. und BCB-Wechselkurs verwenden.</p>';
+    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten</th><th>Aktueller Preis</th><th>Aktueller Wert</th><th>Unrealisierter Gewinn</th></tr>';
+    var burnPrice=P||0;
+    var burnItems=[{name:"BURN (Wallet)",amount:MY_BURN,entry:AVG_ENTRY,price:burnPrice},{name:"stBURN (Staking)",amount:MY_STBURN*stR,entry:AVG_ENTRY,price:burnPrice},{name:"BURN (in LPs)",amount:ALP,entry:AVG_ENTRY,price:burnPrice}];
+    var tHV=0,tHC=0;
+    for(var bi=0;bi<burnItems.length;bi++){var it=burnItems[bi];var val=it.amount*it.price;var cst=it.amount*it.entry;var ug=val-cst;tHV+=val;tHC+=cst;
+      html+='<tr><td>'+it.name+'</td><td style="text-align:right">'+(Math.round(it.amount/10)*10).toLocaleString("en")+'</td>';
+      html+='<td style="text-align:right">$'+it.entry.toFixed(6)+'</td><td style="text-align:right">$'+cst.toFixed(2)+'</td>';
+      html+='<td style="text-align:right">$'+FP(it.price)+'</td><td style="text-align:right" class="g">$'+val.toFixed(2)+'</td>';
+      html+='<td style="text-align:right" class="'+(ug>=0?"g":"r")+'">'+(ug>=0?"+":"")+'$'+ug.toFixed(2)+'</td></tr>';}
+    if(typeof ptfAssets!=="undefined"&&ptfAssets.length>0){
+      for(var pi=0;pi<ptfAssets.length;pi++){var pa=ptfAssets[pi];var pp=typeof ptfPrices!=="undefined"&&ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0;var pv=pa.amount*pp;var pc=pa.totalCost||0;var pg=pv-pc;tHV+=pv;tHC+=pc;
+        html+='<tr><td>'+pa.symbol+' ('+pa.name+')</td><td style="text-align:right">'+pa.amount.toFixed(pa.decimals||2)+'</td>';
+        html+='<td style="text-align:right">'+(pa.avgEntry>0?"$"+pa.avgEntry.toFixed(pa.avgEntry>100?0:pa.avgEntry>1?2:4):"—")+'</td>';
+        html+='<td style="text-align:right">'+(pc>0?"$"+pc.toFixed(2):"—")+'</td>';
+        html+='<td style="text-align:right">'+(pp>0?"$"+pp.toFixed(pp>100?0:pp>1?2:4):"—")+'</td>';
+        html+='<td style="text-align:right" class="g">'+(pv>0?"$"+pv.toFixed(2):"—")+'</td>';
+        html+='<td style="text-align:right" class="'+(pg>=0?"g":"r")+'">'+(pc>0?(pg>=0?"+":"")+"$"+pg.toFixed(2):"—")+'</td></tr>';}}
+    html+='<tr class="h"><td><b>GESAMT BESTAND</b></td><td colspan="4"></td>';
+    html+='<td style="text-align:right" class="g"><b>$'+tHV.toFixed(2)+'</b></td>';
+    html+='<td style="text-align:right" class="'+(tHV-tHC>=0?"g":"r")+'"><b>'+(tHV-tHC>=0?"+":"")+'$'+(tHV-tHC).toFixed(2)+'</b></td></tr></table>';
+    html+='<h3>Zusammenfassung '+curYear+'</h3><table>';
+    html+='<tr><th>Kategorie</th><th>Betrag (USD)</th></tr>';
+    html+='<tr><td>Realisierte Gewinne</td><td class="g">$'+tG.toFixed(2)+'</td></tr>';
+    html+='<tr><td>Gesamtportfolio Wert</td><td>$'+tHV.toFixed(2)+'</td></tr>';
+    html+='<tr><td>Gesamtinvestition</td><td>$'+INVESTED.toFixed(2)+'</td></tr></table>';
+    html+='<p style="font-family:Arial;font-size:9px;color:#999;margin-top:20px">BURN Terminal · '+new Date().toLocaleString("de-DE")+'<br>Keine Steuerberatung. Brasilien: Ganho de Capital auf Krypto, Verkäufe unter R$35.000/Monat ggf. befreit.</p>';
+    html+='</body></html>';
+    var blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel;charset=utf-8"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="BURN-Steuerreport-"+curYear+"-"+new Date().toISOString().split("T")[0]+".xls";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("tax excel export err:",e);}
 }
 
 // ═══ AUTO-DETECT CLOSED LPs ═══
