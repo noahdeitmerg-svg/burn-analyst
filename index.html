@@ -1717,6 +1717,7 @@ function renderTaxReport(){
       var cost=s.burn*AVG_ENTRY;
       var profit=s.usdc-cost;
       var profitPct=cost>0?(profit/cost*100):0;
+      var sp=s.burn>0?s.usdc/s.burn:0;
       var sellDate=parseDateDE(s.date);
       tProceeds+=s.usdc;tCost+=cost;tProfit+=profit;
       var yr=sellDate?sellDate.getFullYear():"?";
@@ -1728,7 +1729,7 @@ function renderTaxReport(){
       rows+='<td style="color:var(--br);white-space:nowrap">'+s.date+'</td>';
       rows+='<td style="color:'+(s.type==="LP"?"var(--cy)":"var(--o)")+'">'+s.type+'</td>';
       rows+='<td style="color:var(--o)">'+F(s.burn,0)+'</td>';
-      rows+='<td>$'+s.sellPrice.toFixed(4)+'</td>';
+      rows+='<td>$'+sp.toFixed(4)+'</td>';
       rows+='<td style="color:var(--g)">$'+F(s.usdc,2)+'</td>';
       rows+='<td style="color:var(--dm)">$'+AVG_ENTRY.toFixed(4)+'</td>';
       rows+='<td style="color:var(--dm)">$'+F(cost,2)+'</td>';
@@ -1857,6 +1858,83 @@ function taxExportExcel(exportYear){
     html+='<tr><td>Realisierte Gewinne</td><td class="g">$'+tG.toFixed(2)+'</td></tr>';
     html+='<tr><td>Gesamtportfolio Wert</td><td>$'+tHV.toFixed(2)+'</td></tr>';
     html+='<tr><td>Gesamtinvestition</td><td>$'+INVESTED.toFixed(2)+'</td></tr></table>';
+
+    // ═══ SHEET: Custo de Aquisição (Purchase Value 31.12) ═══
+    html+='<br><br><h2>Custo de Aquisição — Bestand am 31.12.'+curYear+'</h2>';
+    html+='<p style="font-family:Arial;font-size:10px;color:#666">Anschaffungskosten aller Positionen für DIRPF Declaração de Bens e Direitos.<br>Nur investiertes Kapital — NICHT der aktuelle Marktwert.</p>';
+    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten (USD)</th><th>Anmerkung</th></tr>';
+    var tcBurn=0;
+    var caItems=[
+      {name:"BURN (Wallet)",amount:yeHold?yeHold.MY_BURN:MY_BURN,entry:AVG_ENTRY},
+      {name:"stBURN (Staking)",amount:(yeHold?yeHold.MY_STBURN:MY_STBURN)*stR,entry:AVG_ENTRY},
+      {name:"BURN (in LPs)",amount:yeHold?yeHold.ALP:ALP,entry:AVG_ENTRY}
+    ];
+    for(var ca=0;ca<caItems.length;ca++){var ci3=caItems[ca];var caCost=ci3.amount*ci3.entry;tcBurn+=caCost;
+      html+='<tr><td>'+ci3.name+'</td><td style="text-align:right">'+(Math.round(ci3.amount/10)*10).toLocaleString("en")+'</td>';
+      html+='<td style="text-align:right">$'+ci3.entry.toFixed(6)+'</td>';
+      html+='<td style="text-align:right"><b>$'+caCost.toFixed(2)+'</b></td>';
+      html+='<td>Durchschnittsmethode</td></tr>';}
+    html+='<tr class="h"><td colspan="3"><b>BURN Gesamt</b></td><td style="text-align:right"><b>$'+tcBurn.toFixed(2)+'</b></td><td></td></tr>';
+    var tcAlt=0;
+    if(typeof ptfAssets!=="undefined"&&ptfAssets.length>0){
+      for(var ca2=0;ca2<ptfAssets.length;ca2++){var pa2=ptfAssets[ca2];var pc2=pa2.totalCost||0;tcAlt+=pc2;
+        html+='<tr><td>'+pa2.symbol+' ('+pa2.name+')</td><td style="text-align:right">'+pa2.amount.toFixed(pa2.decimals||2)+'</td>';
+        html+='<td style="text-align:right">'+(pa2.avgEntry>0?"$"+pa2.avgEntry.toFixed(pa2.avgEntry>100?0:pa2.avgEntry>1?2:4):"—")+'</td>';
+        html+='<td style="text-align:right"><b>'+(pc2>0?"$"+pc2.toFixed(2):"$0.00")+'</b></td>';
+        html+='<td>'+(pa2.source==="ledger"?"Ledger Wallet":"Manual/Exchange")+'</td></tr>';}}
+    html+='<tr class="h"><td colspan="3"><b>Altcoins Gesamt</b></td><td style="text-align:right"><b>$'+tcAlt.toFixed(2)+'</b></td><td></td></tr>';
+    html+='<tr style="background:#e8f5e9"><td colspan="3"><b style="font-size:13px">TOTAL CUSTO DE AQUISIÇÃO</b></td>';
+    html+='<td style="text-align:right;font-size:13px"><b>$'+(tcBurn+tcAlt).toFixed(2)+'</b></td>';
+    html+='<td>Für DIRPF</td></tr></table>';
+
+    // ═══ SHEET: Vendas Tributáveis (Taxable Sells >$5000/month) ═══
+    html+='<br><br><h2>Vendas Tributáveis — Monate über $5.000 / R$35.000</h2>';
+    html+='<p style="font-family:Arial;font-size:10px;color:#666">Brasilien: Ganho de Capital nur fällig wenn monatliche Verkäufe R$35.000 (~$5.000) übersteigen.<br>Nur Monate mit Verkäufen über dem Freibetrag sind hier aufgeführt.</p>';
+    var TAX_THRESHOLD=5000;
+    var monthSales={};
+    for(var ms=0;ms<allSales.length;ms++){
+      var msd=parseDateDE(allSales[ms].date);
+      if(!msd)continue;
+      var mKey=(msd.getMonth()+1).toString().padStart(2,"0")+"/"+msd.getFullYear();
+      if(!monthSales[mKey])monthSales[mKey]={proceeds:0,cost:0,profit:0,sales:[]};
+      var mCost=allSales[ms].burn*AVG_ENTRY;
+      var mProfit=allSales[ms].usdc-mCost;
+      monthSales[mKey].proceeds+=allSales[ms].usdc;
+      monthSales[mKey].cost+=mCost;
+      monthSales[mKey].profit+=mProfit;
+      monthSales[mKey].sales.push(allSales[ms]);
+    }
+    var taxableMonths=Object.keys(monthSales).filter(function(k){return monthSales[k].proceeds>=TAX_THRESHOLD;}).sort();
+    if(taxableMonths.length>0){
+      html+='<table><tr><th>Monat</th><th>Anzahl Verkäufe</th><th>Gesamterlös</th><th>Gesamtkosten</th><th>Steuerpflichtiger Gewinn</th></tr>';
+      var ttP=0,ttC=0,ttG=0;
+      for(var tm=0;tm<taxableMonths.length;tm++){
+        var md=monthSales[taxableMonths[tm]];ttP+=md.proceeds;ttC+=md.cost;ttG+=md.profit;
+        html+='<tr><td><b>'+taxableMonths[tm]+'</b></td><td style="text-align:right">'+md.sales.length+'</td>';
+        html+='<td style="text-align:right" class="g">$'+md.proceeds.toFixed(2)+'</td>';
+        html+='<td style="text-align:right">$'+md.cost.toFixed(2)+'</td>';
+        html+='<td style="text-align:right" class="'+(md.profit>=0?"g":"r")+'">'+(md.profit>=0?"+":"")+'$'+md.profit.toFixed(2)+'</td></tr>';
+        for(var tms=0;tms<md.sales.length;tms++){
+          var ts2=md.sales[tms];var tsp=ts2.burn>0?ts2.usdc/ts2.burn:0;var tsc=ts2.burn*AVG_ENTRY;var tsg=ts2.usdc-tsc;
+          html+='<tr style="background:#fff8e1"><td style="padding-left:20px;color:#666">↳ '+ts2.date+'</td><td style="color:#666">'+ts2.type+'</td>';
+          html+='<td style="text-align:right;color:#666">$'+ts2.usdc.toFixed(2)+'</td>';
+          html+='<td style="text-align:right;color:#666">$'+tsc.toFixed(2)+'</td>';
+          html+='<td style="text-align:right" class="'+(tsg>=0?"g":"r")+'">'+(tsg>=0?"+":"")+'$'+tsg.toFixed(2)+'</td></tr>';}
+      }
+      html+='<tr class="h"><td><b>TOTAL TRIBUTÁVEL</b></td><td></td>';
+      html+='<td style="text-align:right" class="g"><b>$'+ttP.toFixed(2)+'</b></td>';
+      html+='<td style="text-align:right"><b>$'+ttC.toFixed(2)+'</b></td>';
+      html+='<td style="text-align:right" class="'+(ttG>=0?"g":"r")+'"><b>'+(ttG>=0?"+":"")+'$'+ttG.toFixed(2)+'</b></td></tr></table>';
+    }else{
+      html+='<table><tr><td style="padding:12px;color:#22aa55;font-weight:bold;font-size:13px">✓ Kein Monat hat $5.000 Verkäufe überschritten — keine Ganho de Capital fällig.</td></tr></table>';
+      html+='<p style="font-family:Arial;font-size:10px;color:#666">Monatliche Verkäufe:</p><table><tr><th>Monat</th><th>Erlös</th><th>Status</th></tr>';
+      var allMonths=Object.keys(monthSales).sort();
+      for(var am=0;am<allMonths.length;am++){
+        html+='<tr><td>'+allMonths[am]+'</td><td style="text-align:right">$'+monthSales[allMonths[am]].proceeds.toFixed(2)+'</td>';
+        html+='<td class="g">Unter Freibetrag</td></tr>';}
+      html+='</table>';
+    }
+
     html+='<p style="font-family:Arial;font-size:9px;color:#999;margin-top:20px">BURN Terminal · '+new Date().toLocaleString("de-DE")+'<br>Keine Steuerberatung. Brasilien: Ganho de Capital auf Krypto, Verkäufe unter R$35.000/Monat ggf. befreit.</p>';
     html+='</body></html>';
     var blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel;charset=utf-8"});
