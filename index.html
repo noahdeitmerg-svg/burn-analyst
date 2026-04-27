@@ -139,14 +139,19 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   .mkt-tbl td{padding:5px 4px;font-size:9px}
   th{font-size:7px;padding:4px;letter-spacing:.5px}
   td{padding:4px}
-  .col{font-size:8px;letter-spacing:.8px}
+  .col{font-size:9px;letter-spacing:.8px;padding:12px 10px;min-height:44px;display:flex;align-items:center}
   .hero-row{margin-top:4px}
   .hdr h1{font-size:13px}
   .hdr{margin-bottom:6px}
-  .btn{font-size:9px;padding:4px 10px}
+  .btn{font-size:9px;padding:6px 12px;min-height:36px}
+  .inp{font-size:12px !important;padding:6px 8px !important;min-height:36px}
+  select.inp{min-height:36px}
   .sep{margin:4px 0 10px}
   .sep-sm{margin:3px 0 6px}
   .nt{font-size:8px;padding:6px}
+  .ov{-webkit-overflow-scrolling:touch;overflow-x:auto}
+  .col-b{padding:6px 0}
+  svg{max-width:100%;height:auto}
 }
 </style>
 </head>
@@ -202,6 +207,21 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     <div id="sec-wt" class="col-b">
       <div id="wtResult" style="font-size:11px"><span style="color:var(--dm)">Enter a wallet address to load portfolio</span></div>
     </div>
+  </div>
+</div>
+
+<!-- ═══ BURN PORTFOLIO (collapsible) ═══ -->
+<div class="c" style="border-left:3px solid #c084fc">
+  <div class="col" onclick="tog(this,'sec-port')">BURN Portfolio</div>
+  <div id="sec-port" class="col-b">
+    <div class="mg" id="portG1"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep-sm"></div>
+    <div class="mg" id="portG2"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep-sm"></div>
+    <div class="mg" id="portG3"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep"></div>
+    <div class="lb">stBURN Yield</div>
+    <div class="mg" id="stGrid"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
   </div>
 </div>
 
@@ -336,10 +356,12 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 
 <!-- ═══ 3. LP POSITIONS ═══ -->
 <div class="c" style="border-color:#fb923c15;border-left:3px solid #fb923c">
-  <div class="lb" style="font-size:11px;letter-spacing:1.5px">Active LP Positions</div>
-  <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
-  <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>100%</th><th>To Fill</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr></tbody></table></div>
-  <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+  <div class="col" onclick="tog(this,'sec-lps')">Active LP Positions</div>
+  <div id="sec-lps" class="col-b">
+    <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
+    <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>100%</th><th>To Fill</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr></tbody></table></div>
+    <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+  </div>
 </div>
 
 <!-- ═══ LP P&L DETAIL ═══ -->
@@ -349,19 +371,6 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     <div id="lpPnlSummary" class="mg" style="margin-bottom:10px"></div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Range</th><th>Sold</th><th>Avg Sell</th><th>Value Now</th><th>HODL Value</th><th>IL</th><th>IL%</th><th>If Filled</th></tr></thead><tbody id="lpPnlB"></tbody></table></div>
   </div>
-</div>
-
-<!-- ═══ 4. PORTFOLIO ═══ -->
-<div class="c" style="border-left:3px solid #c084fc">
-  <div class="lb">Portfolio</div>
-  <div class="mg" id="portG1"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
-  <div class="sep-sm"></div>
-  <div class="mg" id="portG2"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
-  <div class="sep-sm"></div>
-  <div class="mg" id="portG3"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
-  <div class="sep"></div>
-  <div class="lb">stBURN Yield</div>
-  <div class="mg" id="stGrid"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
 </div>
 
 <!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->
@@ -1828,63 +1837,38 @@ function taxExportExcel(exportYear){
     html+='<td style="text-align:right"><b>$'+tC.toFixed(2)+'</b></td>';
     html+='<td style="text-align:right" class="'+(tG>=0?"g":"r")+'"><b>'+(tG>=0?"+":"")+'$'+tG.toFixed(2)+'</b></td>';
     html+='<td colspan="2"></td></tr></table>';
-    html+='<h3>Bestand am 31.12.'+curYear+' (Declaração DIRPF)</h3>';
+    html+='<h3>Bestand am 31.12.'+curYear+' — Declaração DIRPF (Bens e Direitos)</h3>';
     var yeSnap=taxYearEnd[curYear.toString()];
     var yeNote=yeSnap?"Preise vom Stichtag "+yeSnap.date:"Preise zum aktuellen Zeitpunkt — für DIRPF den Kurs am 31.12. verwenden.";
     html+='<p style="font-family:Arial;font-size:10px;color:#666">'+yeNote+'<br>BCB-Wechselkurs am 31.12. für BRL-Umrechnung verwenden.</p>';
-    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten</th><th>Preis 31.12</th><th>Wert 31.12</th><th>Unrealisierter Gewinn</th></tr>';
+    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th style="background:#1a4427;color:#fff">Custo de Aquisição</th><th>Preis 31.12</th><th>Wert 31.12</th><th>Unrealisierter Gewinn</th><th>Anmerkung</th></tr>';
     var burnPrice=yeSnap?yeSnap.burnPrice:(P||0);
     var yeHold=yeSnap?yeSnap.holdings:null;
-    var burnItems=[{name:"BURN (Wallet)",amount:yeHold?yeHold.MY_BURN:MY_BURN,entry:AVG_ENTRY,price:burnPrice},{name:"stBURN (Staking)",amount:(yeHold?yeHold.MY_STBURN:MY_STBURN)*stR,entry:AVG_ENTRY,price:burnPrice},{name:"BURN (in LPs)",amount:yeHold?yeHold.ALP:ALP,entry:AVG_ENTRY,price:burnPrice}];
-    var tHV=0,tHC=0;
-    for(var bi=0;bi<burnItems.length;bi++){var it=burnItems[bi];var val=it.amount*it.price;var cst=it.amount*it.entry;var ug=val-cst;tHV+=val;tHC+=cst;
+    var burnItems=[{name:"BURN (Wallet)",amount:yeHold?yeHold.MY_BURN:MY_BURN,entry:AVG_ENTRY,price:burnPrice,note:"Durchschnittsmethode"},{name:"stBURN (Staking)",amount:(yeHold?yeHold.MY_STBURN:MY_STBURN)*stR,entry:AVG_ENTRY,price:burnPrice,note:"Durchschnittsmethode"},{name:"BURN (in LPs)",amount:yeHold?yeHold.ALP:ALP,entry:AVG_ENTRY,price:burnPrice,note:"Durchschnittsmethode"}];
+    var tHV=0,tHC=0,tcBurn=0;
+    for(var bi=0;bi<burnItems.length;bi++){var it=burnItems[bi];var val=it.amount*it.price;var cst=it.amount*it.entry;var ug=val-cst;tHV+=val;tHC+=cst;tcBurn+=cst;
       html+='<tr><td>'+it.name+'</td><td style="text-align:right">'+(Math.round(it.amount/10)*10).toLocaleString("en")+'</td>';
-      html+='<td style="text-align:right">$'+it.entry.toFixed(6)+'</td><td style="text-align:right">$'+cst.toFixed(2)+'</td>';
+      html+='<td style="text-align:right">$'+it.entry.toFixed(6)+'</td>';
+      html+='<td style="text-align:right;background:#f0fff4"><b>$'+cst.toFixed(2)+'</b></td>';
       html+='<td style="text-align:right">$'+FP(it.price)+'</td><td style="text-align:right" class="g">$'+val.toFixed(2)+'</td>';
-      html+='<td style="text-align:right" class="'+(ug>=0?"g":"r")+'">'+(ug>=0?"+":"")+'$'+ug.toFixed(2)+'</td></tr>';}
+      html+='<td style="text-align:right" class="'+(ug>=0?"g":"r")+'">'+(ug>=0?"+":"")+'$'+ug.toFixed(2)+'</td>';
+      html+='<td>'+it.note+'</td></tr>';}
+    html+='<tr class="h"><td colspan="3"><b>BURN Gesamt</b></td><td style="text-align:right;background:#e8f5e9"><b>$'+tcBurn.toFixed(2)+'</b></td><td></td><td style="text-align:right" class="g"><b>$'+(tHV).toFixed(2)+'</b></td><td></td><td></td></tr>';
+    var tcAlt=0,tAltV=0;
     if(typeof ptfAssets!=="undefined"&&ptfAssets.length>0){
-      for(var pi=0;pi<ptfAssets.length;pi++){var pa=ptfAssets[pi];var pp=yeSnap?taxGetYearEndPrice(curYear.toString(),pa.geckoId):(typeof ptfPrices!=="undefined"&&ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0);var pv=pa.amount*pp;var pc=pa.totalCost||0;var pg=pv-pc;tHV+=pv;tHC+=pc;
+      for(var pi=0;pi<ptfAssets.length;pi++){var pa=ptfAssets[pi];var pp=yeSnap?taxGetYearEndPrice(curYear.toString(),pa.geckoId):(typeof ptfPrices!=="undefined"&&ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0);var pv=pa.amount*pp;var pc=pa.totalCost||0;var pg=pv-pc;tHV+=pv;tHC+=pc;tcAlt+=pc;tAltV+=pv;
         html+='<tr><td>'+pa.symbol+' ('+pa.name+')</td><td style="text-align:right">'+pa.amount.toFixed(pa.decimals||2)+'</td>';
         html+='<td style="text-align:right">'+(pa.avgEntry>0?"$"+pa.avgEntry.toFixed(pa.avgEntry>100?0:pa.avgEntry>1?2:4):"—")+'</td>';
-        html+='<td style="text-align:right">'+(pc>0?"$"+pc.toFixed(2):"—")+'</td>';
+        html+='<td style="text-align:right;background:#f0fff4"><b>'+(pc>0?"$"+pc.toFixed(2):"$0.00")+'</b></td>';
         html+='<td style="text-align:right">'+(pp>0?"$"+pp.toFixed(pp>100?0:pp>1?2:4):"—")+'</td>';
         html+='<td style="text-align:right" class="g">'+(pv>0?"$"+pv.toFixed(2):"—")+'</td>';
-        html+='<td style="text-align:right" class="'+(pg>=0?"g":"r")+'">'+(pc>0?(pg>=0?"+":"")+"$"+pg.toFixed(2):"—")+'</td></tr>';}}
-    html+='<tr class="h"><td><b>GESAMT BESTAND</b></td><td colspan="4"></td>';
-    html+='<td style="text-align:right" class="g"><b>$'+tHV.toFixed(2)+'</b></td>';
-    html+='<td style="text-align:right" class="'+(tHV-tHC>=0?"g":"r")+'"><b>'+(tHV-tHC>=0?"+":"")+'$'+(tHV-tHC).toFixed(2)+'</b></td></tr></table>';
-    html+='<h3>Zusammenfassung '+curYear+'</h3><table>';
-    html+='<tr><th>Kategorie</th><th>Betrag (USD)</th></tr>';
-    html+='<tr><td>Realisierte Gewinne</td><td class="g">$'+tG.toFixed(2)+'</td></tr>';
-    html+='<tr><td>Gesamtportfolio Wert</td><td>$'+tHV.toFixed(2)+'</td></tr>';
-    html+='<tr><td>Gesamtinvestition</td><td>$'+INVESTED.toFixed(2)+'</td></tr></table>';
-
-    // ═══ SHEET: Custo de Aquisição (Purchase Value 31.12) ═══
-    html+='<br><br><h2>Custo de Aquisição — Bestand am 31.12.'+curYear+'</h2>';
-    html+='<p style="font-family:Arial;font-size:10px;color:#666">Anschaffungskosten aller Positionen für DIRPF Declaração de Bens e Direitos.<br>Nur investiertes Kapital — NICHT der aktuelle Marktwert.</p>';
-    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten (USD)</th><th>Anmerkung</th></tr>';
-    var tcBurn=0;
-    var caItems=[
-      {name:"BURN (Wallet)",amount:yeHold?yeHold.MY_BURN:MY_BURN,entry:AVG_ENTRY},
-      {name:"stBURN (Staking)",amount:(yeHold?yeHold.MY_STBURN:MY_STBURN)*stR,entry:AVG_ENTRY},
-      {name:"BURN (in LPs)",amount:yeHold?yeHold.ALP:ALP,entry:AVG_ENTRY}
-    ];
-    for(var ca=0;ca<caItems.length;ca++){var ci3=caItems[ca];var caCost=ci3.amount*ci3.entry;tcBurn+=caCost;
-      html+='<tr><td>'+ci3.name+'</td><td style="text-align:right">'+(Math.round(ci3.amount/10)*10).toLocaleString("en")+'</td>';
-      html+='<td style="text-align:right">$'+ci3.entry.toFixed(6)+'</td>';
-      html+='<td style="text-align:right"><b>$'+caCost.toFixed(2)+'</b></td>';
-      html+='<td>Durchschnittsmethode</td></tr>';}
-    html+='<tr class="h"><td colspan="3"><b>BURN Gesamt</b></td><td style="text-align:right"><b>$'+tcBurn.toFixed(2)+'</b></td><td></td></tr>';
-    var tcAlt=0;
-    if(typeof ptfAssets!=="undefined"&&ptfAssets.length>0){
-      for(var ca2=0;ca2<ptfAssets.length;ca2++){var pa2=ptfAssets[ca2];var pc2=pa2.totalCost||0;tcAlt+=pc2;
-        html+='<tr><td>'+pa2.symbol+' ('+pa2.name+')</td><td style="text-align:right">'+pa2.amount.toFixed(pa2.decimals||2)+'</td>';
-        html+='<td style="text-align:right">'+(pa2.avgEntry>0?"$"+pa2.avgEntry.toFixed(pa2.avgEntry>100?0:pa2.avgEntry>1?2:4):"—")+'</td>';
-        html+='<td style="text-align:right"><b>'+(pc2>0?"$"+pc2.toFixed(2):"$0.00")+'</b></td>';
-        html+='<td>'+(pa2.source==="ledger"?"Ledger Wallet":"Manual/Exchange")+'</td></tr>';}}
-    html+='<tr class="h"><td colspan="3"><b>Altcoins Gesamt</b></td><td style="text-align:right"><b>$'+tcAlt.toFixed(2)+'</b></td><td></td></tr>';
-    html+='<tr style="background:#e8f5e9"><td colspan="3"><b style="font-size:13px">TOTAL CUSTO DE AQUISIÇÃO</b></td>';
-    html+='<td style="text-align:right;font-size:13px"><b>$'+(tcBurn+tcAlt).toFixed(2)+'</b></td>';
+        html+='<td style="text-align:right" class="'+(pg>=0?"g":"r")+'">'+(pc>0?(pg>=0?"+":"")+"$"+pg.toFixed(2):"—")+'</td>';
+        html+='<td>'+(pa.source==="ledger"?"Ledger Wallet":"Manual/Exchange")+'</td></tr>';}}
+    html+='<tr class="h"><td colspan="3"><b>Altcoins Gesamt</b></td><td style="text-align:right;background:#e8f5e9"><b>$'+tcAlt.toFixed(2)+'</b></td><td></td><td style="text-align:right" class="g"><b>$'+tAltV.toFixed(2)+'</b></td><td></td><td></td></tr>';
+    html+='<tr style="background:#c8e6c9"><td colspan="3"><b style="font-size:14px">TOTAL CUSTO DE AQUISIÇÃO</b></td>';
+    html+='<td style="text-align:right;font-size:14px;background:#a5d6a7"><b>$'+(tcBurn+tcAlt).toFixed(2)+'</b></td>';
+    html+='<td></td><td style="text-align:right;font-size:14px" class="g"><b>$'+tHV.toFixed(2)+'</b></td>';
+    html+='<td style="text-align:right;font-size:14px" class="'+(tHV-tHC>=0?"g":"r")+'"><b>'+(tHV-tHC>=0?"+":"")+'$'+(tHV-tHC).toFixed(2)+'</b></td>';
     html+='<td>Für DIRPF</td></tr></table>';
 
     // ═══ SHEET: Vendas Tributáveis (Taxable Sells >$5000/month) ═══
