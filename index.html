@@ -394,8 +394,11 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
     </div>
     <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn" onclick="taxExportCSV()" style="font-size:10px">Export CSV</button>
-      <button class="btn" onclick="taxExportExcel()" style="font-size:10px">Export Excel (.xls)</button>
+      <button class="btn" onclick="taxExportExcel(2025)" style="font-size:10px">Excel 2025</button>
+      <button class="btn" onclick="taxExportExcel(2026)" style="font-size:10px">Excel 2026</button>
+      <button class="btn" onclick="taxSaveYearEnd()" style="font-size:10px;border-color:var(--o)">📸 Stichtag 31.12 speichern</button>
     </div>
+    <div id="taxYearEndStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
   </div>
 </div>
 
@@ -1786,13 +1789,14 @@ function taxExportCSV(){
   }catch(e){console.log("tax export err:",e);}
 }
 
-function taxExportExcel(){
+function taxExportExcel(exportYear){
   try{
-    var curYear=new Date().getFullYear();
+    var curYear=exportYear||new Date().getFullYear();
     var allSales=[];
     for(var i=0;i<CL.length;i++){var c=CL[i];allSales.push({date:c.d,type:"LP",burn:c.b,usdc:c.u,note:c.n||""});}
     for(var j=0;j<MS.length;j++){var m=MS[j];allSales.push({date:m.d,type:"Market",burn:m.b,usdc:m.u,note:m.n||""});}
     allSales.sort(function(a,b){var da=parseDateDE(a.date),db=parseDateDE(b.date);return da&&db?da-db:0;});
+    allSales=allSales.filter(function(s){var sd=parseDateDE(s.date);return sd&&sd.getFullYear()===curYear;});
     var css='<style>td,th{padding:4px 8px;border:1px solid #ccc;font-family:Arial;font-size:11px}th{background:#1a2744;color:#fff;font-weight:bold}.g{color:#22aa55}.r{color:#cc3333}.h{background:#f0f4ff}h2{font-family:Arial;color:#1a2744}h3{font-family:Arial;color:#334155;margin-top:20px}</style>';
     var html='<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8">'+css+'</head><body>';
     html+='<h2>BURN Token — Steuerreport '+curYear+'</h2>';
@@ -1824,10 +1828,13 @@ function taxExportExcel(){
     html+='<td style="text-align:right" class="'+(tG>=0?"g":"r")+'"><b>'+(tG>=0?"+":"")+'$'+tG.toFixed(2)+'</b></td>';
     html+='<td colspan="2"></td></tr></table>';
     html+='<h3>Bestand am 31.12.'+curYear+' (Declaração DIRPF)</h3>';
-    html+='<p style="font-family:Arial;font-size:10px;color:#666">Preise zum aktuellen Zeitpunkt. Für DIRPF den Kurs am 31.12. und BCB-Wechselkurs verwenden.</p>';
-    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten</th><th>Aktueller Preis</th><th>Aktueller Wert</th><th>Unrealisierter Gewinn</th></tr>';
-    var burnPrice=P||0;
-    var burnItems=[{name:"BURN (Wallet)",amount:MY_BURN,entry:AVG_ENTRY,price:burnPrice},{name:"stBURN (Staking)",amount:MY_STBURN*stR,entry:AVG_ENTRY,price:burnPrice},{name:"BURN (in LPs)",amount:ALP,entry:AVG_ENTRY,price:burnPrice}];
+    var yeSnap=taxYearEnd[curYear.toString()];
+    var yeNote=yeSnap?"Preise vom Stichtag "+yeSnap.date:"Preise zum aktuellen Zeitpunkt — für DIRPF den Kurs am 31.12. verwenden.";
+    html+='<p style="font-family:Arial;font-size:10px;color:#666">'+yeNote+'<br>BCB-Wechselkurs am 31.12. für BRL-Umrechnung verwenden.</p>';
+    html+='<table><tr><th>Asset</th><th>Menge</th><th>Kaufpreis (Ø)</th><th>Anschaffungskosten</th><th>Preis 31.12</th><th>Wert 31.12</th><th>Unrealisierter Gewinn</th></tr>';
+    var burnPrice=yeSnap?yeSnap.burnPrice:(P||0);
+    var yeHold=yeSnap?yeSnap.holdings:null;
+    var burnItems=[{name:"BURN (Wallet)",amount:yeHold?yeHold.MY_BURN:MY_BURN,entry:AVG_ENTRY,price:burnPrice},{name:"stBURN (Staking)",amount:(yeHold?yeHold.MY_STBURN:MY_STBURN)*stR,entry:AVG_ENTRY,price:burnPrice},{name:"BURN (in LPs)",amount:yeHold?yeHold.ALP:ALP,entry:AVG_ENTRY,price:burnPrice}];
     var tHV=0,tHC=0;
     for(var bi=0;bi<burnItems.length;bi++){var it=burnItems[bi];var val=it.amount*it.price;var cst=it.amount*it.entry;var ug=val-cst;tHV+=val;tHC+=cst;
       html+='<tr><td>'+it.name+'</td><td style="text-align:right">'+(Math.round(it.amount/10)*10).toLocaleString("en")+'</td>';
@@ -1835,7 +1842,7 @@ function taxExportExcel(){
       html+='<td style="text-align:right">$'+FP(it.price)+'</td><td style="text-align:right" class="g">$'+val.toFixed(2)+'</td>';
       html+='<td style="text-align:right" class="'+(ug>=0?"g":"r")+'">'+(ug>=0?"+":"")+'$'+ug.toFixed(2)+'</td></tr>';}
     if(typeof ptfAssets!=="undefined"&&ptfAssets.length>0){
-      for(var pi=0;pi<ptfAssets.length;pi++){var pa=ptfAssets[pi];var pp=typeof ptfPrices!=="undefined"&&ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0;var pv=pa.amount*pp;var pc=pa.totalCost||0;var pg=pv-pc;tHV+=pv;tHC+=pc;
+      for(var pi=0;pi<ptfAssets.length;pi++){var pa=ptfAssets[pi];var pp=yeSnap?taxGetYearEndPrice(curYear.toString(),pa.geckoId):(typeof ptfPrices!=="undefined"&&ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0);var pv=pa.amount*pp;var pc=pa.totalCost||0;var pg=pv-pc;tHV+=pv;tHC+=pc;
         html+='<tr><td>'+pa.symbol+' ('+pa.name+')</td><td style="text-align:right">'+pa.amount.toFixed(pa.decimals||2)+'</td>';
         html+='<td style="text-align:right">'+(pa.avgEntry>0?"$"+pa.avgEntry.toFixed(pa.avgEntry>100?0:pa.avgEntry>1?2:4):"—")+'</td>';
         html+='<td style="text-align:right">'+(pc>0?"$"+pc.toFixed(2):"—")+'</td>';
@@ -1860,6 +1867,62 @@ function taxExportExcel(){
     URL.revokeObjectURL(url);
   }catch(e){console.log("tax excel export err:",e);}
 }
+
+// ═══ TAX YEAR-END SNAPSHOTS ═══
+var taxYearEnd={};
+try{var tyeStr=localStorage.getItem("tax_yearend");if(tyeStr)taxYearEnd=JSON.parse(tyeStr);}catch(e){}
+
+// Hardcoded 31.12.2025 prices (approximate, from market data)
+if(!taxYearEnd["2025"]){
+  taxYearEnd["2025"]={
+    date:"31.12.2025",
+    burnPrice:0.130,
+    holdings:{MY_BURN:450000,MY_STBURN:350000,ALP:40300},
+    altcoins:{
+      bitcoin:87502,ethereum:2900,chainlink:12.50,"ondo-finance":1.40,
+      "render-token":5.20,monad:0.25,centrifuge:0.18,"fetch-ai":1.15,
+      aave:180,"sky":0.065,"crypto-com-chain":0.09,uniswap:12.50,
+      arbitrum:0.60,"maple-finance":0.24,eigenlayer:2.80,arweave:18,
+      celestia:3.80,bittensor:380,"akash-network":2.50
+    }
+  };
+  try{localStorage.setItem("tax_yearend",JSON.stringify(taxYearEnd));}catch(e){}
+}
+
+function taxSaveYearEnd(){
+  var yr=new Date().getFullYear();
+  var snapshot={
+    date:new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric"}),
+    burnPrice:P||0,
+    holdings:{MY_BURN:MY_BURN,MY_STBURN:MY_STBURN,ALP:ALP},
+    altcoins:{}
+  };
+  if(typeof ptfPrices!=="undefined"){
+    for(var key in ptfPrices){if(ptfPrices[key]&&ptfPrices[key].usd)snapshot.altcoins[key]=ptfPrices[key].usd;}
+  }
+  taxYearEnd[yr.toString()]=snapshot;
+  try{localStorage.setItem("tax_yearend",JSON.stringify(taxYearEnd));}catch(e){}
+  $("taxYearEndStatus").innerHTML='<span style="color:var(--g)">✓ Stichtag '+yr+' gespeichert ('+snapshot.date+')</span>';
+  console.log("TAX: year-end "+yr+" saved",snapshot);
+}
+
+function taxGetYearEndPrice(yr,geckoId){
+  if(!taxYearEnd[yr]||!taxYearEnd[yr].altcoins)return 0;
+  return taxYearEnd[yr].altcoins[geckoId]||0;
+}
+
+// Auto-prompt in late December
+(function(){
+  var now=new Date();
+  if(now.getMonth()===11&&now.getDate()>=28){
+    var yr=now.getFullYear().toString();
+    if(!taxYearEnd[yr]){
+      setTimeout(function(){
+        if($("taxYearEndStatus"))$("taxYearEndStatus").innerHTML='<span style="color:var(--o)">⚠ Stichtag 31.12.'+yr+' noch nicht gespeichert — <button class="btn" onclick="taxSaveYearEnd()" style="font-size:9px">Jetzt speichern</button></span>';
+      },5000);
+    }
+  }
+})();
 
 // ═══ AUTO-DETECT CLOSED LPs ═══
 var lpPrevious=[];
