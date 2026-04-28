@@ -777,7 +777,8 @@ async function scanLiqMap(){
         "0x4b29414c800f84f27056a55298eb685f134bcff4","0xd1ea6173bfd0d53899b0203b9025edd74e783a48",
         "0xa819924301bacd2b0317fad5df9fb94ad2cd6837","0x225400f9e1d42d5caddadbfbfbed1c8d7eeab3f5",
         "0x16ca1ce02248fc59b323f21fc04425050c314f0a","0xecbcc7c2fdc04b151c9dfa8d4e2303be98a0ed61",
-        "0xc3a6f1a7261c0e8834b9f3fc8bf01b8885fc9f80","0x127b27e5d7371b2ea8c894bc9001ea2e97351b01"
+        "0xc3a6f1a7261c0e8834b9f3fc8bf01b8885fc9f80","0x127b27e5d7371b2ea8c894bc9001ea2e97351b01",
+        "0xa1c962c04c8dce9121b321ca1e97fee414aaf57c"
       ];
       for(var bh=0;bh<BURN_HOLDERS.length;bh++){walSet[BURN_HOLDERS[bh]]=1;}
       // Also add known addresses and trade wallets
