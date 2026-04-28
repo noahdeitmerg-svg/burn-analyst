@@ -996,12 +996,18 @@ function renderLmap(buckets){
         // Calculate BURN deposited using wtLiqToBurn with original ticks
         var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
         try{
-          if(lp.tL!==undefined&&lp.tU!==undefined){
+          if(lp.tL!==undefined&&lp.tU!==undefined&&!isFullRange){
             burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
+            console.log("LMAP render: "+lp.owner.slice(0,8)+" tL="+lp.tL+" tU="+lp.tU+" liq="+lp.liq+" → burnDep="+burnDep);
           }
-          if(burnDep>0&&P>0&&!isFullRange){var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;}
-          else if(isFullRange&&P>0){lpUsdc=burnDep*P;lpLeft=burnDep;}
-        }catch(e){}
+          if(isFullRange){
+            // Full Range: estimate from pool reserves proportional to liquidity
+            burnDep=tB>0?tB:0;
+            lpLeft=burnDep;lpUsdc=burnDep*P;
+          } else if(burnDep>0&&P>0){
+            var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
+          }
+        }catch(e){console.log("LMAP render calc err:",e);}
         var isInRange=P>=lp.lo&&P<lp.hi;
         var barPct=maxLiq>0?Math.round(lp.liq/maxLiq*100):100;
         var barClr=isInRange?"var(--o)":"var(--g)";
