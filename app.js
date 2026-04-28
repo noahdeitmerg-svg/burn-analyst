@@ -1040,16 +1040,20 @@ async function wtLoad(){
         if(t0.toLowerCase()!==uLow||t1.toLowerCase()!==bLow){console.log("WT NFT["+i+"] SKIP: not BURN/USDC");continue;}
         var tL=wtI24(d.slice(378,384)),tU=wtI24(d.slice(442,448));
         var liq=BigInt("0x"+d.slice(448,512));
-        console.log("WT NFT["+i+"] ticks:",tL,tU,"liq:",liq.toString());
-        if(liq<=0n){console.log("WT NFT["+i+"] SKIP: zero liquidity");continue;}
+        var isClosed=liq<=0n;
+        console.log("WT NFT["+i+"] ticks:",tL,tU,"liq:",liq.toString(),isClosed?"(CLOSED)":"");
         var pHi=wtTickToPrice(tL),pLo=wtTickToPrice(tU);
         console.log("WT NFT["+i+"] prices: $"+pLo.toFixed(4)+" → $"+pHi.toFixed(4));
         if(pLo<=0||pHi<=pLo){console.log("WT NFT["+i+"] SKIP: invalid prices");continue;}
+        if(isClosed){
+          lps.push({lo:pLo,hi:pHi,burn:0,left:0,usdc:0,pct:0,id:tId.toString(),closed:true});
+          continue;
+        }
         var bDep=wtLiqToBurn(Number(liq),tL,tU);
         console.log("WT NFT["+i+"] BURN deposited:",bDep.toFixed(0));
         if(bDep<=0)continue;
         var cv=v3(bDep,pLo,pHi,P);
-        lps.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,id:tId.toString()});
+        lps.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,id:tId.toString(),closed:false});
       }catch(e2){console.log("WT NFT["+i+"] err:",e2);continue;}
     }
     console.log("WT found",lps.length,"BURN/USDC LPs");
@@ -1069,12 +1073,17 @@ function wtRender(d){
   h+='<div class="mg">'+MB("BURN",F(d.burn,0),"var(--o)")+MB("stBURN",F(d.stBurn,0),"var(--p)")+
     MB("BURN Equiv",F(d.totalEq,0),"var(--br)")+MB("Value","$"+F(d.totalVal,0),"var(--g)")+'</div>';
   if(d.lps.length>0){
-    h+='<div style="margin-top:10px"><div class="lb">LP Positions ('+d.lps.length+')</div>';
-    h+='<div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>Deposited</th><th>Left</th><th>USDC</th><th>Filled</th></tr></thead><tbody>';
-    for(var i=0;i<d.lps.length;i++){var lp=d.lps[i];
+    var activeLps=d.lps.filter(function(l){return!l.closed;});
+    var closedLps=d.lps.filter(function(l){return l.closed;});
+    h+='<div style="margin-top:10px"><div class="lb">LP Positions ('+activeLps.length+' active, '+closedLps.length+' closed)</div>';
+    h+='<div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>Deposited</th><th>Left</th><th>USDC</th><th>Status</th></tr></thead><tbody>';
+    for(var i=0;i<activeLps.length;i++){var lp=activeLps[i];
       h+='<tr><td class="bld">$'+lp.lo.toFixed(lp.lo<1?3:2)+' → $'+lp.hi.toFixed(2)+'</td>';
       h+='<td style="color:var(--o)">'+F(lp.burn,0)+'</td><td>'+F(lp.left,0)+'</td>';
       h+='<td style="color:var(--g)">$'+F(lp.usdc,2)+'</td><td style="color:var(--cy)">'+lp.pct.toFixed(0)+'%</td></tr>';}
+    for(var i2=0;i2<closedLps.length;i2++){var clp=closedLps[i2];
+      h+='<tr style="opacity:.4"><td style="text-decoration:line-through">$'+clp.lo.toFixed(clp.lo<1?3:2)+' → $'+clp.hi.toFixed(2)+'</td>';
+      h+='<td>—</td><td>—</td><td>—</td><td style="color:var(--r);font-size:8px">CLOSED</td></tr>';}
     h+='</tbody></table></div></div>';}
   else if(d.burn<=0&&d.stBurn<=0){h+='<div style="margin-top:8px;color:var(--dm);font-size:10px">No BURN holdings found</div>';}
   $("wtResult").innerHTML=h;
