@@ -740,111 +740,158 @@ async function scanLiqMap(){
       $("lmapStatus").textContent="Read "+Math.min(b+10,tickCalls.length)+"/"+tickCalls.length+" ticks ("+tickData.length+" active)";}
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
-    // 4. Find LP owners: Pool Mint events → individual receipt fetch → NFT owners
+    // 4. Find LP owners: scan ALL BURN holders (full history) → check each for LP NFTs
     var lpOwners=[];
-    $("lmapStatus").textContent="Scanning pool Mint events...";
+    $("lmapStatus").textContent="Scanning all BURN holders...";
     try{
       var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
-      var MINT_SIG="0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde";
-      var XFER_SIG="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
-      var nfmLow=WT_NFT.toLowerCase();
-      // Step A: Get ALL Mint events from BURN/USDC pool
+      var XFER_T="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      var walSet={};
+      // Priority wallets always included
+      walSet[W_DEFI.toLowerCase()]=1;walSet[W_LEDGER.toLowerCase()]=1;
+      walSet[DAO_VAULT.toLowerCase()]=1;walSet[CONTRIB_VAULT.toLowerCase()]=1;
+      walSet[CLIENT_VAULT.toLowerCase()]=1;
+      // Trade wallets
+      for(var sw=0;sw<allTrades.length;sw++){if(allTrades[sw].wallet)walSet[allTrades[sw].wallet.toLowerCase()]=1;}
+      // Scan ALL BURN Token Transfer events — entire history
+      // BURN deployed ~2024 on Arbitrum, start from block 100M to be safe
       var bnRes2=await batchRpc([{jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:0}]);
       var headBlk=0;if(bnRes2&&bnRes2[0]&&bnRes2[0].result)headBlk=parseInt(bnRes2[0].result,16);
-      console.log("LMAP: current block="+headBlk);
-      var mintLogs=[];
       if(headBlk>0){
-        for(var mc=100000000;mc<headBlk;mc+=30000000){
+        var scanFrom=100000000;
+        var chunkSize=30000000;
+        for(var xc=scanFrom;xc<headBlk;xc+=chunkSize){
           try{
-            var mTo=Math.min(mc+30000000,headBlk);
-            var mR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[MINT_SIG],fromBlock:"0x"+mc.toString(16),toBlock:"0x"+mTo.toString(16)}],id:0}]);
-            if(mR&&mR[0]&&mR[0].result&&Array.isArray(mR[0].result)){
-              mintLogs=mintLogs.concat(mR[0].result);
-              console.log("LMAP Mint "+Math.round(mc/1e6)+"M-"+Math.round(mTo/1e6)+"M: "+mR[0].result.length+" events");
-            }else{
-              console.log("LMAP Mint "+Math.round(mc/1e6)+"M-"+Math.round(mTo/1e6)+"M: empty/error",mR?JSON.stringify(mR[0]).slice(0,200):"null");
+            var xTo=Math.min(xc+chunkSize,headBlk);
+            var xR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:BURN_TK,topics:[XFER_T],fromBlock:"0x"+xc.toString(16),toBlock:"0x"+xTo.toString(16)}],id:0}]);
+            if(xR&&xR[0]&&Array.isArray(xR[0].result)){
+              for(var xi=0;xi<xR[0].result.length;xi++){
+                var xl=xR[0].result[xi];if(!xl.topics||xl.topics.length<3)continue;
+                var xTo2="0x"+xl.topics[2].slice(26);
+                var xFrom="0x"+xl.topics[1].slice(26);
+                if(xTo2!=="0x0000000000000000000000000000000000000000")walSet[xTo2.toLowerCase()]=1;
+                if(xFrom!=="0x0000000000000000000000000000000000000000")walSet[xFrom.toLowerCase()]=1;
+              }
+              console.log("LMAP BURN transfers "+Math.round(xc/1000000)+"M-"+Math.round(xTo/1000000)+"M: "+xR[0].result.length+" events, "+Object.keys(walSet).length+" wallets");
             }
-          }catch(e3){console.log("LMAP Mint scan err:",e3.message);}
-          await new Promise(function(r){setTimeout(r,500);});
+          }catch(e3){console.log("LMAP transfer scan err:",e3.message||e3);}
+          await new Promise(function(r){setTimeout(r,400);});
+          $("lmapStatus").textContent="Scanning transfers... "+Object.keys(walSet).length+" wallets found";
         }
       }
-      console.log("LMAP: "+mintLogs.length+" total Mint events");
-      if(mintLogs.length===0){console.log("LMAP: WARNING — 0 Mint events found! Pool address: "+POOL);}
-      // Step B: Get unique tx hashes
-      var txSet={};
-      for(var ml=0;ml<mintLogs.length;ml++){if(mintLogs[ml].transactionHash)txSet[mintLogs[ml].transactionHash]=1;}
-      var txHashes=Object.keys(txSet);
-      console.log("LMAP: "+txHashes.length+" unique Mint transactions");
-      $("lmapStatus").textContent="Reading "+txHashes.length+" receipts...";
-      // Step C: Fetch INDIVIDUAL receipts (not batch — batch fails on some RPCs)
-      var tokenIds=[];
-      var walletFromTx={};
-      for(var ti=0;ti<txHashes.length;ti++){
-        try{
-          // Try each RPC individually for receipt
-          var receipt=null;
-          for(var rci=0;rci<RPC_LIST.length&&!receipt;rci++){
-            try{
-              var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},12000);
-              var rr=await fetch(RPC_LIST[rci],{method:"POST",headers:{"Content-Type":"application/json"},
-                body:JSON.stringify({jsonrpc:"2.0",method:"eth_getTransactionReceipt",params:[txHashes[ti]],id:1}),signal:ac.signal});
-              clearTimeout(tm);
-              var rj=await rr.json();
-              if(rj.result&&rj.result.logs)receipt=rj.result;
-            }catch(erc){clearTimeout(tm);}
-          }
-          if(!receipt){console.log("LMAP receipt "+ti+" failed for tx "+txHashes[ti].slice(0,10));continue;}
-          // Find NFT Transfer from 0x0 (mint) on NFM
-          for(var rli=0;rli<receipt.logs.length;rli++){
-            var rl=receipt.logs[rli];
-            if(!rl.address||!rl.topics||rl.topics.length<3)continue;
-            if(rl.address.toLowerCase()===nfmLow&&rl.topics[0]===XFER_SIG){
-              var from2="0x"+rl.topics[1].slice(26);
-              if(from2==="0x0000000000000000000000000000000000000000"){
-                var to2="0x"+rl.topics[2].slice(26).toLowerCase();
-                var nftId=rl.topics.length>=4?BigInt(rl.topics[3]):null;
-                if(nftId){tokenIds.push({id:nftId,wallet:to2});
-                  console.log("LMAP: tx "+txHashes[ti].slice(0,10)+"... → NFT #"+nftId+" minted to "+to2.slice(0,8)+"..."+to2.slice(-4));}
-              }
+      // Also scan stBURN transfers (stakers may also have LPs)
+      try{
+        for(var sc=scanFrom;sc<headBlk;sc+=50000000){
+          var scTo=Math.min(sc+50000000,headBlk);
+          var sR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:STBURN_TK,topics:[XFER_T],fromBlock:"0x"+sc.toString(16),toBlock:"0x"+scTo.toString(16)}],id:0}]);
+          if(sR&&sR[0]&&Array.isArray(sR[0].result)){
+            for(var si3=0;si3<sR[0].result.length;si3++){
+              var sl=sR[0].result[si3];if(!sl.topics||sl.topics.length<3)continue;
+              var sTo="0x"+sl.topics[2].slice(26);
+              if(sTo!=="0x0000000000000000000000000000000000000000")walSet[sTo.toLowerCase()]=1;
             }
+            console.log("LMAP stBURN transfers: +"+sR[0].result.length+" events");
           }
-          // Also capture tx.from
-          if(receipt.from)walletFromTx[receipt.from.toLowerCase()]=1;
-        }catch(eti){console.log("LMAP receipt err:",eti.message);}
-        if(ti%5===0){$("lmapStatus").textContent="Receipts "+ti+"/"+txHashes.length+" ("+tokenIds.length+" NFTs)";
-          await new Promise(function(r){setTimeout(r,200);});}
-      }
-      console.log("LMAP: "+tokenIds.length+" NFT tokenIds from receipts, "+Object.keys(walletFromTx).length+" tx senders");
-      // Step D: For each tokenId — get CURRENT owner + positions
-      $("lmapStatus").textContent="Checking "+tokenIds.length+" LP NFTs...";
-      for(var pi2=0;pi2<tokenIds.length;pi2++){
+          await new Promise(function(r){setTimeout(r,300);});
+        }
+      }catch(e3b){}
+      // Also scan Pool Mint events to catch router/aggregator wallets
+      try{
+        var MINT_SIG="0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde";
+        for(var mc=scanFrom;mc<headBlk;mc+=30000000){
+          var mTo=Math.min(mc+30000000,headBlk);
+          var mR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[MINT_SIG],fromBlock:"0x"+mc.toString(16),toBlock:"0x"+mTo.toString(16)}],id:0}]);
+          if(mR&&mR[0]&&Array.isArray(mR[0].result)){
+            // Get receipts for each mint tx to find the actual wallet
+            var mintTxs={};
+            for(var mi2=0;mi2<mR[0].result.length;mi2++){if(mR[0].result[mi2].transactionHash)mintTxs[mR[0].result[mi2].transactionHash]=1;}
+            var mtxList=Object.keys(mintTxs);
+            for(var mti=0;mti<mtxList.length;mti++){
+              try{
+                var rcpt=null;
+                for(var rci=0;rci<RPC_LIST.length&&!rcpt;rci++){
+                  try{var ac2=new AbortController();var tm2=setTimeout(function(){ac2.abort();},10000);
+                    var rr2=await fetch(RPC_LIST[rci],{method:"POST",headers:{"Content-Type":"application/json"},
+                      body:JSON.stringify({jsonrpc:"2.0",method:"eth_getTransactionReceipt",params:[mtxList[mti]],id:1}),signal:ac2.signal});
+                    clearTimeout(tm2);var rj2=await rr2.json();
+                    if(rj2.result)rcpt=rj2.result;
+                  }catch(erc2){clearTimeout(tm2);}
+                }
+                if(rcpt){
+                  if(rcpt.from)walSet[rcpt.from.toLowerCase()]=1;
+                  if(rcpt.logs){
+                    var XFER_SIG="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+                    var nfmLow=WT_NFT.toLowerCase();
+                    for(var rli=0;rli<rcpt.logs.length;rli++){
+                      var rl=rcpt.logs[rli];
+                      if(rl.address&&rl.address.toLowerCase()===nfmLow&&rl.topics&&rl.topics.length>=3&&rl.topics[0]===XFER_SIG){
+                        var to3="0x"+rl.topics[2].slice(26);
+                        walSet[to3.toLowerCase()]=1;
+                      }
+                    }
+                  }
+                }
+              }catch(emr){}
+              if(mti%3===0)await new Promise(function(r){setTimeout(r,200);});
+            }
+            console.log("LMAP Mint receipts: "+mtxList.length+" txs, "+Object.keys(walSet).length+" wallets total");
+          }
+          await new Promise(function(r){setTimeout(r,300);});
+        }
+      }catch(e3c){}
+      // Remove contracts and known non-LP addresses
+      var removeList=[POOL,DEAD_ADDR,STAKE_VAULT,WT_NFT,BURN_TK,STBURN_TK,"0x0000000000000000000000000000000000000000"];
+      for(var rm=0;rm<removeList.length;rm++){delete walSet[removeList[rm].toLowerCase()];}
+      // Remove Uniswap routers
+      delete walSet["0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45"];
+      delete walSet["0xe592427a0aece92de3edee1f18e0157c05861564"];
+      var allAddrs=Object.keys(walSet);
+      console.log("LMAP: "+allAddrs.length+" total unique addresses to scan for LP NFTs");
+      // Priority order: known wallets first, then rest
+      var priorityList=[W_DEFI,W_LEDGER,DAO_VAULT,CONTRIB_VAULT,CLIENT_VAULT].map(function(a){return a.toLowerCase();}).filter(function(a){return walSet.hasOwnProperty(a);});
+      var otherAddrs=allAddrs.filter(function(a){return priorityList.indexOf(a)===-1;});
+      var scanAddrs=priorityList.concat(otherAddrs);
+      $("lmapStatus").textContent="Checking "+scanAddrs.length+" wallets for LP NFTs...";
+      // Scan each wallet for NFTs
+      var walletsScanned=0,walletsWithNFTs=0;
+      for(var wi=0;wi<scanAddrs.length;wi++){
+        if(wi>0&&wi%5===0)await new Promise(function(r){setTimeout(r,200);});
         try{
-          // Get current owner (NFT might have been transferred)
-          var owH=await wtRpc(WT_NFT,"0x6352211e"+wtPad(tokenIds[pi2].id));
-          var owner=tokenIds[pi2].wallet;
-          if(owH&&owH.length>=66){owner="0x"+owH.slice(26,66).toLowerCase();}
-          // Get position data
-          var psH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tokenIds[pi2].id));
-          if(!psH||psH.length<770){console.log("LMAP: NFT #"+tokenIds[pi2].id+" — positions too short or reverted (closed?)");continue;}
-          var pd=psH.slice(2);
-          var pt0="0x"+pd.slice(152,192),pt1="0x"+pd.slice(216,256);
-          if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase()){continue;}
-          var pLiq=BigInt("0x"+pd.slice(448,512));
-          if(pLiq<=0n){console.log("LMAP: NFT #"+tokenIds[pi2].id+" — zero liquidity (closed)");continue;}
-          var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
-          var isFullRange=Math.abs(ptU-ptL)>800000;
-          var ppHi,ppLo;
-          if(isFullRange){ppLo=0.0001;ppHi=999999;}
-          else{ppHi=wtTickToPrice(ptL);ppLo=wtTickToPrice(ptU);}
-          if(ppLo<=0||ppHi<=ppLo)continue;
-          var isMe=owner===myD||owner===myL;
-          console.log("LMAP: NFT #"+tokenIds[pi2].id+" owner="+owner.slice(0,8)+"... "+(isFullRange?"FULL":"$"+ppLo.toFixed(3)+">$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
-          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq)});
-        }catch(e5){console.log("LMAP: NFT #"+tokenIds[pi2].id+" err:",e5.message);continue;}
-        if(pi2%5===0){$("lmapStatus").textContent="Checking NFT "+(pi2+1)+"/"+tokenIds.length+" ("+lpOwners.length+" active)";
-          await new Promise(function(r){setTimeout(r,200);});}
+          walletsScanned++;
+          var wAddr=scanAddrs[wi];
+          var nfH=await rpc(WT_NFT,bof(wAddr));
+          var nfC=parseInt(nfH,16);
+          if(isNaN(nfC)||nfC<=0)continue;
+          if(nfC>200)continue;
+          walletsWithNFTs++;
+          console.log("LMAP: "+wAddr.slice(0,8)+"..."+wAddr.slice(-4)+" has "+nfC+" NFTs");
+          for(var ni=0;ni<nfC&&ni<50;ni++){
+            try{
+              var tiH=await wtRpc(WT_NFT,"0x2f745c59"+wAddr.slice(2).padStart(64,"0")+wtPad(ni));
+              if(!tiH)continue;
+              var tId2=BigInt("0x"+tiH.slice(2));
+              var psH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tId2));
+              if(!psH||psH.length<770)continue;
+              var pd=psH.slice(2);
+              var pt0="0x"+pd.slice(152,192),pt1="0x"+pd.slice(216,256);
+              if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase())continue;
+              var pLiq=BigInt("0x"+pd.slice(448,512));
+              if(pLiq<=0n){console.log("LMAP: NFT #"+tId2+" — zero liquidity (closed)");continue;}
+              var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
+              var isFullRange=Math.abs(ptU-ptL)>800000;
+              var ppHi,ppLo;
+              if(isFullRange){ppLo=0.0001;ppHi=999999;}
+              else{ppHi=wtTickToPrice(ptL);ppLo=wtTickToPrice(ptU);}
+              if(ppLo<=0||ppHi<=ppLo)continue;
+              var isMe=wAddr===myD||wAddr===myL;
+              console.log("LMAP: "+wAddr.slice(0,8)+"... NFT #"+tId2+": "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+">$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
+              lpOwners.push({lo:ppLo,hi:ppHi,owner:wAddr,isMe:isMe,liq:Number(pLiq)});
+            }catch(e5){continue;}
+          }
+        }catch(e4){continue;}
+        if(wi%10===0)$("lmapStatus").textContent="Scanned "+wi+"/"+scanAddrs.length+" wallets ("+lpOwners.length+" active LPs, "+walletsWithNFTs+" with NFTs)";
       }
-      console.log("LMAP owners: "+tokenIds.length+" NFTs checked, "+lpOwners.length+" active BURN/USDC LPs");
+      console.log("LMAP FINAL: scanned="+walletsScanned+" withNFTs="+walletsWithNFTs+" activeLPs="+lpOwners.length);
     }catch(e6){console.log("LMAP owner scan err:",e6);}
 
     // 5. Reconstruct liquidity per range
