@@ -472,6 +472,6 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 </div>
 
 <script src="app.js"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){});}</script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var i=0;i<regs.length;i++)regs[i].update();});}</script>
 </body>
 </html>
