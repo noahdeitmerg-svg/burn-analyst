@@ -747,6 +747,40 @@ async function scanLiqMap(){
       var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
       var XFER_T="0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
       var walSet={};
+      // Seed with ALL known BURN holders (from Arbiscan export)
+      var BURN_HOLDERS=[
+        "0x2e9237771d0ae73b7d9a2c791209efd5a1ea9513","0x5b08d24efcb4b485fa34bbdced6d63205100afd6",
+        "0x9ae5453f156a1f7ac297781c15c77b622e42c12c","0x521b33d8bd645986e0d7f0db01bdf8a166408aa8",
+        "0x72ade1298731f057796ecab891f623ae4c18e7c1","0x141bd9c930a544b528851b4c5b6973f2562fd50d",
+        "0xbb751e832d9da605eacebec153101afc3aadd154","0x1b5b969fcccc12ddcf3022bbf1c586b775ddfb42",
+        "0x0e7121299279d976c246957617db97a81a9a1a4b","0xe9956194b6e86f3f4abd89c0184deb04f3ca6d7e",
+        "0x575dbf4a67b549f72f98a80fe9a2afe0925c4dca","0x58098a94c6ec47937557f8790a5531eaf196e939",
+        "0x441c5c0aae9f9325b31f9691d19d283fbf5438ac","0xae87c1e544cd73d6d67f29500a2969abc9f3ab75",
+        "0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2","0x8dbd81fd2fe6074bbdca0b6b2fce05c7d54263e6",
+        "0x98896671e67107e3e41c0e6c90d138b485eff3de","0x9e4e0a1c623c4f8a8f8a2d81f1b477bc8f80b888",
+        "0xced145bd4bcfaa9688e6006837ba51026a665911","0xe73bcb80ec39551677b79916126d65165fe38f7a",
+        "0x1f3f931ed40273a8e71dee7771322bb3c28aa22e","0x9b0207f16f290e0220c47baab52594356e6d45c7",
+        "0xe0c6e5432bf1cd3d4927d71c8fbe467ee8d91236","0x6324b1010b0e1fd0f6938aca07ccf801c97f8a40",
+        "0x7d32f1334265a77fbea2a03c3a5ca6b5b1319f17","0x184830d06c734033f8f37f2a91abd33d62dfeffb",
+        "0xdd91ef9232047dcc5f308d5358d1b7d80da311b5","0x751de1df943f22b90468ed5d6b193549cd5bd4b8",
+        "0x45a69064468971af7488967cec6afe24c9b2fe5a","0x680f81cb4f553396e6a470412fb9225ffaf9882c",
+        "0xe4607c283daa0fbcf70abb00c5f2e032d876936b","0x9f2406cfc9738337dcaaaf16ab6382da359b6d56",
+        "0x041c7f9b9e852b86a653d9344f7e5cbbc38a14f6","0x56fd5146ba62dd3484fcd33d6097f3824a788b0d",
+        "0x7635c7ca8e1c66b5a5c5203e6f4a6f12603d061d","0xb5d252d5f996fee396d63829eaffe8fbdb1dea8b",
+        "0xba006ccc22038cf3885ac8e7cece8957afb1b3e6","0x89f30783108e2f9191db4a44ae2a516327c99575",
+        "0xa13d975d8ca2258551769d654d090369792f7404","0x346303a6e64900f2c1ba7127eed94974c8b67784",
+        "0x505042ff781ea1689e44e1d200efd691c30db86c","0x4489103f76d4191224b0c3b035fb310da7e4e038",
+        "0xf99803b16004e708c1b697ae4a658293840228f4","0x7a28a86fcac8a75bb5d1fa5777662997a5ae543d",
+        "0x83bf24a3cbd3b789b4fdadaacbce39ea6e3b0e1f","0xff2f41ed3ac6f2e0394c0dac26b6a356aab53547",
+        "0x53ad70b790fef1485431e1cde2729d1fa67019ee",
+        "0xda685d818ad0e3bf261070516f089700259ddffe","0x9dd3a6eeb6f43f7e1d3466b5f33454daccfaf080",
+        "0x4b29414c800f84f27056a55298eb685f134bcff4","0xd1ea6173bfd0d53899b0203b9025edd74e783a48",
+        "0xa819924301bacd2b0317fad5df9fb94ad2cd6837","0x225400f9e1d42d5caddadbfbfbed1c8d7eeab3f5",
+        "0x16ca1ce02248fc59b323f21fc04425050c314f0a","0xecbcc7c2fdc04b151c9dfa8d4e2303be98a0ed61",
+        "0xc3a6f1a7261c0e8834b9f3fc8bf01b8885fc9f80","0x127b27e5d7371b2ea8c894bc9001ea2e97351b01"
+      ];
+      for(var bh=0;bh<BURN_HOLDERS.length;bh++){walSet[BURN_HOLDERS[bh]]=1;}
+      // Also add known addresses and trade wallets
       walSet[W_DEFI.toLowerCase()]=1;walSet[W_LEDGER.toLowerCase()]=1;
       walSet[DAO_VAULT.toLowerCase()]=1;walSet[CONTRIB_VAULT.toLowerCase()]=1;
       walSet[CLIENT_VAULT.toLowerCase()]=1;
