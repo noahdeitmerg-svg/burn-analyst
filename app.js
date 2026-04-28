@@ -781,6 +781,16 @@ async function scanLiqMap(){
         "0xa1c962c04c8dce9121b321ca1e97fee414aaf57c"
       ];
       for(var bh=0;bh<BURN_HOLDERS.length;bh++){walSet[BURN_HOLDERS[bh]]=1;}
+      // Read extra wallets from textarea input
+      try{
+        var extraInput=$("lmapExtra")?$("lmapExtra").value:"";
+        if(extraInput){
+          var extras=extraInput.split(/[,\n\s]+/).map(function(a){return a.trim().toLowerCase();}).filter(function(a){return/^0x[0-9a-f]{40}$/.test(a);});
+          for(var ei=0;ei<extras.length;ei++){walSet[extras[ei]]=1;}
+          if(extras.length>0){console.log("LMAP: "+extras.length+" extra wallets from input");
+            localStorage.setItem("lmap_extra",extraInput);}
+        }
+      }catch(ee){}
       // Also add known addresses and trade wallets
       walSet[W_DEFI.toLowerCase()]=1;walSet[W_LEDGER.toLowerCase()]=1;
       walSet[DAO_VAULT.toLowerCase()]=1;walSet[CONTRIB_VAULT.toLowerCase()]=1;
@@ -2343,6 +2353,7 @@ loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
+try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtra"))$("lmapExtra").value=savedExtra;}catch(e){}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});

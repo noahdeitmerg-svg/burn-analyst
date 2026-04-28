@@ -434,6 +434,11 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 <div class="c" style="border-left:3px solid #f87171">
   <div class="col" onclick="tog(this,'sec-lmap')">Pool Liquidity Map</div>
   <div id="sec-lmap" class="col-b">
+    <div style="margin-bottom:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px"><div style="font-size:8px;color:var(--dm)">EXTRA WALLETS TO SCAN (one per line or comma-separated)</div>
+        <textarea class="inp" id="lmapExtra" rows="2" placeholder="0xa1c962c04c8dce9121b321ca1e97fee414aaf57c" style="width:100%;font-size:9px;resize:vertical"></textarea></div>
+      <button class="btn" onclick="scanLiqMap()" style="font-size:10px">Scan Pool</button>
+    </div>
     <div id="lmapSummary" class="mg" style="margin-bottom:10px"></div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Price Range</th><th>BURN Liq.</th><th>USDC Equiv.</th><th style="min-width:80px">Wall</th><th>LPs</th></tr></thead><tbody id="lmapB"><tr><td colspan="5" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
     <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
