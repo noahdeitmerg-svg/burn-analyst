@@ -741,7 +741,7 @@ async function scanLiqMap(){
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
     // 4. Find LP owners: Pool Mint Events → Receipts → Token IDs → ownerOf
-    var lpOwners=[];
+    var lpOwners=window._lpOwners=[];
     $("lmapStatus").textContent="Scanning pool history...";
     try{
       var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
@@ -942,34 +942,76 @@ async function scanLiqMap(){
 }
 
 function renderLmap(buckets){
-  var maxB=0,tB=0,tU=0,allOwn={},activeOwn={};
-  for(var i=0;i<buckets.length;i++){if(buckets[i].burn>maxB)maxB=buckets[i].burn;tB+=buckets[i].burn;tU+=buckets[i].usdc;
-    if(buckets[i].owners)for(var oi3=0;oi3<buckets[i].owners.length;oi3++){allOwn[buckets[i].owners[oi3].owner]=1;if(!buckets[i].owners[oi3].closed)activeOwn[buckets[i].owners[oi3].owner]=1;}}
+  var lpOwners=window._lpOwners||[];
+  var tB=0,tU=0,allOwn={},activeOwn={};
+  for(var i=0;i<buckets.length;i++){tB+=buckets[i].burn;tU+=buckets[i].usdc;}
+  // Group lpOwners by wallet
+  var ownerMap={};
+  for(var oi=0;oi<lpOwners.length;oi++){
+    var lp=lpOwners[oi];
+    if(!ownerMap[lp.owner])ownerMap[lp.owner]={addr:lp.owner,isMe:lp.isMe,positions:[],activeLiq:0,activeCount:0,closedCount:0};
+    ownerMap[lp.owner].positions.push(lp);
+    allOwn[lp.owner]=1;
+    if(!lp.closed){ownerMap[lp.owner].activeLiq+=lp.liq;ownerMap[lp.owner].activeCount++;activeOwn[lp.owner]=1;}
+    else{ownerMap[lp.owner].closedCount++;}
+  }
+  // Sort owners: active first (by liquidity desc), then closed
+  var owners=Object.values(ownerMap);
+  owners.sort(function(a,b){
+    if(a.activeCount>0&&b.activeCount===0)return-1;
+    if(a.activeCount===0&&b.activeCount>0)return 1;
+    return b.activeLiq-a.activeLiq;
+  });
   $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)")+
     MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--cy)")+MB("Historical",Object.keys(allOwn).length+" total","var(--dm)");
+  // Render by wallet
   var rows="";
-  for(var j=0;j<buckets.length;j++){var bk=buckets[j];
-    var rng="$"+bk.lo.toFixed(bk.lo<1?2:1)+" → $"+bk.hi.toFixed(bk.hi<1?2:1);
-    var pct=maxB>0?Math.round(bk.burn/maxB*100):0;
-    var barClr=bk.active?"var(--o)":bk.burn>maxB*.5?"var(--r)":"var(--g)";
-    var wallTxt=bk.burn>maxB*.7?"🧱 WALL":bk.burn>maxB*.4?"▓▓▓":"";
-    var bar='<div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div>';
-    var ownerH="";
-    if(bk.owners&&bk.owners.length>0){
-      var activeOwners=bk.owners.filter(function(o){return!o.closed;});
-      var closedOwners=bk.owners.filter(function(o){return o.closed;});
-      var shown=Math.min(3,activeOwners.length);
-      for(var oi2=0;oi2<shown;oi2++){var o=activeOwners[oi2];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
-        ownerH+='<a href="https://arbiscan.io/address/'+o.owner+'" target="_blank" style="font-size:8px;color:'+(o.isMe?"var(--cy)":"var(--g)")+'">'+(o.isMe?"⭐":"")+'●'+oS+'</a> ';}
-      if(activeOwners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+(activeOwners.length-3)+'</span>';
-      var cShown=Math.min(2,closedOwners.length);
-      for(var ci3=0;ci3<cShown;ci3++){var co=closedOwners[ci3];var coS=co.owner.slice(0,6)+"…"+co.owner.slice(-4);
-        ownerH+='<a href="https://arbiscan.io/address/'+co.owner+'" target="_blank" style="font-size:7px;color:var(--dm);opacity:.5;text-decoration:line-through">'+(co.isMe?"⭐":"")+coS+'</a> ';}
-      if(closedOwners.length>2)ownerH+='<span style="font-size:7px;color:var(--dm);opacity:.4">+'+(closedOwners.length-2)+' ex</span>';}
-    var rowBg=bk.active?"background:rgba(251,146,60,.06);":"";
-    rows+='<tr style="'+rowBg+'"><td class="bld">'+(bk.active?"► ":"")+rng+'</td><td style="color:var(--o)">'+F(bk.burn,0)+'</td><td style="color:var(--g)">$'+F(bk.usdc,0)+'</td><td>'+bar+(wallTxt?' <span style="font-size:8px;color:var(--r)">'+wallTxt+'</span>':'')+'</td><td>'+ownerH+'</td></tr>';}
+  for(var wi=0;wi<owners.length;wi++){
+    var ow=owners[wi];
+    var wS=ow.addr.slice(0,6)+"…"+ow.addr.slice(-4);
+    var wLink='<a href="https://arbiscan.io/address/'+ow.addr+'" target="_blank" style="color:'+(ow.isMe?"var(--cy)":ow.activeCount>0?"var(--g)":"var(--dm)")+'">'+(ow.isMe?"⭐ ":"")+wS+'</a>';
+    var statusTxt=ow.activeCount>0?ow.activeCount+" active"+(ow.closedCount>0?", "+ow.closedCount+" closed":""):ow.closedCount+" closed";
+    // Wallet header row
+    rows+='<tr style="background:rgba(30,41,59,.3);border-top:2px solid var(--bd)"><td colspan="5" style="padding:8px 6px">'+
+      '<span style="font-weight:600;font-size:11px">'+wLink+'</span>'+
+      ' <span style="font-size:8px;color:var(--dm);margin-left:6px">'+statusTxt+'</span></td></tr>';
+    // Sort positions: active first, then by lo price
+    ow.positions.sort(function(a,b){
+      if(!a.closed&&b.closed)return-1;
+      if(a.closed&&!b.closed)return 1;
+      return a.lo-b.lo;
+    });
+    // Position rows
+    for(var pi=0;pi<ow.positions.length;pi++){
+      var lp=ow.positions[pi];
+      var isFullRange=lp.hi>100000;
+      var rng=isFullRange?"$0 → ∞ (Full Range)":"$"+lp.lo.toFixed(lp.lo<1?3:2)+" → $"+lp.hi.toFixed(lp.hi<1?3:2);
+      if(lp.closed){
+        rows+='<tr style="opacity:.35"><td style="padding-left:20px;text-decoration:line-through;font-size:9px">'+rng+'</td>';
+        rows+='<td style="color:var(--dm)">—</td><td style="color:var(--dm)">—</td><td style="color:var(--dm)">—</td>';
+        rows+='<td style="color:var(--r);font-size:8px">CLOSED</td></tr>';
+      }else{
+        // Calculate BURN amount from liquidity
+        var burnAmt=0;
+        try{
+          var tL2=Math.log(1/lp.hi)/Math.log(1.0001);
+          var tU2=Math.log(1/lp.lo)/Math.log(1.0001);
+          burnAmt=lp.liq*(Math.pow(1.0001,tU2/2)-Math.pow(1.0001,tL2/2))/1e18;
+        }catch(e){}
+        var usdcEq=burnAmt*(lp.lo+lp.hi)/2;
+        // Bar width relative to biggest position
+        var isActive=P>=lp.lo&&P<lp.hi;
+        var barClr=isActive?"var(--o)":"var(--g)";
+        rows+='<tr style="'+(isActive?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px">'+(isActive?"► ":"")+rng+'</td>';
+        rows+='<td style="color:var(--o)">'+F(burnAmt,0)+'</td>';
+        rows+='<td style="color:var(--g)">$'+F(usdcEq,0)+'</td>';
+        rows+='<td><div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:6px;overflow:hidden"><div style="width:100%;height:100%;background:'+barClr+';border-radius:3px"></div></div></td>';
+        rows+='<td style="font-size:8px;color:var(--cy)">#'+(lp.tokenId||"")+'</td></tr>';
+      }
+    }
+  }
   $("lmapB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No data</td></tr>';
-  $("lmapStatus").textContent=buckets.length+" price buckets · "+Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+new Date().toLocaleTimeString();
+  $("lmapStatus").textContent=Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+lpOwners.length+" positions · "+new Date().toLocaleTimeString();
 }
 
 // ═══ WALLET TRACKER (isolated module) ═══
