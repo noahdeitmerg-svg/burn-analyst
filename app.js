@@ -850,7 +850,7 @@ async function scanLiqMap(){
           if(!isClosed)nftActive++;
           uniqueOwners[owner]=1;
           if(!isClosed)console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
-          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString()});
+          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString(),tL:ptL,tU:ptU});
         }catch(e5){continue;}
         if(ni2%5===0){
           $("lmapStatus").textContent="NFT "+(ni2+1)+"/"+allTokenIds.length+" ("+nftActive+" active)";
@@ -892,7 +892,7 @@ async function scanLiqMap(){
                   var eisMe=eAddr===myD||eAddr===myL;
                   nftActive++;
                   console.log("LMAP: ✅ EXTRA #"+etId+" owner="+eAddr.slice(0,8)+"... "+(eisFR?"FULL":"$"+eppLo.toFixed(3)+"→$"+eppHi.toFixed(2)));
-                  lpOwners.push({lo:eppLo,hi:eppHi,owner:eAddr,isMe:eisMe,liq:Number(epLiq)});
+                  lpOwners.push({lo:eppLo,hi:eppHi,owner:eAddr,isMe:eisMe,liq:Number(epLiq),tL:eptL,tU:eptU,closed:false,tokenId:etId.toString()});
                 }catch(e5b){continue;}
               }
             }catch(e4b){continue;}
@@ -981,6 +981,9 @@ function renderLmap(buckets){
       if(a.closed&&!b.closed)return 1;
       return a.lo-b.lo;
     });
+    // Calculate max liquidity for bar scaling
+    var maxLiq=0;
+    for(var ml2=0;ml2<ow.positions.length;ml2++){if(!ow.positions[ml2].closed&&ow.positions[ml2].liq>maxLiq)maxLiq=ow.positions[ml2].liq;}
     // Position rows
     for(var pi=0;pi<ow.positions.length;pi++){
       var lp=ow.positions[pi];
@@ -988,25 +991,25 @@ function renderLmap(buckets){
       var rng=isFullRange?"$0 → ∞ (Full Range)":"$"+lp.lo.toFixed(lp.lo<1?3:2)+" → $"+lp.hi.toFixed(lp.hi<1?3:2);
       if(lp.closed){
         rows+='<tr style="opacity:.35"><td style="padding-left:20px;text-decoration:line-through;font-size:9px">'+rng+'</td>';
-        rows+='<td style="color:var(--dm)">—</td><td style="color:var(--dm)">—</td><td style="color:var(--dm)">—</td>';
-        rows+='<td style="color:var(--r);font-size:8px">CLOSED</td></tr>';
+        rows+='<td colspan="4" style="color:var(--r);font-size:8px">CLOSED</td></tr>';
       }else{
-        // Calculate BURN amount from liquidity
-        var burnAmt=0;
+        // Calculate BURN deposited using wtLiqToBurn with original ticks
+        var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
         try{
-          var tL2=Math.log(1/lp.hi)/Math.log(1.0001);
-          var tU2=Math.log(1/lp.lo)/Math.log(1.0001);
-          burnAmt=lp.liq*(Math.pow(1.0001,tU2/2)-Math.pow(1.0001,tL2/2))/1e18;
+          if(lp.tL!==undefined&&lp.tU!==undefined){
+            burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
+          }
+          if(burnDep>0&&P>0&&!isFullRange){var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;}
+          else if(isFullRange&&P>0){lpUsdc=burnDep*P;lpLeft=burnDep;}
         }catch(e){}
-        var usdcEq=burnAmt*(lp.lo+lp.hi)/2;
-        // Bar width relative to biggest position
-        var isActive=P>=lp.lo&&P<lp.hi;
-        var barClr=isActive?"var(--o)":"var(--g)";
-        rows+='<tr style="'+(isActive?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px">'+(isActive?"► ":"")+rng+'</td>';
-        rows+='<td style="color:var(--o)">'+F(burnAmt,0)+'</td>';
-        rows+='<td style="color:var(--g)">$'+F(usdcEq,0)+'</td>';
-        rows+='<td><div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:6px;overflow:hidden"><div style="width:100%;height:100%;background:'+barClr+';border-radius:3px"></div></div></td>';
-        rows+='<td style="font-size:8px;color:var(--cy)">#'+(lp.tokenId||"")+'</td></tr>';
+        var isInRange=P>=lp.lo&&P<lp.hi;
+        var barPct=maxLiq>0?Math.round(lp.liq/maxLiq*100):100;
+        var barClr=isInRange?"var(--o)":"var(--g)";
+        rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px">'+(isInRange?"► ":"")+rng+'</td>';
+        rows+='<td style="color:var(--o)">'+F(burnDep,0)+'</td>';
+        rows+='<td>'+F(lpLeft,0)+' / $'+F(lpUsdc,0)+'</td>';
+        rows+='<td><div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:6px;overflow:hidden"><div style="width:'+barPct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div></td>';
+        rows+='<td style="font-size:9px;color:var(--cy)">'+lpPct.toFixed(0)+'%</td></tr>';
       }
     }
   }
