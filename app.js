@@ -836,9 +836,9 @@ async function scanLiqMap(){
           var pt0="0x"+pd.slice(152,192),pt1="0x"+pd.slice(216,256);
           if(pt0.toLowerCase()!==USDC_TK.toLowerCase()||pt1.toLowerCase()!==BURN_TK.toLowerCase()){continue;}
           var pLiq=BigInt("0x"+pd.slice(448,512));
-          if(pLiq<=0n){
+          var isClosed=pLiq<=0n;
+          if(isClosed){
             console.log("LMAP: NFT #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" — closed");
-            continue;
           }
           var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
           var isFullRange=Math.abs(ptU-ptL)>800000;
@@ -847,10 +847,10 @@ async function scanLiqMap(){
           else{ppHi=wtTickToPrice(ptL);ppLo=wtTickToPrice(ptU);}
           if(ppLo<=0||ppHi<=ppLo)continue;
           var isMe=owner===myD||owner===myL;
-          nftActive++;
+          if(!isClosed)nftActive++;
           uniqueOwners[owner]=1;
-          console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
-          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq)});
+          if(!isClosed)console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
+          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString()});
         }catch(e5){continue;}
         if(ni2%5===0){
           $("lmapStatus").textContent="NFT "+(ni2+1)+"/"+allTokenIds.length+" ("+nftActive+" active)";
@@ -942,9 +942,11 @@ async function scanLiqMap(){
 }
 
 function renderLmap(buckets){
-  var maxB=0,tB=0,tU=0;
-  for(var i=0;i<buckets.length;i++){if(buckets[i].burn>maxB)maxB=buckets[i].burn;tB+=buckets[i].burn;tU+=buckets[i].usdc;}
-  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)");
+  var maxB=0,tB=0,tU=0,allOwn={},activeOwn={};
+  for(var i=0;i<buckets.length;i++){if(buckets[i].burn>maxB)maxB=buckets[i].burn;tB+=buckets[i].burn;tU+=buckets[i].usdc;
+    if(buckets[i].owners)for(var oi3=0;oi3<buckets[i].owners.length;oi3++){allOwn[buckets[i].owners[oi3].owner]=1;if(!buckets[i].owners[oi3].closed)activeOwn[buckets[i].owners[oi3].owner]=1;}}
+  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)")+
+    MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--cy)")+MB("Historical",Object.keys(allOwn).length+" total","var(--dm)");
   var rows="";
   for(var j=0;j<buckets.length;j++){var bk=buckets[j];
     var rng="$"+bk.lo.toFixed(bk.lo<1?2:1)+" → $"+bk.hi.toFixed(bk.hi<1?2:1);
@@ -954,14 +956,20 @@ function renderLmap(buckets){
     var bar='<div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div>';
     var ownerH="";
     if(bk.owners&&bk.owners.length>0){
-      var shown=Math.min(3,bk.owners.length);
-      for(var oi2=0;oi2<shown;oi2++){var o=bk.owners[oi2];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
-        ownerH+='<a href="https://arbiscan.io/address/'+o.owner+'" target="_blank" style="font-size:8px;color:'+(o.isMe?"var(--cy)":"var(--dm)")+'">'+(o.isMe?"⭐":"")+oS+'</a> ';}
-      if(bk.owners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+(bk.owners.length-3)+'</span>';}
+      var activeOwners=bk.owners.filter(function(o){return!o.closed;});
+      var closedOwners=bk.owners.filter(function(o){return o.closed;});
+      var shown=Math.min(3,activeOwners.length);
+      for(var oi2=0;oi2<shown;oi2++){var o=activeOwners[oi2];var oS=o.owner.slice(0,6)+"…"+o.owner.slice(-4);
+        ownerH+='<a href="https://arbiscan.io/address/'+o.owner+'" target="_blank" style="font-size:8px;color:'+(o.isMe?"var(--cy)":"var(--g)")+'">'+(o.isMe?"⭐":"")+'●'+oS+'</a> ';}
+      if(activeOwners.length>3)ownerH+='<span style="font-size:8px;color:var(--dm)">+'+(activeOwners.length-3)+'</span>';
+      var cShown=Math.min(2,closedOwners.length);
+      for(var ci3=0;ci3<cShown;ci3++){var co=closedOwners[ci3];var coS=co.owner.slice(0,6)+"…"+co.owner.slice(-4);
+        ownerH+='<a href="https://arbiscan.io/address/'+co.owner+'" target="_blank" style="font-size:7px;color:var(--dm);opacity:.5;text-decoration:line-through">'+(co.isMe?"⭐":"")+coS+'</a> ';}
+      if(closedOwners.length>2)ownerH+='<span style="font-size:7px;color:var(--dm);opacity:.4">+'+(closedOwners.length-2)+' ex</span>';}
     var rowBg=bk.active?"background:rgba(251,146,60,.06);":"";
     rows+='<tr style="'+rowBg+'"><td class="bld">'+(bk.active?"► ":"")+rng+'</td><td style="color:var(--o)">'+F(bk.burn,0)+'</td><td style="color:var(--g)">$'+F(bk.usdc,0)+'</td><td>'+bar+(wallTxt?' <span style="font-size:8px;color:var(--r)">'+wallTxt+'</span>':'')+'</td><td>'+ownerH+'</td></tr>';}
   $("lmapB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No data</td></tr>';
-  $("lmapStatus").textContent=buckets.length+" price buckets · "+new Date().toLocaleTimeString();
+  $("lmapStatus").textContent=buckets.length+" price buckets · "+Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+new Date().toLocaleTimeString();
 }
 
 // ═══ WALLET TRACKER (isolated module) ═══
