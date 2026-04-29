@@ -816,18 +816,17 @@ async function scanLiqMap(){
       // STEP 3+4: For each token ID → ownerOf + positions
       $("lmapStatus").textContent="Checking "+allTokenIds.length+" LP NFTs...";
       var nftChecked=0,nftActive=0,uniqueOwners={};
+      var closedIds=[];
 
       for(var ni2=0;ni2<allTokenIds.length;ni2++){
         try{
           nftChecked++;
           var tid=allTokenIds[ni2].id;
-          // ownerOf(tokenId) — gets CURRENT owner (handles transfers)
           var ownerHex=await wtRpc(WT_NFT,"0x6352211e"+wtPad(tid));
           var owner=allTokenIds[ni2].minter;
           if(ownerHex&&ownerHex.length>=66){
             owner="0x"+ownerHex.slice(26,66).toLowerCase();
           }
-          // positions(tokenId)
           var psH=await wtRpc(WT_NFT,"0x99fbab88"+wtPad(tid));
           if(!psH||psH.length<770){
             console.log("LMAP: NFT #"+tid+" — reverted (burned?)");continue;
@@ -839,6 +838,7 @@ async function scanLiqMap(){
           var isClosed=pLiq<=0n;
           if(isClosed){
             console.log("LMAP: NFT #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" — closed");
+            closedIds.push(tid);
           }
           var ptL=wtI24(pd.slice(378,384)),ptU=wtI24(pd.slice(442,448));
           var isFullRange=Math.abs(ptU-ptL)>800000;
@@ -850,11 +850,54 @@ async function scanLiqMap(){
           if(!isClosed)nftActive++;
           uniqueOwners[owner]=1;
           if(!isClosed)console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
-          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString(),tL:ptL,tU:ptU});
+          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString(),tL:ptL,tU:ptU,burnOut:0,usdcOut:0});
         }catch(e5){continue;}
         if(ni2%5===0){
           $("lmapStatus").textContent="NFT "+(ni2+1)+"/"+allTokenIds.length+" ("+nftActive+" active)";
           await new Promise(function(r){setTimeout(r,100);});
+        }
+      }
+
+      // STEP 4b: Fetch Collect events for closed LPs to get withdrawn amounts
+      if(closedIds.length>0){
+        $("lmapStatus").textContent="Reading "+closedIds.length+" closed LP histories...";
+        var COLLECT_SIG="0x40d0efd1a53d60ecbf40971b9daf7dc90178c3aadc7aab1765632738fa8b8f01";
+        for(var ci4=0;ci4<closedIds.length;ci4++){
+          try{
+            var cTid=closedIds[ci4];
+            var tidHex="0x"+BigInt(cTid).toString(16).padStart(64,"0");
+            var cR=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{
+              address:WT_NFT,
+              topics:[COLLECT_SIG,tidHex],
+              fromBlock:"0x5F5E100",
+              toBlock:"latest"
+            }],id:0}]);
+            if(cR&&cR[0]&&Array.isArray(cR[0].result)&&cR[0].result.length>0){
+              var totalUsdc=0,totalBurn=0;
+              for(var ce=0;ce<cR[0].result.length;ce++){
+                var cData=cR[0].result[ce].data;
+                if(!cData||cData.length<194)continue;
+                var cd=cData.slice(2);
+                var amt0=parseInt(cd.slice(64,128),16)/1e6;
+                var amt1raw=cd.slice(128,192);
+                var amt1=0;
+                try{amt1=Number(BigInt("0x"+amt1raw))/1e18;}catch(e){amt1=parseInt(amt1raw,16)/1e18;}
+                totalUsdc+=amt0;
+                totalBurn+=amt1;
+              }
+              // Find this LP in lpOwners and update
+              for(var lo2=0;lo2<lpOwners.length;lo2++){
+                if(lpOwners[lo2].tokenId===cTid.toString()&&lpOwners[lo2].closed){
+                  lpOwners[lo2].usdcOut=Math.round(totalUsdc*100)/100;
+                  lpOwners[lo2].burnOut=Math.round(totalBurn);
+                  console.log("LMAP: #"+cTid+" collected: "+totalBurn.toFixed(0)+" BURN + $"+totalUsdc.toFixed(2)+" USDC");
+                  break;
+                }
+              }
+            }
+          }catch(e7){}
+          if(ci4%3===0){await new Promise(function(r){setTimeout(r,200);});
+            $("lmapStatus").textContent="History "+(ci4+1)+"/"+closedIds.length;}
         }
       }
 
@@ -990,8 +1033,13 @@ function renderLmap(buckets){
       var isFullRange=lp.hi>100000;
       var rng=isFullRange?"$0 → ∞ (Full Range)":"$"+lp.lo.toFixed(lp.lo<1?3:2)+" → $"+lp.hi.toFixed(lp.hi<1?3:2);
       if(lp.closed){
-        rows+='<tr style="opacity:.35"><td style="padding-left:20px;text-decoration:line-through;font-size:9px">'+rng+'</td>';
-        rows+='<td colspan="4" style="color:var(--r);font-size:8px">CLOSED</td></tr>';
+        var nftLink=lp.tokenId?'<a href="https://arbiscan.io/nft/0xC36442b4a4522E871399CD717aBDD847Ab11FE88/'+lp.tokenId+'" target="_blank" style="font-size:8px;color:var(--dm)">#'+lp.tokenId+'</a>':'';
+        var cBurn=lp.burnOut>0?F(lp.burnOut,0):'—';
+        var cUsdc=lp.usdcOut>0?'$'+F(lp.usdcOut,0):'—';
+        rows+='<tr style="opacity:.5"><td style="padding-left:20px;font-size:9px;text-decoration:line-through">'+rng+'</td>';
+        rows+='<td style="color:var(--o);font-size:9px">'+cBurn+'</td>';
+        rows+='<td style="font-size:9px">'+cUsdc+'</td>';
+        rows+='<td>'+nftLink+'</td><td style="color:var(--r);font-size:8px">CLOSED</td></tr>';
       }else{
         // Calculate BURN deposited using wtLiqToBurn with original ticks
         var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
