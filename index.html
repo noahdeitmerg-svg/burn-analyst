@@ -302,6 +302,13 @@ tr:hover td{background:rgba(96,165,250,.02)}
         <input class="inp" id="alertFill2" type="number" step="1" placeholder="90" style="width:60px;font-size:11px"></div>
       <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
     </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+      <div><div style="font-size:8px;color:var(--dm)">PORTFOLIO ABOVE $</div>
+        <input class="inp" id="alertPtfHi" type="number" step="100" placeholder="4100" style="width:80px;font-size:11px"></div>
+      <div><div style="font-size:8px;color:var(--dm)">PORTFOLIO BELOW $</div>
+        <input class="inp" id="alertPtfLo" type="number" step="100" placeholder="4000" style="width:80px;font-size:11px"></div>
+      <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
+    </div>
     <div id="alertStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
     <div id="alertHistory" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
     <div class="sep" style="margin:6px 0"></div>

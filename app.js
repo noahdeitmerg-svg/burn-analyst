@@ -1758,15 +1758,18 @@ function saveAlerts(){
   alertCfg.lo=parseFloat($("alertLo").value)||0;
   alertCfg.fill1=parseInt($("alertFill1").value)||50;
   alertCfg.fill2=parseInt($("alertFill2").value)||90;
+  alertCfg.ptfHi=parseFloat($("alertPtfHi").value)||0;
+  alertCfg.ptfLo=parseFloat($("alertPtfLo").value)||0;
   alertTriggered={};
   try{localStorage.setItem("burn_alerts",JSON.stringify(alertCfg));localStorage.removeItem("burn_alert_triggered");}catch(e){}
-  $("alertStatus").innerHTML='<span style="color:var(--g)">✓ Alerts saved</span>';
+  $("alertStatus").innerHTML='<span style="color:var(--g)">Alerts saved</span>';
   checkAlerts();
 }
 function clearAlerts(){
-  alertCfg={hi:0,lo:0,fill1:50,fill2:90};alertTriggered={};
+  alertCfg={hi:0,lo:0,fill1:50,fill2:90,ptfHi:0,ptfLo:0};alertTriggered={};
   try{localStorage.removeItem("burn_alerts");localStorage.removeItem("burn_alert_triggered");}catch(e){}
   $("alertHi").value="";$("alertLo").value="";$("alertFill1").value="";$("alertFill2").value="";
+  try{$("alertPtfHi").value="";$("alertPtfLo").value="";}catch(e){}
   $("alertStatus").innerHTML='<span style="color:var(--dm)">Alerts cleared</span>';
   $("alertBar").style.display="none";
 }
@@ -1821,10 +1824,12 @@ function checkAlerts(){
     }
     // Update status
     var statusParts=[];
-    if(alertCfg.hi>0)statusParts.push("Above $"+alertCfg.hi.toFixed(4));
-    if(alertCfg.lo>0)statusParts.push("Below $"+alertCfg.lo.toFixed(4));
+    if(alertCfg.hi>0)statusParts.push("Price >$"+alertCfg.hi.toFixed(4));
+    if(alertCfg.lo>0)statusParts.push("Price <$"+alertCfg.lo.toFixed(4));
     if(alertCfg.fill1>0)statusParts.push("LP Fill "+alertCfg.fill1+"%");
     if(alertCfg.fill2>0)statusParts.push("LP Fill "+alertCfg.fill2+"%");
+    if(alertCfg.ptfHi>0)statusParts.push("Portfolio >$"+F(alertCfg.ptfHi,0));
+    if(alertCfg.ptfLo>0)statusParts.push("Portfolio <$"+F(alertCfg.ptfLo,0));
     if($("alertStatus"))$("alertStatus").innerHTML=statusParts.length>0?'Active: '+statusParts.join(", "):'No alerts set';
     try{localStorage.setItem("burn_alert_triggered",JSON.stringify(alertTriggered));}catch(e){}
   }catch(e){}
@@ -1835,6 +1840,8 @@ try{
   if(alertCfg.lo>0&&$("alertLo"))$("alertLo").value=alertCfg.lo;
   if(alertCfg.fill1&&$("alertFill1"))$("alertFill1").value=alertCfg.fill1;
   if(alertCfg.fill2&&$("alertFill2"))$("alertFill2").value=alertCfg.fill2;
+  if(alertCfg.ptfHi>0&&$("alertPtfHi"))$("alertPtfHi").value=alertCfg.ptfHi;
+  if(alertCfg.ptfLo>0&&$("alertPtfLo"))$("alertPtfLo").value=alertCfg.ptfLo;
 }catch(e){}
 
 // ═══ CAPITAL FLOW CHART ═══
@@ -2702,7 +2709,46 @@ function startRefresh(){
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
     if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}}
     if(_refreshCount%10===0){try{ptfDetectLedgerBalances();}catch(e){}}
+    // Auto LP Map scan every 5 min (count 5 = 5*60s = 300s)
+    if(_refreshCount%5===0){try{lmapCache=null;lmapTs=0;scanLiqMap();}catch(e){}}
+    // Check portfolio value alerts
+    try{checkPortfolioAlerts();}catch(e){}
     saveOffline();updateSysStatus();},60000);
+}
+
+// ═══ PORTFOLIO VALUE ALERTS ═══
+function checkPortfolioAlerts(){
+  try{
+    if(!alertCfg||!P||P<=0)return;
+    // Calculate total portfolio value
+    var burnVal=(MY_BURN||0)*P + (MY_STBURN||0)*stR*P + (ALP||0)*P;
+    var altVal=0;
+    if(typeof ptfAssets!=="undefined"&&typeof ptfPrices!=="undefined"){
+      for(var i=0;i<ptfAssets.length;i++){
+        var pa=ptfAssets[i];
+        var pp=ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0;
+        altVal+=pa.amount*pp;
+      }
+    }
+    var totalVal=burnVal+altVal;
+    if(totalVal<=0)return;
+    // Portfolio above threshold
+    if(alertCfg.ptfHi&&alertCfg.ptfHi>0&&totalVal>=alertCfg.ptfHi&&!alertTriggered.ptfHi){
+      var msg="Portfolio $"+F(totalVal,0)+" (above $"+F(alertCfg.ptfHi,0)+")";
+      if(typeof notify==="function")notify("Portfolio Alert",msg);
+      alertTriggered.ptfHi=Date.now();
+    }
+    // Portfolio below threshold
+    if(alertCfg.ptfLo&&alertCfg.ptfLo>0&&totalVal<=alertCfg.ptfLo&&!alertTriggered.ptfLo){
+      var msg2="Portfolio $"+F(totalVal,0)+" (below $"+F(alertCfg.ptfLo,0)+")";
+      if(typeof notify==="function")notify("Portfolio Alert",msg2);
+      alertTriggered.ptfLo=Date.now();
+    }
+    // Reset with 2% hysteresis
+    if(alertCfg.ptfHi&&alertCfg.ptfHi>0&&totalVal<alertCfg.ptfHi*0.98)delete alertTriggered.ptfHi;
+    if(alertCfg.ptfLo&&alertCfg.ptfLo>0&&totalVal>alertCfg.ptfLo*1.02)delete alertTriggered.ptfLo;
+    try{localStorage.setItem("burn_alert_triggered",JSON.stringify(alertTriggered));}catch(e){}
+  }catch(e){}
 }
 function updateSysStatus(){
   var rpcOk=rpcFails[rpcIdx]<3,apiOk=P>0&&SRC!=="",walOk=wal.ok||MY_BURN>0;
@@ -2718,5 +2764,7 @@ try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtra"))$("lmapExtra").value=savedExtra;}catch(e){}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
+// Auto-scan LP Map after 10s (let other data load first)
+setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
