@@ -1994,6 +1994,22 @@ function renderStakingApy(){
   }catch(e){console.log("stapy err:",e);}
 }
 
+// ═══ PORTFOLIO SYNC TO SERVER ═══
+var SYNC_URL="http://95.216.152.31:8081";
+function syncPortfolioToServer(){
+  try{
+    if(typeof ptfAssets==="undefined"||!ptfAssets||ptfAssets.length===0)return;
+    var assets=[];
+    for(var i=0;i<ptfAssets.length;i++){
+      var a=ptfAssets[i];
+      var pp=typeof ptfPrices!=="undefined"&&ptfPrices[a.geckoId]?ptfPrices[a.geckoId].usd:0;
+      assets.push({symbol:a.symbol,geckoId:a.geckoId,amount:a.amount,price:pp,totalCost:a.totalCost||0});
+    }
+    var data={assets:assets,burnPrice:P||0,myBurn:MY_BURN||0,myStBurn:MY_STBURN||0,stRatio:stR||1,ts:Date.now()};
+    fetch(SYNC_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),mode:"cors"}).catch(function(){});
+  }catch(e){}
+}
+
 // ═══ OFFLINE CACHE ═══
 function saveOffline(){try{localStorage.setItem("burn_cache",JSON.stringify({P:P,stR:stR,stOK:stOK,stSrc:stSrc,sup:sup,X:X,Y:Y,K:K,SRC:SRC,MY_BURN:MY_BURN,MY_STBURN:MY_STBURN,wal:wal,ts:Date.now()}));}catch(e){}}
 function loadOffline(){try{var c=JSON.parse(localStorage.getItem("burn_cache"));if(!c||!c.P)return false;
@@ -2014,7 +2030,25 @@ document.addEventListener("touchmove",function(e){if(ptrY>0&&window.scrollY===0)
 document.addEventListener("touchend",function(){if(ptrActive){ptrActive=false;$("ptr").classList.remove("show");go();fetchSt();fetchTrades();}ptrY=0;});
 
 // ═══ PORTFOLIO TERMINAL FUNCTIONS ═══
-function ptfSave(){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){console.log("PTF save err:",e);}}
+function ptfSave(){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));ptfSyncServer();}catch(e){console.log("PTF save err:",e);}}
+
+// Sync portfolio to Hetzner for push notifications
+var _ptfLastSync=0;
+function ptfSyncServer(){
+  try{
+    if(Date.now()-_ptfLastSync<300000)return; // max every 5 min
+    _ptfLastSync=Date.now();
+    var assets=[];
+    for(var i=0;i<ptfAssets.length;i++){
+      var a=ptfAssets[i];
+      assets.push({symbol:a.symbol,geckoId:a.geckoId,amount:a.amount,totalCost:a.totalCost||0,avgEntry:a.avgEntry||0});
+    }
+    var data={assets:assets,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
+    fetch("http://95.216.152.31:8081",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}).then(function(r){
+      if(r.ok)console.log("PTF synced to server");
+    }).catch(function(){});
+  }catch(e){}
+}
 function ptfLoad(){try{
   var a=localStorage.getItem("ptf_assets");var l=localStorage.getItem("ptf_ledger");var t=localStorage.getItem("ptf_targets");
   if(a)ptfAssets=JSON.parse(a); else ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
@@ -2046,6 +2080,7 @@ function ptfFetchPrices(){
         for(var k in data){if(data.hasOwnProperty(k))ptfPrices[k]={usd:data[k].usd||0,change:data[k].usd_24h_change||0};}
         console.log("PTF: prices fetched for "+Object.keys(data).length+" assets");
         ptfRenderTable();
+        ptfSyncServer();
       }).catch(function(e){console.log("PTF CoinGecko err:",e);});
   }catch(e){console.log("PTF fetchPrices err:",e);}
 }
@@ -2711,6 +2746,8 @@ function startRefresh(){
     if(_refreshCount%10===0){try{ptfDetectLedgerBalances();}catch(e){}}
     // Auto LP Map scan every 5 min (count 5 = 5*60s = 300s)
     if(_refreshCount%5===0){try{lmapCache=null;lmapTs=0;scanLiqMap();}catch(e){}}
+    // Sync portfolio to Hetzner for push alerts
+    if(_refreshCount%5===0){try{syncPortfolioToServer();}catch(e){}}
     // Check portfolio value alerts
     try{checkPortfolioAlerts();}catch(e){}
     saveOffline();updateSysStatus();},60000);
@@ -2766,5 +2803,6 @@ try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtr
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 // Auto-scan LP Map after 10s (let other data load first)
 setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
+setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});

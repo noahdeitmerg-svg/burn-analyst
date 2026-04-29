@@ -62,16 +62,17 @@ border:1px solid var(--glass-border);border-radius:18px;padding:14px;margin-bott
 backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
 box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset;
 transition:border-color .3s,box-shadow .3s}
+.c::after{content:'';position:absolute;top:0;left:15%;right:15%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);pointer-events:none}
 .c0{padding:0;overflow:hidden}
 
 /* Card glow based on border color */
-.c[style*="border-left:3px solid #fb923c"],.c[style*="border-left:2px solid #fb923c"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(251,146,60,.06)}
-.c[style*="border-left:3px solid #fbbf24"],.c[style*="border-left:2px solid #fbbf24"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(251,191,36,.06)}
-.c[style*="border-left:3px solid #34d399"],.c[style*="border-left:2px solid #34d399"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(52,211,153,.06)}
-.c[style*="border-left:3px solid #60a5fa"],.c[style*="border-left:2px solid #60a5fa"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(96,165,250,.06)}
-.c[style*="border-left:3px solid #c084fc"],.c[style*="border-left:2px solid #c084fc"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(192,132,252,.06)}
-.c[style*="border-left:3px solid #22d3ee"],.c[style*="border-left:2px solid #22d3ee"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(34,211,238,.06)}
-.c[style*="border-left:3px solid #f87171"],.c[style*="border-left:2px solid #f87171"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-4px 0 24px rgba(248,113,113,.06)}
+.c[style*="border-left:3px solid #fb923c"],.c[style*="border-left:3px solid #fb923c"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(251,146,60,.12),0 0 2px rgba(251,146,60,.15) inset}
+.c[style*="border-left:3px solid #fbbf24"],.c[style*="border-left:3px solid #fbbf24"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(251,191,36,.12),0 0 2px rgba(251,191,36,.15) inset}
+.c[style*="border-left:3px solid #34d399"],.c[style*="border-left:3px solid #34d399"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(52,211,153,.12),0 0 2px rgba(52,211,153,.15) inset}
+.c[style*="border-left:3px solid #60a5fa"],.c[style*="border-left:3px solid #60a5fa"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(96,165,250,.12),0 0 2px rgba(96,165,250,.15) inset}
+.c[style*="border-left:3px solid #c084fc"],.c[style*="border-left:3px solid #c084fc"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(192,132,252,.12),0 0 2px rgba(192,132,252,.15) inset}
+.c[style*="border-left:3px solid #22d3ee"],.c[style*="border-left:3px solid #22d3ee"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(34,211,238,.12),0 0 2px rgba(34,211,238,.15) inset}
+.c[style*="border-left:3px solid #f87171"],.c[style*="border-left:3px solid #f87171"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(248,113,113,.12),0 0 2px rgba(248,113,113,.15) inset}
 
 /* ═══ LABELS ═══ */
 .lb{font-size:9px;color:var(--br);text-transform:uppercase;letter-spacing:1.3px;font-weight:600;margin-bottom:8px;font-family:'Inter','Geist Mono',sans-serif}
@@ -341,12 +342,12 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ NEXT FILL TARGET ═══ -->
-<div class="c" style="border-left:2px solid var(--o);padding:14px">
+<div class="c" style="border-left:3px solid var(--o);padding:14px">
   <div id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
 </div>
 
 <!-- ═══ LEDGER BALANCE ═══ -->
-<div class="c" style="padding:12px 14px;border-left:2px solid #fb923c">
+<div class="c" style="padding:12px 14px;border-left:3px solid #fb923c">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
     <div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;font-family:Inter,sans-serif">⬡ Ledger Balance</div>
   </div>
@@ -354,12 +355,12 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ ALERT BAR ═══ -->
-<div id="alertBar" class="c" style="padding:6px 12px;display:none;border-left:2px solid #fbbf24;background:rgba(251,191,36,.04)">
+<div id="alertBar" class="c" style="padding:6px 12px;display:none;border-left:3px solid #fbbf24;background:rgba(251,191,36,.04)">
   <div id="alertMsg" style="font-size:10px;color:var(--o);text-align:center"></div>
 </div>
 
 <!-- ═══ PRICE ALERTS ═══ -->
-<div class="c" style="border-left:2px solid #fbbf24">
+<div class="c" style="border-left:3px solid #fbbf24">
   <div class="col" onclick="tog(this,'sec-palert')">🔔 Price & LP Alerts</div>
   <div id="sec-palert" class="col-b">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
@@ -394,7 +395,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ WALLET TRACKER ═══ -->
-<div class="c" style="border-left:2px solid #60a5fa">
+<div class="c" style="border-left:3px solid #60a5fa">
   <div class="col" onclick="tog(this,'sec-wt-wrap')">👛 Wallet Tracker</div>
   <div id="sec-wt-wrap" class="col-b">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 8px">
@@ -409,7 +410,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ BURN PORTFOLIO (collapsible) ═══ -->
-<div class="c" style="border-left:2px solid #c084fc">
+<div class="c" style="border-left:3px solid #c084fc">
   <div class="col" onclick="tog(this,'sec-port')">💎 BURN Portfolio</div>
   <div id="sec-port" class="col-b">
     <div class="mg" id="portG1"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
@@ -424,7 +425,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ COLLAPSIBLE: Altcoin Portfolio ═══ -->
-<div class="c" style="border-left:2px solid #34d399">
+<div class="c" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-ptf')">🌐 Altcoin Portfolio</div>
   <div id="sec-ptf" class="col-b">
     <div id="ptfDetectDiv"></div>
@@ -522,7 +523,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ TRADES ═══ -->
-<div class="c" style="border-left:2px solid #22d3ee">
+<div class="c" style="border-left:3px solid #22d3ee">
   <div class="lb">Last Trade</div>
   <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
   <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">📋 All Trades (<span id="tradeCnt">0</span>)</div>
@@ -541,7 +542,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ WHALE ACTIVITY ═══ -->
-<div class="c" style="border-left:2px solid #fbbf24">
+<div class="c" style="border-left:3px solid #fbbf24">
   <div class="col" onclick="tog(this,'sec-whale')">🐋 Whale Activity</div>
   <div id="sec-whale" class="col-b">
     <div id="whaleSummary" class="mg" style="margin-bottom:10px"></div>
@@ -550,10 +551,10 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
-<div class="c" style="border-color:#34d39920;border-left:2px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">📊 P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
+<div class="c" style="border-color:#34d39920;border-left:3px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">📊 P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
 
 <!-- ═══ 3. LP POSITIONS ═══ -->
-<div class="c" style="border-color:#fb923c15;border-left:2px solid #fb923c">
+<div class="c" style="border-color:#fb923c15;border-left:3px solid #fb923c">
   <div class="col" onclick="tog(this,'sec-lps')">📌 Active LP Positions</div>
   <div id="sec-lps" class="col-b">
     <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
@@ -563,7 +564,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ LP P&L DETAIL ═══ -->
-<div class="c" style="border-left:2px solid #34d399">
+<div class="c" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-lppnl')">📈 LP P&L Detail</div>
   <div id="sec-lppnl" class="col-b">
     <div id="lpPnlSummary" class="mg" style="margin-bottom:10px"></div>
@@ -572,7 +573,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->
-<div class="c" style="border-left:2px solid #475569">
+<div class="c" style="border-left:3px solid #475569">
   <div class="lb">Closed Positions</div>
   <div class="mg" id="histSummary"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
   <div class="col" onclick="tog(this,'sec-hist')" style="margin-top:10px">📕 Closed Positions — Details</div>
@@ -582,7 +583,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ TAX REPORT ═══ -->
-<div class="c" style="border-left:2px solid #fbbf24">
+<div class="c" style="border-left:3px solid #fbbf24">
   <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report</div>
   <div id="sec-tax" class="col-b">
     <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BURN Token — Veräußerungen (Ganho de Capital)</div>
@@ -610,13 +611,13 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ 6. CHART (collapsible) ═══ -->
-<div class="c" style="border-left:2px solid #475569">
+<div class="c" style="border-left:3px solid #475569">
   <div class="col" onclick="tog(this,'sec-chart')">📉 Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:12px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ GeckoTerminal</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:10px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ DexScreener</a></div>
   <div id="sec-chart" class="col-b"><div style="position:relative;min-height:400px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0&resolution=1D" style="width:100%;height:400px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
 </div>
 
 <!-- ═══ COLLAPSIBLE: Market Analysis ═══ -->
-<div class="c" style="border-left:2px solid #22d3ee">
+<div class="c" style="border-left:3px solid #22d3ee">
   <div class="col" onclick="tog(this,'sec-mkt')">🔍 Market Analysis</div>
   <div id="sec-mkt" class="col-b">
     <div class="lb" style="margin-top:4px">Buyflow</div>
@@ -628,7 +629,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ CAPITAL FLOW ═══ -->
-<div class="c" style="border-left:2px solid #60a5fa">
+<div class="c" style="border-left:3px solid #60a5fa">
   <div class="col" onclick="tog(this,'sec-cflow')">💰 Capital Flow</div>
   <div id="sec-cflow" class="col-b">
     <div id="cflowSummary" class="mg" style="margin-bottom:10px"></div>
@@ -637,7 +638,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ POOL HEALTH ═══ -->
-<div class="c" style="border-left:2px solid #34d399">
+<div class="c" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-phealth')">🏥 Pool Health</div>
   <div id="sec-phealth" class="col-b">
     <div id="phealthGrid" class="mg" style="margin-bottom:10px"></div>
@@ -646,7 +647,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ STAKING APY ═══ -->
-<div class="c" style="border-left:2px solid #c084fc">
+<div class="c" style="border-left:3px solid #c084fc">
   <div class="col" onclick="tog(this,'sec-stapy')">⚡ Staking APY Tracker</div>
   <div id="sec-stapy" class="col-b">
     <div id="stapySummary" class="mg" style="margin-bottom:10px"></div>
@@ -655,7 +656,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ COLLAPSIBLE: Pool Liquidity Map ═══ -->
-<div class="c" style="border-left:2px solid #f87171">
+<div class="c" style="border-left:3px solid #f87171">
   <div class="col" onclick="tog(this,'sec-lmap')">🗺️ Pool Liquidity Map</div>
   <div id="sec-lmap" class="col-b">
     <div style="margin-bottom:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
@@ -670,7 +671,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ COLLAPSIBLE: Tokenomics ═══ -->
-<div class="c" style="border-left:2px solid #475569">
+<div class="c" style="border-left:3px solid #475569">
   <div class="col" onclick="tog(this,'sec-tok')">🪙 Tokenomics</div>
   <div id="sec-tok" class="col-b">
     <div class="mg" id="supplyGrid"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
@@ -678,7 +679,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ COLLAPSIBLE: Price Scenario Simulation ═══ -->
-<div class="c" style="border-left:2px solid #fbbf24">
+<div class="c" style="border-left:3px solid #fbbf24">
   <div class="col" onclick="tog(this,'sec-sim')">🎲 Price Scenario Simulation</div>
   <div id="sec-sim" class="col-b">
     <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚠ Simulation — not a price prediction</div>
