@@ -1064,21 +1064,28 @@ function renderLmap(buckets){
             burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
           }
           if(isFullRange){
-            // Full Range: estimate from pool reserves proportional to liquidity
             burnDep=tB>0?tB:0;
             lpLeft=burnDep;lpUsdc=burnDep*P;
           } else if(burnDep>0&&P>0){
             var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
           }
-        }catch(e){console.log("LMAP render calc err:",e);}
+        }catch(e){}
+        // Calculate projected USDC when fully filled
+        var ifFilled=0;
+        if(!isFullRange&&burnDep>0){
+          var avgSell=(lp.lo+lp.hi)/2;
+          ifFilled=burnDep*avgSell;
+        }else if(isFullRange){
+          ifFilled=burnDep*P;
+        }
         var isInRange=P>=lp.lo&&P<lp.hi;
-        var barPct=maxLiq>0?Math.round(lp.liq/maxLiq*100):100;
-        var barClr=isInRange?"var(--o)":"var(--g)";
-        rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--g)">'+(isInRange?"► ":"")+rng+'</td>';
+        // Fill bar as percentage
+        var fillClr=lpPct>=90?"var(--r)":lpPct>=50?"var(--warn)":lpPct>0?"var(--g)":"var(--dm)";
+        rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.04);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--g)">'+(isInRange?"► ":"")+rng+'</td>';
         rows+='<td style="color:var(--o)">'+F(burnDep,0)+'</td>';
-        rows+='<td>'+F(lpLeft,0)+' / $'+F(lpUsdc,0)+'</td>';
-        rows+='<td><div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:6px;overflow:hidden"><div style="width:'+barPct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div></td>';
-        rows+='<td style="color:var(--g);font-weight:600">ACTIVE</td></tr>';
+        rows+='<td style="color:var(--g)">$'+F(lpUsdc,0)+'</td>';
+        rows+='<td style="color:var(--cy)">$'+F(ifFilled,0)+'</td>';
+        rows+='<td style="color:'+fillClr+';font-weight:600">'+lpPct.toFixed(0)+'%</td></tr>';
       }
     }
   }
