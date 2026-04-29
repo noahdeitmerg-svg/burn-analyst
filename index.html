@@ -115,44 +115,68 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 .nxt b{font-size:14px;font-weight:700}
 .tgt-row{text-align:center;margin-top:8px;font-size:10px;color:var(--tx);display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
 @media(max-width:600px){
-  .w{padding:6px}
-  .c{margin-bottom:8px;padding:10px}
-  .rings{gap:8px;padding:4px 0}
-  .orb{width:95px;height:95px;border-width:1.5px}
-  .orb-main{width:115px;height:115px}
-  .orb-main .orb-val{font-size:16px}
-  .orb-val{font-size:12px}
-  .orb-lbl{font-size:6px;letter-spacing:1px}
-  .orb-sub{font-size:7px}
-  .mg{grid-template-columns:repeat(2,1fr);gap:6px}
-  .mb{padding:8px 6px}
-  .mb small{font-size:7px;letter-spacing:.5px}
-  .mb b{font-size:12px}
-  .key-val{font-size:15px !important}
-  .yield-big{font-size:14px !important}
-  .lb{font-size:8px;letter-spacing:1px;margin-bottom:6px}
-  .nxt{font-size:9px;padding:8px 6px}
-  .nxt b{font-size:11px}
-  table{font-size:9px;line-height:1.5}
-  .lp-tbl td{padding:8px 4px;font-size:10px}
-  .lp-tbl th{padding:6px 4px;font-size:7px;letter-spacing:.5px}
-  .hist-tbl td{padding:5px 4px;font-size:9px}
-  .mkt-tbl td{padding:5px 4px;font-size:9px}
-  th{font-size:7px;padding:4px;letter-spacing:.5px}
-  td{padding:4px}
-  .col{font-size:9px;letter-spacing:.8px;padding:12px 10px;min-height:44px;display:flex;align-items:center}
-  .hero-row{margin-top:4px}
-  .hdr h1{font-size:13px}
-  .hdr{margin-bottom:6px}
-  .btn{font-size:9px;padding:6px 12px;min-height:36px}
-  .inp{font-size:12px !important;padding:6px 8px !important;min-height:36px}
-  select.inp{min-height:36px}
-  .sep{margin:4px 0 10px}
-  .sep-sm{margin:3px 0 6px}
-  .nt{font-size:8px;padding:6px}
+  .w{padding:8px}
+  .c{margin-bottom:10px;padding:12px}
+  /* Hero Orbs */
+  .rings{gap:6px;padding:6px 0}
+  .orb{width:100px;height:100px;border-width:2px}
+  .orb-main{width:125px;height:125px}
+  .orb-main .orb-val{font-size:18px}
+  .orb-val{font-size:14px}
+  .orb-lbl{font-size:7px;letter-spacing:1.2px}
+  .orb-sub{font-size:9px}
+  /* Summary Boxes */
+  .mg{grid-template-columns:repeat(2,1fr);gap:8px}
+  .mb{padding:10px 8px}
+  .mb small{font-size:8px;letter-spacing:.6px}
+  .mb b{font-size:15px}
+  .key-val{font-size:18px !important}
+  .yield-big{font-size:16px !important}
+  /* Labels */
+  .lb{font-size:10px;letter-spacing:1.2px;margin-bottom:8px}
+  /* Next Fill */
+  .nxt{font-size:11px;padding:10px 8px}
+  .nxt b{font-size:14px}
+  /* Tables */
+  table{font-size:11px;line-height:1.6}
+  .lp-tbl td{padding:10px 6px;font-size:12px}
+  .lp-tbl th{padding:8px 6px;font-size:9px;letter-spacing:.6px}
+  .hist-tbl td{padding:8px 6px;font-size:11px}
+  .mkt-tbl td{padding:8px 6px;font-size:11px}
+  th{font-size:9px;padding:6px;letter-spacing:.6px}
+  td{padding:6px}
+  /* Collapsible Headers */
+  .col{font-size:12px;letter-spacing:1px;padding:14px 12px;min-height:48px;display:flex;align-items:center}
+  /* Header */
+  .hero-row{margin-top:6px}
+  .hdr h1{font-size:15px}
+  .hdr{margin-bottom:8px}
+  /* Buttons & Inputs */
+  .btn{font-size:11px;padding:8px 14px;min-height:44px}
+  .inp{font-size:14px !important;padding:8px 10px !important;min-height:44px}
+  select.inp{min-height:44px;font-size:14px !important}
+  textarea.inp{font-size:12px !important;min-height:60px}
+  /* Separators */
+  .sep{margin:6px 0 12px}
+  .sep-sm{margin:4px 0 8px}
+  /* Notes */
+  .nt{font-size:10px;padding:8px}
+  /* Scrolling */
   .ov{-webkit-overflow-scrolling:touch;overflow-x:auto}
-  .col-b{padding:6px 0}
+  .col-b{padding:8px 0}
+  /* SVG Charts */
   svg{max-width:100%;height:auto}
+  /* Progress bar */
+  .prog-wrap{height:6px;margin:6px 0}
+  /* Alert bar */
+  #alertBar{padding:10px 12px !important}
+  #alertMsg{font-size:12px !important}
+  /* Wallet balance */
+  #walGrid{font-size:13px !important;gap:12px !important}
+  /* Trade rows - make wallet links bigger */
+  a[href*="arbiscan"]{font-size:10px !important}
+  /* Status bar */
+  #foot{font-size:10px;padding:16px 0}
 }
 </style>
 </head>
@@ -194,6 +218,39 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 <!-- ═══ WALLET ═══ -->
 <div class="c" style="padding:8px 14px;border-left:3px solid #fb923c">
   <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
+</div>
+
+<!-- ═══ ALERT BAR ═══ -->
+<div id="alertBar" class="c" style="padding:6px 12px;display:none;border-left:3px solid #fbbf24;background:rgba(251,191,36,.04)">
+  <div id="alertMsg" style="font-size:10px;color:var(--o);text-align:center"></div>
+</div>
+
+<!-- ═══ PRICE ALERTS ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-palert')">Price & LP Alerts</div>
+  <div id="sec-palert" class="col-b">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
+      <div><div style="font-size:8px;color:var(--dm)">ALERT ABOVE $</div>
+        <input class="inp" id="alertHi" type="number" step="any" placeholder="0.20" style="width:80px;font-size:11px"></div>
+      <div><div style="font-size:8px;color:var(--dm)">ALERT BELOW $</div>
+        <input class="inp" id="alertLo" type="number" step="any" placeholder="0.12" style="width:80px;font-size:11px"></div>
+      <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
+      <button class="btn" onclick="clearAlerts()" style="font-size:10px;opacity:.5">Clear</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:8px;color:var(--dm)">LP FILL ALERT %</div>
+        <input class="inp" id="alertFill1" type="number" step="1" placeholder="50" style="width:60px;font-size:11px"></div>
+      <div><div style="font-size:8px;color:var(--dm)">LP FILL ALERT %</div>
+        <input class="inp" id="alertFill2" type="number" step="1" placeholder="90" style="width:60px;font-size:11px"></div>
+      <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
+    </div>
+    <div id="alertStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
+    <div id="alertHistory" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
+    <div class="sep" style="margin:6px 0"></div>
+    <div style="font-size:8px;color:var(--dm)">PUSH SETUP: Klick 🔔 oben → Dann öffne Console → <code>localStorage.getItem('push_sub')</code> → Paste in burn-monitor.py auf Hetzner</div>
+    <div><button class="btn" onclick="showPushSub()" style="font-size:9px;margin-top:4px">Show Push Subscription</button></div>
+    <div id="pushSubInfo" style="font-size:8px;color:var(--cy);margin-top:4px;word-break:break-all"></div>
+  </div>
 </div>
 
 <!-- ═══ WALLET TRACKER ═══ -->
@@ -430,6 +487,33 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
   </div>
 </div>
 
+<!-- ═══ CAPITAL FLOW ═══ -->
+<div class="c" style="border-left:3px solid #60a5fa">
+  <div class="col" onclick="tog(this,'sec-cflow')">Capital Flow</div>
+  <div id="sec-cflow" class="col-b">
+    <div id="cflowSummary" class="mg" style="margin-bottom:10px"></div>
+    <div id="cflowChart" style="margin-bottom:8px"><span style="color:var(--dm);font-size:10px">Loading trades...</span></div>
+  </div>
+</div>
+
+<!-- ═══ POOL HEALTH ═══ -->
+<div class="c" style="border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-phealth')">Pool Health</div>
+  <div id="sec-phealth" class="col-b">
+    <div id="phealthGrid" class="mg" style="margin-bottom:10px"></div>
+    <div id="phealthDetail" style="font-size:9px;color:var(--dm)"></div>
+  </div>
+</div>
+
+<!-- ═══ STAKING APY ═══ -->
+<div class="c" style="border-left:3px solid #c084fc">
+  <div class="col" onclick="tog(this,'sec-stapy')">Staking APY Tracker</div>
+  <div id="sec-stapy" class="col-b">
+    <div id="stapySummary" class="mg" style="margin-bottom:10px"></div>
+    <div id="stapyChart" style="margin-bottom:8px"></div>
+  </div>
+</div>
+
 <!-- ═══ COLLAPSIBLE: Pool Liquidity Map ═══ -->
 <div class="c" style="border-left:3px solid #f87171">
   <div class="col" onclick="tog(this,'sec-lmap')">Pool Liquidity Map</div>
@@ -477,6 +561,34 @@ td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
 </div>
 
 <script src="app.js"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(function(regs){for(var i=0;i<regs.length;i++)regs[i].update();});}</script>
+<script>
+var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    console.log('SW registered');
+    // Subscribe to push if not already
+    reg.pushManager.getSubscription().then(function(sub){
+      if(sub){console.log('Push already subscribed');window._pushSub=sub;return;}
+      // Auto-subscribe on notification permission
+      if(Notification.permission==='granted'){
+        reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)}).then(function(sub){
+          console.log('Push subscribed:',JSON.stringify(sub.toJSON()));
+          window._pushSub=sub;
+          // Show subscription for server config
+          var subData=sub.toJSON();
+          localStorage.setItem('push_sub',JSON.stringify(subData));
+        });
+      }
+    });
+  }).catch(function(e){console.log('SW err:',e);});
+}
+function urlBase64ToUint8Array(base64String){
+  var padding='='.repeat((4-base64String.length%4)%4);
+  var base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  var raw=atob(base64);var arr=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+</script>
 </body>
 </html>

@@ -135,7 +135,15 @@ function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;var v=parseInt(h,16)/1e6;re
 // ═══ NOTIFICATIONS + SOUND ═══
 var prevPrice=0, notifOn=false, soundOn=false, audioCtx=null;
 function reqNotif(){if(!("Notification" in window)){alert("Browser does not support notifications");return;}
-  Notification.requestPermission().then(function(p){if(p==="granted"){notifOn=true;alert("🔔 Alerts enabled!");}});}
+  Notification.requestPermission().then(function(p){if(p==="granted"){notifOn=true;alert("🔔 Alerts enabled!");
+    // Subscribe to Web Push
+    if('serviceWorker' in navigator){navigator.serviceWorker.ready.then(function(reg){
+      reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)}).then(function(sub){
+        window._pushSub=sub;localStorage.setItem('push_sub',JSON.stringify(sub.toJSON()));
+        console.log('Push subscribed! Copy this to server:');console.log(JSON.stringify(sub.toJSON()));
+      }).catch(function(e){console.log('Push subscribe err:',e);});
+    });}
+  }});}
 function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body});}catch(e){}}if(soundOn)beep();}
 function toggleMute(){soundOn=!soundOn;$("mutBtn").textContent=soundOn?"🔊":"🔇";if(soundOn)beep();}
 function beep(){
@@ -510,6 +518,8 @@ function render(){
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
   try{renderLpPnl();}catch(e){}
+  try{checkAlerts();}catch(e){}
+  try{renderStakingApy();}catch(e){}
 
   // BUYFLOW
   var bR="";for(var i=0;i<TGT.length;i++){var tp=TGT[i],ok=tp>P&&P>0,uN=ok?Math.sqrt(K*tp)-Y:0,bB=ok?X-Math.sqrt(K/tp):0,m=P>0?tp/P:0;
@@ -578,6 +588,8 @@ function renderTrades(){
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
   try{renderWhales();}catch(e){}
+  try{renderCapitalFlow();}catch(e){}
+  try{renderPoolHealth();}catch(e){}
 }
 
 function tradePg(d){tradePg_+=d;renderTrades();}
@@ -685,7 +697,7 @@ function encI256(v){if(v>=0)return BigInt(v).toString(16).padStart(64,"0");retur
 function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
 
 async function scanLiqMap(){
-  if(lmapCache&&lmapTs>Date.now()-120000){renderLmap(lmapCache);return;}
+  if(lmapCache&&lmapTs>Date.now()-600000){renderLmap(lmapCache);return;}
   $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
   $("lmapStatus").textContent="Scanning ticks...";
   try{
@@ -846,7 +858,8 @@ async function scanLiqMap(){
           if(isFullRange){ppLo=0.0001;ppHi=999999;}
           else{ppHi=wtTickToPrice(ptL);ppLo=wtTickToPrice(ptU);}
           if(ppLo<=0||ppHi<=ppLo)continue;
-          var isMe=owner===myD||owner===myL;
+          var myAlt="0x6e37cc";
+          var isMe=owner===myD||owner===myL||owner.indexOf(myAlt)===0;
           if(!isClosed)nftActive++;
           uniqueOwners[owner]=1;
           if(!isClosed)console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
@@ -1012,11 +1025,14 @@ function renderLmap(buckets){
   for(var wi=0;wi<owners.length;wi++){
     var ow=owners[wi];
     var wS=ow.addr.slice(0,6)+"…"+ow.addr.slice(-4);
+    var WALLET_LABELS={"0x72ade1":"DAO Vault","0x505042":"Noah (DeFi)","0x6e37cc":"Noah (Alt)","0x1b5b96":"Elite","0x0e7121":"Founder","0x6324b1":"Private","0x988966":"Private"};
+    var wLabel="";for(var wk in WALLET_LABELS){if(ow.addr.indexOf(wk)===0){wLabel=WALLET_LABELS[wk];break;}}
     var wLink='<a href="https://arbiscan.io/address/'+ow.addr+'" target="_blank" style="color:'+(ow.isMe?"var(--cy)":ow.activeCount>0?"var(--g)":"var(--dm)")+'">'+(ow.isMe?"⭐ ":"")+wS+'</a>';
+    var labelHtml=wLabel?' <span style="font-size:9px;color:var(--cy);margin-left:4px">'+wLabel+'</span>':'';
     var statusTxt=ow.activeCount>0?ow.activeCount+" active"+(ow.closedCount>0?", "+ow.closedCount+" closed":""):ow.closedCount+" closed";
     // Wallet header row
     rows+='<tr style="background:rgba(30,41,59,.3);border-top:2px solid var(--bd)"><td colspan="5" style="padding:8px 6px">'+
-      '<span style="font-weight:600;font-size:11px">'+wLink+'</span>'+
+      '<span style="font-weight:600;font-size:11px">'+wLink+'</span>'+labelHtml+
       ' <span style="font-size:8px;color:var(--dm);margin-left:6px">'+statusTxt+'</span></td></tr>';
     // Sort positions: active first, then by lo price
     ow.positions.sort(function(a,b){
@@ -1046,7 +1062,6 @@ function renderLmap(buckets){
         try{
           if(lp.tL!==undefined&&lp.tU!==undefined&&!isFullRange){
             burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
-            console.log("LMAP render: "+lp.owner.slice(0,8)+" tL="+lp.tL+" tU="+lp.tU+" liq="+lp.liq+" → burnDep="+burnDep);
           }
           if(isFullRange){
             // Full Range: estimate from pool reserves proportional to liquidity
@@ -1730,6 +1745,246 @@ function detectClosedLPs(newLPs){
       localStorage.setItem("cl_seen",JSON.stringify(clSeen));}catch(e){}
     if(typeof beep==="function"&&typeof soundOn!=="undefined"&&soundOn)beep();
   }
+}
+
+// ═══ PRICE & LP ALERTS ═══
+var alertCfg={hi:0,lo:0,fill1:50,fill2:90};
+var alertTriggered={};
+try{var ac=localStorage.getItem("burn_alerts");if(ac)alertCfg=JSON.parse(ac);}catch(e){}
+try{var at2=localStorage.getItem("burn_alert_triggered");if(at2)alertTriggered=JSON.parse(at2);}catch(e){}
+
+function saveAlerts(){
+  alertCfg.hi=parseFloat($("alertHi").value)||0;
+  alertCfg.lo=parseFloat($("alertLo").value)||0;
+  alertCfg.fill1=parseInt($("alertFill1").value)||50;
+  alertCfg.fill2=parseInt($("alertFill2").value)||90;
+  alertTriggered={};
+  try{localStorage.setItem("burn_alerts",JSON.stringify(alertCfg));localStorage.removeItem("burn_alert_triggered");}catch(e){}
+  $("alertStatus").innerHTML='<span style="color:var(--g)">✓ Alerts saved</span>';
+  checkAlerts();
+}
+function clearAlerts(){
+  alertCfg={hi:0,lo:0,fill1:50,fill2:90};alertTriggered={};
+  try{localStorage.removeItem("burn_alerts");localStorage.removeItem("burn_alert_triggered");}catch(e){}
+  $("alertHi").value="";$("alertLo").value="";$("alertFill1").value="";$("alertFill2").value="";
+  $("alertStatus").innerHTML='<span style="color:var(--dm)">Alerts cleared</span>';
+  $("alertBar").style.display="none";
+}
+function showPushSub(){
+  var sub=localStorage.getItem("push_sub");
+  var fcm=localStorage.getItem("fcm_token");
+  var info="";
+  if(fcm)info+='<div style="margin-bottom:4px"><b>FCM Token (für Hetzner):</b><br><span style="color:var(--g);word-break:break-all">'+fcm+'</span></div>';
+  if(sub)info+='<div><b>Web Push Sub:</b><br>'+sub+'</div>';
+  if(!fcm&&!sub)info='<span style="color:var(--r)">Nicht subscribed. Klick erst 🔔 oben rechts.</span>';
+  $("pushSubInfo").innerHTML=info;
+}
+function checkAlerts(){
+  try{
+    if(P<=0)return;
+    var msgs=[];
+    // Price alerts
+    if(alertCfg.hi>0&&P>=alertCfg.hi&&!alertTriggered.hi){
+      msgs.push("🚀 BURN above $"+alertCfg.hi.toFixed(4)+" (now $"+FP(P)+")");
+      alertTriggered.hi=Date.now();
+      if(typeof notify==="function")notify("🚀 Price Alert","BURN above $"+alertCfg.hi.toFixed(4)+" → $"+FP(P));
+    }
+    if(alertCfg.lo>0&&P<=alertCfg.lo&&!alertTriggered.lo){
+      msgs.push("⚠️ BURN below $"+alertCfg.lo.toFixed(4)+" (now $"+FP(P)+")");
+      alertTriggered.lo=Date.now();
+      if(typeof notify==="function")notify("⚠️ Price Alert","BURN below $"+alertCfg.lo.toFixed(4)+" → $"+FP(P));
+    }
+    // Reset triggers when price moves back
+    if(alertCfg.hi>0&&P<alertCfg.hi*0.98)delete alertTriggered.hi;
+    if(alertCfg.lo>0&&P>alertCfg.lo*1.02)delete alertTriggered.lo;
+    // LP Fill alerts
+    for(var li=0;li<LP.length;li++){
+      if(LP[li].fr)continue;
+      var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);
+      var fillKey="lp_"+li+"_"+alertCfg.fill1;
+      var fillKey2="lp_"+li+"_"+alertCfg.fill2;
+      if(alertCfg.fill1>0&&cv.pct>=alertCfg.fill1&&!alertTriggered[fillKey]){
+        msgs.push("📊 LP $"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" reached "+cv.pct.toFixed(0)+"% filled");
+        alertTriggered[fillKey]=Date.now();
+        if(typeof notify==="function")notify("📊 LP Fill Alert","$"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" at "+cv.pct.toFixed(0)+"%");
+      }
+      if(alertCfg.fill2>0&&cv.pct>=alertCfg.fill2&&!alertTriggered[fillKey2]){
+        msgs.push("🔥 LP $"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" reached "+cv.pct.toFixed(0)+"% filled!");
+        alertTriggered[fillKey2]=Date.now();
+        if(typeof notify==="function")notify("🔥 LP Fill Alert!","$"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" at "+cv.pct.toFixed(0)+"%!");
+      }
+    }
+    // Show alert bar
+    if(msgs.length>0){
+      $("alertBar").style.display="block";
+      $("alertMsg").innerHTML=msgs.join(" · ");
+    }
+    // Update status
+    var statusParts=[];
+    if(alertCfg.hi>0)statusParts.push("Above $"+alertCfg.hi.toFixed(4));
+    if(alertCfg.lo>0)statusParts.push("Below $"+alertCfg.lo.toFixed(4));
+    if(alertCfg.fill1>0)statusParts.push("LP Fill "+alertCfg.fill1+"%");
+    if(alertCfg.fill2>0)statusParts.push("LP Fill "+alertCfg.fill2+"%");
+    if($("alertStatus"))$("alertStatus").innerHTML=statusParts.length>0?'Active: '+statusParts.join(", "):'No alerts set';
+    try{localStorage.setItem("burn_alert_triggered",JSON.stringify(alertTriggered));}catch(e){}
+  }catch(e){}
+}
+// Restore alert inputs on load
+try{
+  if(alertCfg.hi>0&&$("alertHi"))$("alertHi").value=alertCfg.hi;
+  if(alertCfg.lo>0&&$("alertLo"))$("alertLo").value=alertCfg.lo;
+  if(alertCfg.fill1&&$("alertFill1"))$("alertFill1").value=alertCfg.fill1;
+  if(alertCfg.fill2&&$("alertFill2"))$("alertFill2").value=alertCfg.fill2;
+}catch(e){}
+
+// ═══ CAPITAL FLOW CHART ═══
+function renderCapitalFlow(){
+  try{
+    if(!$("cflowChart")||!allTrades||allTrades.length<2)return;
+    // Aggregate by day
+    var days={};
+    var now=Date.now();
+    for(var i=0;i<allTrades.length;i++){
+      var t=allTrades[i];
+      var dayMs=now-t.minAgo*60000;
+      var dayKey=new Date(dayMs).toISOString().split("T")[0];
+      if(!days[dayKey])days[dayKey]={buy:0,sell:0,net:0,count:0};
+      if(t.isBuy){days[dayKey].buy+=t.usdc;}else{days[dayKey].sell+=t.usdc;}
+      days[dayKey].net+=(t.isBuy?t.usdc:-t.usdc);
+      days[dayKey].count++;
+    }
+    var dayKeys=Object.keys(days).sort();
+    if(dayKeys.length<1)return;
+    var last14=dayKeys.slice(-14);
+    // Summary
+    var totalBuy=0,totalSell=0;
+    for(var d=0;d<last14.length;d++){totalBuy+=days[last14[d]].buy;totalSell+=days[last14[d]].sell;}
+    $("cflowSummary").innerHTML=MB("Buy Volume","$"+F(totalBuy,0),"var(--g)")+MB("Sell Volume","$"+F(totalSell,0),"var(--r)")+
+      MB("Net Flow",(totalBuy-totalSell>=0?"+":"-")+"$"+F(Math.abs(totalBuy-totalSell),0),totalBuy>=totalSell?"var(--g)":"var(--r)")+
+      MB("Days",last14.length,"var(--br)");
+    // SVG bar chart
+    var maxVal=1;
+    for(var d2=0;d2<last14.length;d2++){var abs=Math.abs(days[last14[d2]].net);if(abs>maxVal)maxVal=abs;}
+    var svgW=700,svgH=160,barW=Math.floor(svgW/last14.length)-4,midY=svgH/2;
+    var svg='<svg viewBox="0 0 '+svgW+' '+(svgH+20)+'" style="width:100%;height:auto">';
+    svg+='<line x1="0" y1="'+midY+'" x2="'+svgW+'" y2="'+midY+'" stroke="rgba(148,163,184,.3)" stroke-width="1" stroke-dasharray="4"/>';
+    for(var d3=0;d3<last14.length;d3++){
+      var dk=last14[d3];var net=days[dk].net;
+      var barH=Math.abs(net)/maxVal*(midY-10);
+      var x=d3*(barW+4)+2;
+      var clr=net>=0?"#34d399":"#f87171";
+      var y=net>=0?midY-barH:midY;
+      svg+='<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+Math.max(barH,1)+'" fill="'+clr+'" rx="2" opacity=".8"/>';
+      svg+='<text x="'+(x+barW/2)+'" y="'+(svgH+14)+'" text-anchor="middle" fill="#94a3b8" font-size="7" font-family="JetBrains Mono">'+dk.slice(5)+'</text>';
+    }
+    svg+='<text x="4" y="12" fill="#94a3b8" font-size="8">+$'+F(maxVal,0)+'</text>';
+    svg+='<text x="4" y="'+(svgH-4)+'" fill="#94a3b8" font-size="8">-$'+F(maxVal,0)+'</text>';
+    svg+='</svg>';
+    $("cflowChart").innerHTML=svg;
+  }catch(e){console.log("cflow err:",e);}
+}
+
+// ═══ POOL HEALTH DASHBOARD ═══
+function renderPoolHealth(){
+  try{
+    if(!$("phealthGrid")||!allTrades||allTrades.length<2)return;
+    var now=Date.now();
+    var h24={buy:0,sell:0,buyC:0,sellC:0,wallets:{}};
+    var d7={buy:0,sell:0,buyC:0,sellC:0,wallets:{}};
+    for(var i=0;i<allTrades.length;i++){
+      var t=allTrades[i];
+      var ageMs=t.minAgo*60000;
+      if(ageMs<=86400000){
+        if(t.isBuy){h24.buy+=t.usdc;h24.buyC++;}else{h24.sell+=t.usdc;h24.sellC++;}
+        if(t.wallet)h24.wallets[t.wallet]=1;
+      }
+      if(ageMs<=604800000){
+        if(t.isBuy){d7.buy+=t.usdc;d7.buyC++;}else{d7.sell+=t.usdc;d7.sellC++;}
+        if(t.wallet)d7.wallets[t.wallet]=1;
+      }
+    }
+    var ratio24=h24.sell>0?(h24.buy/h24.sell):h24.buy>0?999:1;
+    var ratio7=d7.sell>0?(d7.buy/d7.sell):d7.buy>0?999:1;
+    // Pool TVL from existing data
+    var poolBurn=typeof POOL_BURN!=="undefined"?POOL_BURN:0;
+    var poolUsdc=typeof POOL_USDC!=="undefined"?POOL_USDC:0;
+    var tvl=poolBurn*P+poolUsdc;
+    $("phealthGrid").innerHTML=
+      MB("TVL","$"+F(tvl,0),"var(--br)")+
+      MB("24h Volume","$"+F(h24.buy+h24.sell,0),"var(--cy)")+
+      MB("24h Buy/Sell",ratio24.toFixed(2)+"x",ratio24>1?"var(--g)":"var(--r)")+
+      MB("7d Buy/Sell",ratio7.toFixed(2)+"x",ratio7>1?"var(--g)":"var(--r)")+
+      MB("24h Traders",Object.keys(h24.wallets).length,"var(--br)")+
+      MB("7d Traders",Object.keys(d7.wallets).length,"var(--br)");
+    var pressure=ratio24>1.5?"🟢 Strong buying":ratio24>1?"🟢 Slight buying":ratio24>0.7?"🟡 Neutral":"🔴 Selling pressure";
+    $("phealthDetail").innerHTML=pressure+" · 24h: "+h24.buyC+" buys / "+h24.sellC+" sells · 7d: "+d7.buyC+" buys / "+d7.sellC+" sells";
+  }catch(e){console.log("phealth err:",e);}
+}
+
+// ═══ STAKING APY TRACKER ═══
+var stapyHistory=[];
+try{var sh=localStorage.getItem("stapy_history");if(sh)stapyHistory=JSON.parse(sh);}catch(e){}
+
+function renderStakingApy(){
+  try{
+    if(!$("stapySummary")||typeof stR==="undefined"||stR<=0)return;
+    // Save snapshot every hour
+    var lastSnap=stapyHistory.length>0?stapyHistory[stapyHistory.length-1]:null;
+    if(!lastSnap||Date.now()-lastSnap[0]>3600000){
+      stapyHistory.push([Date.now(),stR]);
+      if(stapyHistory.length>8760)stapyHistory.shift();
+      try{localStorage.setItem("stapy_history",JSON.stringify(stapyHistory));}catch(e){}
+    }
+    // Calculate APY from ratio change
+    var currentRatio=stR;
+    var dailyYield=0,weeklyYield=0,monthlyYield=0,apy=0;
+    if(stapyHistory.length>=2){
+      var oldest=stapyHistory[0];
+      var dayMs=Date.now()-oldest[0];
+      var days=dayMs/86400000;
+      if(days>0){
+        var totalGrowth=(currentRatio-oldest[1])/oldest[1];
+        var dailyRate=totalGrowth/days;
+        dailyYield=dailyRate*100;
+        weeklyYield=dailyRate*7*100;
+        monthlyYield=dailyRate*30*100;
+        apy=((Math.pow(1+dailyRate,365))-1)*100;
+      }
+    }
+    // Summary
+    var burnValue=typeof MY_STBURN!=="undefined"?MY_STBURN*stR*P:0;
+    var stBurnYield=typeof MY_STBURN!=="undefined"?MY_STBURN*(stR-1):0;
+    $("stapySummary").innerHTML=
+      MB("stBURN/BURN Ratio",currentRatio.toFixed(6),"var(--cy)")+
+      MB("Est. APY",apy>0?apy.toFixed(2)+"%":"collecting...","var(--g)")+
+      MB("Daily Yield",dailyYield>0?"+"+dailyYield.toFixed(4)+"%":"—","var(--g)")+
+      MB("stBURN Value","$"+F(burnValue,0),"var(--br)")+
+      MB("Yield Earned",F(stBurnYield,0)+" BURN","var(--o)")+
+      MB("Data Points",stapyHistory.length,"var(--dm)");
+    // Mini chart of ratio history
+    if(stapyHistory.length>=3){
+      var svgW=700,svgH=80;
+      var pts=stapyHistory;
+      var minR=pts[0][1],maxR=pts[0][1];
+      for(var i=0;i<pts.length;i++){if(pts[i][1]<minR)minR=pts[i][1];if(pts[i][1]>maxR)maxR=pts[i][1];}
+      var pad=(maxR-minR)*0.1||0.0001;minR-=pad;maxR+=pad;
+      var path="M";
+      var step=pts.length>300?Math.ceil(pts.length/300):1;
+      for(var j=0;j<pts.length;j+=step){
+        var x=(j/(pts.length-1))*svgW;
+        var y=svgH-(pts[j][1]-minR)/(maxR-minR)*svgH;
+        path+=(j===0?"":"L")+x.toFixed(1)+","+y.toFixed(1);
+      }
+      var svg='<svg viewBox="0 0 '+svgW+' '+(svgH+4)+'" style="width:100%;height:auto">';
+      svg+='<path d="'+path+'" fill="none" stroke="#c084fc" stroke-width="2"/>';
+      svg+='<text x="4" y="10" fill="#94a3b8" font-size="8">'+maxR.toFixed(6)+'</text>';
+      svg+='<text x="4" y="'+svgH+'" fill="#94a3b8" font-size="8">'+minR.toFixed(6)+'</text>';
+      svg+='</svg>';
+      $("stapyChart").innerHTML=svg;
+    }else{
+      $("stapyChart").innerHTML='<span style="color:var(--dm);font-size:10px">Collecting ratio data... chart after 3+ snapshots</span>';
+    }
+  }catch(e){console.log("stapy err:",e);}
 }
 
 // ═══ OFFLINE CACHE ═══
