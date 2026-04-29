@@ -1033,13 +1033,13 @@ function renderLmap(buckets){
       var isFullRange=lp.hi>100000;
       var rng=isFullRange?"$0 → ∞ (Full Range)":"$"+lp.lo.toFixed(lp.lo<1?3:2)+" → $"+lp.hi.toFixed(lp.hi<1?3:2);
       if(lp.closed){
-        var nftLink=lp.tokenId?'<a href="https://arbiscan.io/nft/0xC36442b4a4522E871399CD717aBDD847Ab11FE88/'+lp.tokenId+'" target="_blank" style="font-size:8px;color:var(--dm)">#'+lp.tokenId+'</a>':'';
+        var nftLink=lp.tokenId?'<a href="https://arbiscan.io/nft/0xC36442b4a4522E871399CD717aBDD847Ab11FE88/'+lp.tokenId+'" target="_blank" style="font-size:9px;color:var(--dm)">#'+lp.tokenId+'</a>':'';
         var cBurn=lp.burnOut>0?F(lp.burnOut,0):'—';
         var cUsdc=lp.usdcOut>0?'$'+F(lp.usdcOut,0):'—';
-        rows+='<tr style="opacity:.5"><td style="padding-left:20px;font-size:9px;text-decoration:line-through">'+rng+'</td>';
-        rows+='<td style="color:var(--o);font-size:9px">'+cBurn+'</td>';
-        rows+='<td style="font-size:9px">'+cUsdc+'</td>';
-        rows+='<td>'+nftLink+'</td><td style="color:var(--r);font-size:8px">CLOSED</td></tr>';
+        rows+='<tr><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--r)">'+rng+'</td>';
+        rows+='<td style="color:var(--o)">'+cBurn+'</td>';
+        rows+='<td>'+cUsdc+'</td>';
+        rows+='<td>'+nftLink+'</td><td style="color:var(--r);font-weight:600">CLOSED</td></tr>';
       }else{
         // Calculate BURN deposited using wtLiqToBurn with original ticks
         var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
@@ -1059,11 +1059,11 @@ function renderLmap(buckets){
         var isInRange=P>=lp.lo&&P<lp.hi;
         var barPct=maxLiq>0?Math.round(lp.liq/maxLiq*100):100;
         var barClr=isInRange?"var(--o)":"var(--g)";
-        rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px">'+(isInRange?"► ":"")+rng+'</td>';
+        rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.06);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--g)">'+(isInRange?"► ":"")+rng+'</td>';
         rows+='<td style="color:var(--o)">'+F(burnDep,0)+'</td>';
         rows+='<td>'+F(lpLeft,0)+' / $'+F(lpUsdc,0)+'</td>';
         rows+='<td><div style="width:100%;background:rgba(30,41,59,.3);border-radius:3px;height:6px;overflow:hidden"><div style="width:'+barPct+'%;height:100%;background:'+barClr+';border-radius:3px"></div></div></td>';
-        rows+='<td style="font-size:9px;color:var(--cy)">'+lpPct.toFixed(0)+'%</td></tr>';
+        rows+='<td style="color:var(--g);font-weight:600">ACTIVE</td></tr>';
       }
     }
   }
