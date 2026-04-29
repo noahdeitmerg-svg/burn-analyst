@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="My Crypto Portfolio">
+<meta name="theme-color" content="#05080f">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>My Crypto Portfolio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#05080f;--cd:rgba(12,18,32,.85);--bd:#1e293b;--dm:#e0e4ea;--mt:#eaecf0;--tx:#f0f2f5;--br:#ffffff;
+--g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--p:#c084fc;--cy:#22d3ee}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'JetBrains Mono','Courier New',monospace;font-size:13px;line-height:1.5;
+  background-image:radial-gradient(rgba(30,41,59,.25) 1px,transparent 1px);background-size:24px 24px}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:#1e293b;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#334155}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle;animation:pulse 2s ease-in-out infinite}
+a{color:var(--b);text-decoration:none}
+.w{max-width:860px;margin:0 auto;padding:16px}
+.hdr{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.hdr h1{font-size:16px;font-weight:700;color:var(--br);font-family:'Inter','JetBrains Mono',sans-serif}
+.hdr h1 em{color:var(--o);font-style:normal}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
+.btn{font-family:inherit;font-size:10px;padding:4px 12px;border-radius:8px;border:1px solid rgba(96,165,250,.15);background:rgba(96,165,250,.05);color:var(--b);cursor:pointer;transition:all .2s;backdrop-filter:blur(4px)}
+.btn:hover{background:rgba(96,165,250,.12);box-shadow:0 0 12px rgba(96,165,250,.15);border-color:rgba(96,165,250,.3)}
+.btn:disabled{opacity:.4}
+.c{position:relative;background:linear-gradient(180deg,rgba(14,20,35,.92),rgba(10,15,28,.88));border:1px solid rgba(30,41,59,.5);border-radius:14px;padding:14px;margin-bottom:10px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 4px 24px rgba(0,0,0,.3),0 1px 0 rgba(255,255,255,.02) inset}
+.c0{padding:0;overflow:hidden}
+.lb{font-size:9px;color:var(--br);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;margin-bottom:8px;font-family:'Inter','JetBrains Mono',sans-serif}
+.mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.mb{position:relative;background:linear-gradient(180deg,rgba(12,18,32,.8),rgba(6,10,20,.9));border:1px solid rgba(30,41,59,.35);border-radius:10px;padding:10px;transition:all .2s ease;animation:fadeIn .3s ease;overflow:hidden}
+.mb::after{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent)}
+.mb:hover{transform:translateY(-2px);border-color:rgba(96,165,250,.25);box-shadow:0 4px 16px rgba(0,0,0,.3),0 0 20px rgba(96,165,250,.06)}
+.mb small{font-size:8px;color:#fff;text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:3px;font-family:'Inter','JetBrains Mono',sans-serif}
+.mb b{font-size:14px;font-weight:600;display:block}
+.tg{display:inline-block;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;color:var(--br);font-size:9px;text-transform:uppercase;letter-spacing:.8px;padding:5px 6px;border-bottom:1px solid rgba(30,41,59,.5);font-weight:600;font-family:'Inter',sans-serif}
+td{padding:5px 6px;border-bottom:1px solid rgba(15,23,42,.6)}
+.bld{font-weight:600;color:var(--br)}
+.ov{overflow-x:auto}
+.tabs{display:flex;border-bottom:1px solid rgba(30,41,59,.4)}
+.tab{flex:1;padding:8px 0;border:none;font-family:inherit;font-size:10px;font-weight:600;cursor:pointer;background:0;color:var(--mt);border-bottom:2px solid transparent;transition:all .2s}
+.tab.on{background:rgba(96,165,250,.05);color:var(--b);border-bottom-color:var(--b)}
+.tab:hover{color:var(--b)}
+.inp{width:100%;background:rgba(10,15,26,.8);border:1px solid rgba(30,41,59,.4);border-radius:8px;color:var(--tx);padding:5px 8px;font-family:inherit;font-size:11px;outline:0;transition:border-color .2s}
+.inp:focus{border-color:rgba(96,165,250,.3)}
+.big{font-size:26px;font-weight:700;color:var(--br);font-family:inherit}
+.hid{display:none}
+.nt{padding:8px;border-radius:8px;font-size:9px;line-height:1.5;color:var(--tx);margin-top:8px;background:rgba(8,12,22,.5);border:1px solid rgba(30,41,59,.3)}
+@keyframes borderSpin{0%{--a:0deg}100%{--a:360deg}}
+@property --a{syntax:"<angle>";initial-value:0deg;inherits:false}
+.hero-card{position:relative;padding:24px 14px;background:var(--cd);border-radius:12px;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);overflow:hidden}
+.hero-card::before{content:'';position:absolute;inset:-1px;border-radius:12px;padding:1px;
+  background:conic-gradient(from var(--a),transparent 40%,var(--o) 50%,var(--cy) 55%,transparent 65%);
+  -webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  animation:borderSpin 8s linear infinite;pointer-events:none}
+.neon-g{text-shadow:0 0 12px rgba(52,211,153,.3),0 0 4px rgba(52,211,153,.15)}
+.neon-cy{text-shadow:0 0 12px rgba(34,211,238,.3),0 0 4px rgba(34,211,238,.15)}
+.neon-o{text-shadow:0 0 12px rgba(251,146,60,.3),0 0 4px rgba(251,146,60,.15)}
+.neon-w{text-shadow:0 0 12px rgba(226,232,240,.2),0 0 4px rgba(226,232,240,.1)}
+@keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+@keyframes glow{0%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}50%{box-shadow:0 0 30px rgba(251,146,60,.4),inset 0 0 20px rgba(251,146,60,.1)}100%{box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes orbBreathe{0%,100%{border-color:var(--o);filter:drop-shadow(0 0 8px rgba(251,146,60,.15))}50%{border-color:#fbbf24;filter:drop-shadow(0 0 16px rgba(251,146,60,.3))}}
+.orb-pulse{animation:glow .6s ease-out}
+.prog-wrap{height:6px;background:rgba(10,15,26,.8);border-radius:3px;margin-bottom:12px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,.3)}
+.prog-bar{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--g),var(--cy));transition:width .5s ease;box-shadow:0 0 8px rgba(52,211,153,.3)}
+.ptr{text-align:center;font-size:9px;color:var(--dm);padding:0;max-height:0;overflow:hidden;transition:max-height .2s,padding .2s}
+.ptr.show{max-height:40px;padding:10px 0}
+.ld{display:flex;align-items:center;gap:6px;padding:16px;color:var(--dm);font-size:10px}
+.ld::before{content:'';display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--b);animation:pulse 1.2s infinite}
+.skel{background:linear-gradient(90deg,rgba(12,18,32,.6) 25%,rgba(30,41,59,.4) 50%,rgba(12,18,32,.6) 75%);background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:6px;height:14px;width:60px;display:inline-block}
+.col{font-size:10px;color:var(--br);text-transform:uppercase;letter-spacing:1px;font-weight:600;cursor:pointer;padding:4px 0;user-select:none;display:flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;transition:color .15s}
+.col:hover{color:var(--br)}
+.col::before{content:'▸';color:var(--dm);font-size:12px;transition:transform .2s,color .2s}
+.col:hover::before{color:var(--b)}
+.col.open::before{transform:rotate(90deg)}
+.col-b{display:none;padding-top:12px}
+.col-b.open{display:block}
+.rings{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:8px 0}
+.orb{width:130px;height:130px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(circle at 35% 35%,rgba(20,29,48,.9),rgba(8,12,22,.95));border:2px solid;
+  box-shadow:0 0 24px rgba(0,0,0,.6),inset 0 0 20px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.03);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:filter .3s}
+.orb-main{width:155px;height:155px;animation:orbBreathe 4s ease-in-out infinite}
+.orb-main .orb-val{font-size:21px}
+.orb-lbl{font-size:8px;color:var(--mt);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:2px;font-family:'Inter',sans-serif}
+.orb-val{font-size:16px;font-weight:700;font-family:inherit}
+.orb-sub{font-size:9px;color:var(--mt);margin-top:2px}
+.hero-row{text-align:center;margin-top:10px;display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap}
+.hero-meta{margin-top:8px;display:flex;justify-content:center;gap:16px;font-size:10px;color:var(--tx)}
+.hero-update{text-align:center;margin-top:6px;font-size:9px;color:var(--dm)}
+.sep{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--bd),transparent);margin:6px 0 14px}
+.sep-sm{width:100%;height:1px;background:linear-gradient(90deg,transparent,var(--bd),transparent);margin:4px 0 8px}
+.lp-tbl th{padding:10px 12px;font-size:11px;letter-spacing:1px}
+.lp-tbl td{padding:14px 12px;font-size:15px;border-bottom:1px solid rgba(21,29,46,.6)}
+.lp-tbl tr:hover td{background:rgba(96,165,250,.03)}
+.hist-tbl td{padding:8px 8px;font-size:12px;border-bottom:1px solid rgba(21,29,46,.6)}
+.hist-tbl tr:hover td{background:rgba(96,165,250,.03)}
+.mkt-tbl td{padding:7px 8px}
+.mkt-tbl tr:hover td{background:rgba(96,165,250,.03)}
+.yield-big{font-size:18px !important}
+.key-val{font-size:20px !important}
+.nxt{text-align:center;margin-top:12px;padding:12px;background:linear-gradient(180deg,rgba(12,18,32,.8),rgba(6,10,20,.9));border:1px solid rgba(30,41,59,.3);border-radius:10px;font-size:11px;color:var(--tx)}
+.nxt b{font-size:14px;font-weight:700}
+.tgt-row{text-align:center;margin-top:8px;font-size:10px;color:var(--tx);display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+@media(max-width:600px){
+  .w{padding:8px}
+  .c{margin-bottom:10px;padding:12px}
+  /* Hero Orbs */
+  .rings{gap:6px;padding:6px 0}
+  .orb{width:100px;height:100px;border-width:2px}
+  .orb-main{width:125px;height:125px}
+  .orb-main .orb-val{font-size:18px}
+  .orb-val{font-size:14px}
+  .orb-lbl{font-size:7px;letter-spacing:1.2px}
+  .orb-sub{font-size:9px}
+  /* Summary Boxes */
+  .mg{grid-template-columns:repeat(2,1fr);gap:8px}
+  .mb{padding:10px 8px}
+  .mb small{font-size:8px;letter-spacing:.6px}
+  .mb b{font-size:15px}
+  .key-val{font-size:18px !important}
+  .yield-big{font-size:16px !important}
+  /* Labels */
+  .lb{font-size:10px;letter-spacing:1.2px;margin-bottom:8px}
+  /* Next Fill */
+  .nxt{font-size:11px;padding:10px 8px}
+  .nxt b{font-size:14px}
+  /* Tables */
+  table{font-size:11px;line-height:1.6}
+  .lp-tbl td{padding:10px 6px;font-size:12px}
+  .lp-tbl th{padding:8px 6px;font-size:9px;letter-spacing:.6px}
+  .hist-tbl td{padding:8px 6px;font-size:11px}
+  .mkt-tbl td{padding:8px 6px;font-size:11px}
+  th{font-size:9px;padding:6px;letter-spacing:.6px}
+  td{padding:6px}
+  /* Collapsible Headers */
+  .col{font-size:12px;letter-spacing:1px;padding:14px 12px;min-height:48px;display:flex;align-items:center}
+  /* Header */
+  .hero-row{margin-top:6px}
+  .hdr h1{font-size:15px}
+  .hdr{margin-bottom:8px}
+  /* Buttons & Inputs */
+  .btn{font-size:11px;padding:8px 14px;min-height:44px}
+  .inp{font-size:14px !important;padding:8px 10px !important;min-height:44px}
+  select.inp{min-height:44px;font-size:14px !important}
+  textarea.inp{font-size:12px !important;min-height:60px}
+  /* Separators */
+  .sep{margin:6px 0 12px}
+  .sep-sm{margin:4px 0 8px}
+  /* Notes */
+  .nt{font-size:10px;padding:8px}
+  /* Scrolling */
+  .ov{-webkit-overflow-scrolling:touch;overflow-x:auto}
+  .col-b{padding:8px 0}
+  /* SVG Charts */
+  svg{max-width:100%;height:auto}
+  /* Progress bar */
+  .prog-wrap{height:6px;margin:6px 0}
+  /* Alert bar */
+  #alertBar{padding:10px 12px !important}
+  #alertMsg{font-size:12px !important}
+  /* Wallet balance */
+  #walGrid{font-size:13px !important;gap:12px !important}
+  /* Trade rows - make wallet links bigger */
+  a[href*="arbiscan"]{font-size:10px !important}
+  /* Status bar */
+  #foot{font-size:10px;padding:16px 0}
+}
+</style>
+</head>
+<body>
+<div class="w">
+<div class="ptr" id="ptr">↓ Release to refresh</div>
+
+<div class="hdr"><h1><em>◆</em> My Crypto Portfolio</h1><div style="display:flex;align-items:center;gap:10px"><span id="sts" style="font-size:9px;color:var(--mt)"></span><button class="btn" id="mutBtn" onclick="toggleMute()" style="font-size:12px;padding:2px 6px">🔇</button><button class="btn" id="rbtn" onclick="go(true)">⟳</button></div></div>
+<div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span></div>
+<div class="c hid" id="lbox" style="text-align:center;padding:40px"><div class="ld" style="justify-content:center">Connecting to DexScreener + Arbitrum RPC</div></div>
+<div id="manBox" class="hid" style="margin-bottom:10px"><div class="c" style="padding:10px 14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div style="font-size:9px;color:var(--mt);white-space:nowrap">✎ Manual:</div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="mx" placeholder="BURN" oninput="doMan()"></div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="my" placeholder="USDC" oninput="doMan()"></div><div id="mp" style="font-size:11px"></div></div></div></div>
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:10px" id="astat">Connecting...</span><button class="btn" style="font-size:8px;padding:2px 8px" onclick="$('manBox').classList.toggle('hid')">⚙️</button></div>
+
+<div id="main" class="hid">
+
+<!-- ═══ 1. HERO: 3 CIRCLES ═══ -->
+<div class="hero-card">
+  <div class="rings">
+    <div class="orb" style="border-color:var(--p)">
+      <div class="orb-lbl">stBURN Price</div>
+      <div class="orb-val" id="stPrice" style="color:var(--p)"><span class="skel" style="width:80px;height:18px"></span></div>
+      <div class="orb-sub" id="stPriceSub"></div>
+    </div>
+    <div class="orb orb-main" style="border-color:var(--o)">
+      <div class="orb-lbl">BURN Price</div>
+      <div class="orb-val" id="dPrice" style="color:var(--o)"><span class="skel" style="width:100px;height:22px"></span></div>
+      <div class="orb-sub" id="dPct"></div>
+    </div>
+    <div class="orb" style="border-color:var(--cy)">
+      <div class="orb-lbl">stBURN / BURN</div>
+      <div class="orb-val" id="dRatio" style="color:var(--cy)"><span class="skel" style="width:80px;height:18px"></span></div>
+      <div class="orb-sub">Ratio</div>
+    </div>
+  </div>
+  <div class="hero-row"><span id="dSrc"></span><span id="spark"></span></div>
+  <div class="nxt" id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
+</div>
+
+<!-- ═══ WALLET ═══ -->
+<div class="c" style="padding:8px 14px;border-left:3px solid #fb923c">
+  <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
+</div>
+
+<!-- ═══ ALERT BAR ═══ -->
+<div id="alertBar" class="c" style="padding:6px 12px;display:none;border-left:3px solid #fbbf24;background:rgba(251,191,36,.04)">
+  <div id="alertMsg" style="font-size:10px;color:var(--o);text-align:center"></div>
+</div>
+
+<!-- ═══ PRICE ALERTS ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-palert')">Price & LP Alerts</div>
+  <div id="sec-palert" class="col-b">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
+      <div><div style="font-size:8px;color:var(--dm)">ALERT ABOVE $</div>
+        <input class="inp" id="alertHi" type="number" step="any" placeholder="0.20" style="width:80px;font-size:11px"></div>
+      <div><div style="font-size:8px;color:var(--dm)">ALERT BELOW $</div>
+        <input class="inp" id="alertLo" type="number" step="any" placeholder="0.12" style="width:80px;font-size:11px"></div>
+      <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
+      <button class="btn" onclick="clearAlerts()" style="font-size:10px;opacity:.5">Clear</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div><div style="font-size:8px;color:var(--dm)">LP FILL ALERT %</div>
+        <input class="inp" id="alertFill1" type="number" step="1" placeholder="50" style="width:60px;font-size:11px"></div>
+      <div><div style="font-size:8px;color:var(--dm)">LP FILL ALERT %</div>
+        <input class="inp" id="alertFill2" type="number" step="1" placeholder="90" style="width:60px;font-size:11px"></div>
+      <button class="btn" onclick="saveAlerts()" style="font-size:10px">Save</button>
+    </div>
+    <div id="alertStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
+    <div id="alertHistory" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
+    <div class="sep" style="margin:6px 0"></div>
+    <div style="font-size:8px;color:var(--dm)">PUSH SETUP: Klick 🔔 oben → Dann öffne Console → <code>localStorage.getItem('push_sub')</code> → Paste in burn-monitor.py auf Hetzner</div>
+    <div><button class="btn" onclick="showPushSub()" style="font-size:9px;margin-top:4px">Show Push Subscription</button></div>
+    <div id="pushSubInfo" style="font-size:8px;color:var(--cy);margin-top:4px;word-break:break-all"></div>
+  </div>
+</div>
+
+<!-- ═══ WALLET TRACKER ═══ -->
+<div class="c" style="border-left:3px solid #60a5fa">
+  <div class="col" onclick="tog(this,'sec-wt-wrap')">Wallet Tracker</div>
+  <div id="sec-wt-wrap" class="col-b">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 8px">
+      <input class="inp" id="wtInput" placeholder="0x..." style="flex:1;min-width:180px;font-size:10px;padding:4px 8px">
+      <button class="btn" id="wtBtn" onclick="wtLoad()">Load</button>
+    </div>
+    <div class="col" onclick="tog(this,'sec-wt')" style="font-size:10px" id="wtCol">Wallet Portfolio</div>
+    <div id="sec-wt" class="col-b">
+      <div id="wtResult" style="font-size:11px"><span style="color:var(--dm)">Enter a wallet address to load portfolio</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BURN PORTFOLIO (collapsible) ═══ -->
+<div class="c" style="border-left:3px solid #c084fc">
+  <div class="col" onclick="tog(this,'sec-port')">BURN Portfolio</div>
+  <div id="sec-port" class="col-b">
+    <div class="mg" id="portG1"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep-sm"></div>
+    <div class="mg" id="portG2"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep-sm"></div>
+    <div class="mg" id="portG3"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="sep"></div>
+    <div class="lb">stBURN Yield</div>
+    <div class="mg" id="stGrid"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Altcoin Portfolio ═══ -->
+<div class="c" style="border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-ptf')">Altcoin Portfolio</div>
+  <div id="sec-ptf" class="col-b">
+    <div id="ptfDetectDiv"></div>
+    <div id="ptfPerformers" style="text-align:center;font-size:11px;margin-bottom:8px"></div>
+    <div id="ptfSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">Portfolio Charts</div>
+    <div id="sec-ptf-charts" class="col-b">
+      <div class="lb" style="margin-top:4px">Value Timeline</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="btn" id="ptfTR1d" onclick="ptfSetChartRange('1d')" style="font-size:9px;padding:2px 8px">1D</button>
+        <button class="btn" id="ptfTR7d" onclick="ptfSetChartRange('7d')" style="font-size:9px;padding:2px 8px;border-color:var(--cy)">7D</button>
+        <button class="btn" id="ptfTR1m" onclick="ptfSetChartRange('1m')" style="font-size:9px;padding:2px 8px">1M</button>
+        <button class="btn" id="ptfTR1y" onclick="ptfSetChartRange('1y')" style="font-size:9px;padding:2px 8px">1Y</button>
+      </div>
+      <div id="ptfChartTimeline" style="margin-bottom:12px"><span style="color:var(--dm);font-size:10px">Collecting data points...</span></div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="lb">P&L Distribution</div>
+      <div id="ptfChartPnl" style="margin-bottom:12px"></div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="lb">Allocation</div>
+      <div id="ptfChartAlloc" style="margin-bottom:4px"></div>
+    </div>
+    <div class="sep" style="margin:8px 0"></div>
+    <div class="ov">
+      <table class="mkt-tbl">
+        <thead><tr><th style="cursor:pointer" onclick="ptfSort('symbol')">Asset</th><th style="cursor:pointer" onclick="ptfSort('amount')">Amount</th><th style="cursor:pointer" onclick="ptfSort('entry')">Entry</th><th style="cursor:pointer" onclick="ptfSort('price')">Price</th><th style="cursor:pointer" onclick="ptfSort('cost')">Cost</th><th style="cursor:pointer" onclick="ptfSort('value')">Value</th><th style="cursor:pointer" onclick="ptfSort('pnl')">P&L</th><th style="cursor:pointer" onclick="ptfSort('pct')">%</th><th></th></tr></thead>
+        <tbody id="ptfTableB"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px">
+      <div class="col" onclick="tog(this,'sec-ptf-add')" style="font-size:10px">+ Add Asset</div>
+      <div id="sec-ptf-add" class="col-b" style="padding:8px 0">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+          <div><div style="font-size:8px;color:var(--dm)">SYMBOL</div><input class="inp" id="ptfAddSym" placeholder="BTC" style="width:60px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">COINGECKO ID</div><input class="inp" id="ptfAddGecko" placeholder="bitcoin" style="width:80px;font-size:10px"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfAddAmt" placeholder="0.15" style="width:70px;font-size:10px" type="number" step="any"></div>
+          <div><div style="font-size:8px;color:var(--dm)">AVG ENTRY $</div><input class="inp" id="ptfAddEntry" placeholder="42000" style="width:80px;font-size:10px" type="number" step="any"></div>
+          <button class="btn" onclick="ptfAddAsset()" style="font-size:10px">Add</button>
+        </div>
+        <div id="ptfAddErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+      </div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-ledger')" style="font-size:10px">Cost Basis Ledger</div>
+    <div id="sec-ptf-ledger" class="col-b">
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Date</th><th>Asset</th><th>Amount</th><th>Price</th><th>Total</th><th>Wallet</th><th></th></tr></thead>
+          <tbody id="ptfLedgerB"></tbody>
+        </table>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-top:8px">
+        <div><div style="font-size:8px;color:var(--dm)">ASSET</div><select class="inp" id="ptfBuyAsset" style="width:70px;font-size:10px"></select></div>
+        <div><div style="font-size:8px;color:var(--dm)">AMOUNT</div><input class="inp" id="ptfBuyAmt" placeholder="0.05" style="width:70px;font-size:10px" type="number" step="any"></div>
+        <div><div style="font-size:8px;color:var(--dm)">PRICE $</div><input class="inp" id="ptfBuyPrice" placeholder="40000" style="width:80px;font-size:10px" type="number" step="any"></div>
+        <div><div style="font-size:8px;color:var(--dm)">DATE</div><input class="inp" id="ptfBuyDate" style="width:90px;font-size:10px" type="date"></div>
+        <div><div style="font-size:8px;color:var(--dm)">WALLET</div><input class="inp" id="ptfBuyWallet" placeholder="Ledger" style="width:70px;font-size:10px"></div>
+        <button class="btn" onclick="ptfAddPurchase()" style="font-size:10px">Add</button>
+      </div>
+      <div id="ptfBuyErr" style="font-size:9px;color:var(--r);margin-top:4px"></div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-sim')">Cycle Scenario Simulation</div>
+    <div id="sec-ptf-sim" class="col-b">
+      <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Risk-adjusted cycle projections — not financial advice</div>
+      <div id="ptfSimSummary" class="mg" style="margin-bottom:10px"></div>
+      <div class="ov">
+        <table class="mkt-tbl">
+          <thead><tr><th>Asset</th><th style="width:30px"></th><th>Current</th><th>Bear</th><th>Base</th><th>Super</th></tr></thead>
+          <tbody id="ptfSimTableB"><tr><td colspan="6" style="text-align:center;color:var(--dm);font-size:10px">Loading prices...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.4">Risk-adjusted = raw target × survival + current × 0.3 × (1−survival).<br>L=Large Cap M=Mid Cap S=Small Cap ?=Speculative</div>
+      <div class="sep" style="margin:8px 0"></div>
+      <div class="col" onclick="tog(this,'sec-ptf-override')" style="font-size:10px">Manual Override</div>
+      <div id="sec-ptf-override" class="col-b">
+        <div class="ov">
+          <table class="mkt-tbl">
+            <thead><tr><th>Asset</th><th>Bear $</th><th>Base $</th><th>Super $</th></tr></thead>
+            <tbody id="ptfSimOverrideB"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-ptf-io')" style="font-size:10px">Export / Import</div>
+    <div id="sec-ptf-io" class="col-b">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="btn" onclick="ptfExport()" style="font-size:10px">Export JSON</button>
+        <button class="btn" onclick="ptfImport()" style="font-size:10px">Import JSON</button>
+      </div>
+      <div id="ptfImportErr" style="font-size:9px;margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRADES ═══ -->
+<div class="c" style="border-left:3px solid #22d3ee">
+  <div class="lb">Last Trade</div>
+  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
+  <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">All Trades (<span id="tradeCnt">0</span>)</div>
+  <div id="sec-trades" class="col-b">
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
+      <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
+      <span style="font-size:10px;color:var(--mt)" id="tPgInfo">1/1</span>
+      <button class="btn" id="tNext" onclick="tradePg(1)">Next →</button>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn" id="tMore" onclick="fetchTradesOlder()" style="opacity:.7">Load Older ↓</button>
+      <span style="font-size:9px;color:var(--dm);margin-left:8px" id="tLoadStat"></span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ WHALE ACTIVITY ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-whale')">Whale Activity</div>
+  <div id="sec-whale" class="col-b">
+    <div id="whaleSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="whaleTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Loading trades...</td></tr></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
+<div class="c" style="border-color:#34d39920;border-left:3px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
+
+<!-- ═══ 3. LP POSITIONS ═══ -->
+<div class="c" style="border-color:#fb923c15;border-left:3px solid #fb923c">
+  <div class="col" onclick="tog(this,'sec-lps')">Active LP Positions</div>
+  <div id="sec-lps" class="col-b">
+    <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
+    <div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>BURN In</th><th>Left</th><th>USDC</th><th>100%</th><th>To Fill</th><th>Dist</th><th>Status</th></tr></thead><tbody id="lpB"><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="8"><span class="skel" style="width:100%;height:14px"></span></td></tr></tbody></table></div>
+    <div class="nt" style="background:#fb923c06;border:1px solid #fb923c12"><span style="color:var(--o)">⚡</span> <span id="lpS"></span></div>
+  </div>
+</div>
+
+<!-- ═══ LP P&L DETAIL ═══ -->
+<div class="c" style="border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-lppnl')">LP P&L Detail</div>
+  <div id="sec-lppnl" class="col-b">
+    <div id="lpPnlSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Range</th><th>Sold</th><th>Avg Sell</th><th>Value Now</th><th>HODL Value</th><th>IL</th><th>IL%</th><th>If Filled</th></tr></thead><tbody id="lpPnlB"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->
+<div class="c" style="border-left:3px solid #475569">
+  <div class="lb">Closed Positions</div>
+  <div class="mg" id="histSummary"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+  <div class="col" onclick="tog(this,'sec-hist')" style="margin-top:10px">Closed Positions — Details</div>
+  <div id="sec-hist" class="col-b">
+    <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══ TAX REPORT ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-tax')">Tax Report</div>
+  <div id="sec-tax" class="col-b">
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BURN Token — Veräußerungen (Ganho de Capital)</div>
+    <div id="taxSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="col" onclick="tog(this,'sec-tax-year')" style="font-size:10px">Aufschlüsselung nach Jahr</div>
+    <div id="sec-tax-year" class="col-b">
+      <div id="taxYears" class="mg" style="margin-bottom:10px"></div>
+    </div>
+    <div class="sep" style="margin:8px 0"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <th>Verkauf</th><th>Typ</th><th>BURN</th><th>Sell Ø</th><th>Erlös</th><th>Buy Ø</th><th>Kosten</th><th>Gewinn</th><th>Gewinn %</th>
+    </tr></thead><tbody id="taxTableB"></tbody></table></div>
+    <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">
+      Kaufpreis: Durchschnittsmethode (AVG_ENTRY). Brasilien: Verkäufe unter R$35.000/Monat (~$7.000) sind von Kapitalertragssteuer befreit.<br>
+      Keine Steuerberatung — konsultiere einen Steuerberater für verbindliche Auskünfte.
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn" onclick="taxExportCSV()" style="font-size:10px">Export CSV</button>
+      <button class="btn" onclick="taxExportExcel(2025)" style="font-size:10px">Excel 2025</button>
+      <button class="btn" onclick="taxExportExcel(2026)" style="font-size:10px">Excel 2026</button>
+      <button class="btn" onclick="taxSaveYearEnd()" style="font-size:10px;border-color:var(--o)">📸 Stichtag 31.12 speichern</button>
+    </div>
+    <div id="taxYearEndStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
+  </div>
+</div>
+
+<!-- ═══ 6. CHART (collapsible) ═══ -->
+<div class="c" style="border-left:3px solid #475569">
+  <div class="col" onclick="tog(this,'sec-chart')">Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:12px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ GeckoTerminal</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:10px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ DexScreener</a></div>
+  <div id="sec-chart" class="col-b"><div style="position:relative;min-height:400px"><div class="ld" style="position:absolute;inset:0;justify-content:center;background:#080c16;border-radius:8px;z-index:1">Loading chart...</div><iframe src="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37?embed=1&info=0&swaps=0&resolution=1D" style="width:100%;height:400px;border:none;border-radius:8px;position:relative;z-index:2" loading="lazy" onload="this.previousElementSibling.style.display='none'"></iframe></div></div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Market Analysis ═══ -->
+<div class="c" style="border-left:3px solid #22d3ee">
+  <div class="col" onclick="tog(this,'sec-mkt')">Market Analysis</div>
+  <div id="sec-mkt" class="col-b">
+    <div class="lb" style="margin-top:4px">Buyflow</div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Target</th><th>USDC</th><th>BURN</th><th>My Sold</th><th>My USDC</th><th>×</th></tr></thead><tbody id="bfB"></tbody></table></div>
+    <div class="sep"></div>
+    <div class="lb">Sell Impact</div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ═══ CAPITAL FLOW ═══ -->
+<div class="c" style="border-left:3px solid #60a5fa">
+  <div class="col" onclick="tog(this,'sec-cflow')">Capital Flow</div>
+  <div id="sec-cflow" class="col-b">
+    <div id="cflowSummary" class="mg" style="margin-bottom:10px"></div>
+    <div id="cflowChart" style="margin-bottom:8px"><span style="color:var(--dm);font-size:10px">Loading trades...</span></div>
+  </div>
+</div>
+
+<!-- ═══ POOL HEALTH ═══ -->
+<div class="c" style="border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-phealth')">Pool Health</div>
+  <div id="sec-phealth" class="col-b">
+    <div id="phealthGrid" class="mg" style="margin-bottom:10px"></div>
+    <div id="phealthDetail" style="font-size:9px;color:var(--dm)"></div>
+  </div>
+</div>
+
+<!-- ═══ STAKING APY ═══ -->
+<div class="c" style="border-left:3px solid #c084fc">
+  <div class="col" onclick="tog(this,'sec-stapy')">Staking APY Tracker</div>
+  <div id="sec-stapy" class="col-b">
+    <div id="stapySummary" class="mg" style="margin-bottom:10px"></div>
+    <div id="stapyChart" style="margin-bottom:8px"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Pool Liquidity Map ═══ -->
+<div class="c" style="border-left:3px solid #f87171">
+  <div class="col" onclick="tog(this,'sec-lmap')">Pool Liquidity Map</div>
+  <div id="sec-lmap" class="col-b">
+    <div style="margin-bottom:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px"><div style="font-size:8px;color:var(--dm)">EXTRA WALLETS TO SCAN (one per line or comma-separated)</div>
+        <textarea class="inp" id="lmapExtra" rows="2" placeholder="0xa1c962c04c8dce9121b321ca1e97fee414aaf57c" style="width:100%;font-size:9px;resize:vertical"></textarea></div>
+      <button class="btn" onclick="scanLiqMap()" style="font-size:10px">Scan Pool</button>
+    </div>
+    <div id="lmapSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet / Range</th><th>BURN In</th><th>Left / USDC</th><th>Size</th><th>Fill%</th></tr></thead><tbody id="lmapB"><tr><td colspan="5" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
+    <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Tokenomics ═══ -->
+<div class="c" style="border-left:3px solid #475569">
+  <div class="col" onclick="tog(this,'sec-tok')">Tokenomics</div>
+  <div id="sec-tok" class="col-b">
+    <div class="mg" id="supplyGrid"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: Price Scenario Simulation ═══ -->
+<div class="c" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-sim')">Price Scenario Simulation</div>
+  <div id="sec-sim" class="col-b">
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚠ Simulation — not a price prediction</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn" onclick="runSim(30)" id="sim30">30d</button>
+      <button class="btn" onclick="runSim(90)" id="sim90">90d</button>
+      <button class="btn" onclick="runSim(180)" id="sim180">180d</button>
+      <button class="btn" onclick="runSim(365)" id="sim365">365d</button>
+    </div>
+    <div id="simChart" style="position:relative;height:200px;background:rgba(8,12,22,.6);border-radius:8px;border:1px solid rgba(30,41,59,.3);margin-bottom:10px;overflow:hidden"></div>
+    <div id="simGrid" class="mg" style="margin-bottom:8px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Model</th><th>30d</th><th>90d</th><th>180d</th><th>365d</th></tr></thead><tbody id="simB"></tbody></table></div>
+    <div id="simStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
+  </div>
+</div>
+
+
+</div>
+<div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
+</div>
+
+<script src="app.js"></script>
+<script>
+var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    console.log('SW registered');
+    // Subscribe to push if not already
+    reg.pushManager.getSubscription().then(function(sub){
+      if(sub){console.log('Push already subscribed');window._pushSub=sub;return;}
+      // Auto-subscribe on notification permission
+      if(Notification.permission==='granted'){
+        reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)}).then(function(sub){
+          console.log('Push subscribed:',JSON.stringify(sub.toJSON()));
+          window._pushSub=sub;
+          // Show subscription for server config
+          var subData=sub.toJSON();
+          localStorage.setItem('push_sub',JSON.stringify(subData));
+        });
+      }
+    });
+  }).catch(function(e){console.log('SW err:',e);});
+}
+function urlBase64ToUint8Array(base64String){
+  var padding='='.repeat((4-base64String.length%4)%4);
+  var base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  var raw=atob(base64);var arr=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+</script>
+</body>
+</html>

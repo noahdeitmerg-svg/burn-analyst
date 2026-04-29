@@ -19,7 +19,7 @@ self.addEventListener('fetch', function(e) {
 
 // Web Push Handler
 self.addEventListener('push', function(e) {
-  var data = { title: 'BURN Terminal', body: 'Alert triggered', tag: 'burn-alert' };
+  var data = { title: 'My Crypto Portfolio', body: 'Alert triggered', tag: 'burn-alert' };
   try {
     if (e.data) data = e.data.json();
   } catch (err) {
@@ -34,7 +34,7 @@ self.addEventListener('push', function(e) {
     requireInteraction: true,
     data: { url: data.url || './' }
   };
-  e.waitUntil(self.registration.showNotification(data.title || 'BURN Terminal', options));
+  e.waitUntil(self.registration.showNotification(data.title || 'My Crypto Portfolio', options));
 });
 
 self.addEventListener('notificationclick', function(e) {

@@ -375,7 +375,7 @@ function render(){
   $("dPrice").textContent=P>0?FP(P):"";
   if(P<=0)$("dPrice").innerHTML='<span class="skel" style="width:100px;height:22px"></span>';
   var ptfPart=typeof ptfTotalDisplay==="number"&&ptfTotalDisplay>0?" | $"+F(ptfTotalDisplay,0):"";
-  document.title=P>0?FP(P)+ptfPart+" | BURN Terminal":"BURN Terminal";
+  document.title=P>0?FP(P)+ptfPart+" | My Crypto Portfolio":"My Crypto Portfolio";
   // Pulse on price change
   if(prevPrice>0&&P!==prevPrice){var orbEl=document.querySelector(".orb-main");if(orbEl){orbEl.classList.remove("orb-pulse");void orbEl.offsetWidth;orbEl.classList.add("orb-pulse");}}
   $("dPct").innerHTML=pct?(pct>=0?"▲":"▼")+" "+Math.abs(pct).toFixed(2)+"%":"";
@@ -544,7 +544,7 @@ function render(){
   }
   prevPrice=P;
 
-  $("foot").innerHTML="BURN Terminal · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
+  $("foot").innerHTML="My Crypto Portfolio · "+SRC.toUpperCase()+" · "+new Date().toLocaleTimeString()+" · stBURN "+(stOK?"✓":"…")+" · Supply "+(sup.total>0?"✓":"…");
 }
 
 // ═══ TRADES: On-Chain Swap Events ═══
@@ -1630,7 +1630,7 @@ function taxExportExcel(exportYear){
       html+='</table>';
     }
 
-    html+='<p style="font-family:Arial;font-size:9px;color:#999;margin-top:20px">BURN Terminal · '+new Date().toLocaleString("de-DE")+'<br>Keine Steuerberatung. Brasilien: Ganho de Capital auf Krypto, Verkäufe unter R$35.000/Monat ggf. befreit.</p>';
+    html+='<p style="font-family:Arial;font-size:9px;color:#999;margin-top:20px">My Crypto Portfolio · '+new Date().toLocaleString("de-DE")+'<br>Keine Steuerberatung. Brasilien: Ganho de Capital auf Krypto, Verkäufe unter R$35.000/Monat ggf. befreit.</p>';
     html+='</body></html>';
     var blob=new Blob(["\ufeff"+html],{type:"application/vnd.ms-excel;charset=utf-8"});
     var url=URL.createObjectURL(blob);
@@ -2710,7 +2710,7 @@ function updateSysStatus(){
     "API:"+(apiOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--o)'>"+SRC+"</span>"),
     "WAL:"+(walOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--dm)'>…</span>"),
     "LP:"+(lpLive?"<span style='color:var(--g)'>LIVE</span>":"<span style='color:var(--o)'>static</span>")];
-  $("foot").innerHTML="BURN Terminal · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
+  $("foot").innerHTML="My Crypto Portfolio · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
 loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();

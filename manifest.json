@@ -1,6 +1,6 @@
 {
-  "name": "BURN Terminal",
-  "short_name": "BURN",
+  "name": "My Crypto Portfolio",
+  "short_name": "MCP",
   "description": "DeFi Analytics Dashboard — BURN/USDC Pool + Altcoin Portfolio",
   "start_url": "/burn-analyst/",
   "scope": "/burn-analyst/",
