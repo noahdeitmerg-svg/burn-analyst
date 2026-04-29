@@ -305,35 +305,51 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 <div class="c hid" id="ebox" style="border-color:#f8717130"><span style="color:var(--r);font-size:11px;font-weight:600" id="emsg"></span></div>
 <div class="c hid" id="lbox" style="text-align:center;padding:40px"><div class="ld" style="justify-content:center">Connecting to DexScreener + Arbitrum RPC</div></div>
 <div id="manBox" class="hid" style="margin-bottom:10px"><div class="c" style="padding:10px 14px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><div style="font-size:9px;color:var(--mt);white-space:nowrap">✎ Manual:</div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="mx" placeholder="BURN" oninput="doMan()"></div><div style="flex:1;min-width:80px"><input class="inp" type="number" id="my" placeholder="USDC" oninput="doMan()"></div><div id="mp" style="font-size:11px"></div></div></div></div>
-<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:10px" id="astat">Connecting...</span><button class="btn" style="font-size:8px;padding:2px 8px" onclick="$('manBox').classList.toggle('hid')">⚙️</button></div>
+<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><button class="btn" style="font-size:8px;padding:2px 8px" onclick="$('manBox').classList.toggle('hid')">⚙️</button></div>
 
 <div id="main" class="hid">
 
-<!-- ═══ 1. HERO: 3 CIRCLES ═══ -->
+<!-- ═══ 1. HERO: LIVE PRICING ═══ -->
 <div class="hero-card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:9px;color:var(--o);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;font-family:Inter,sans-serif"><span style="color:var(--o);margin-right:4px">◆</span> LIVE PRICING</div>
+    <div id="astat" style="font-size:9px;color:var(--g);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--g)"></span>Connecting...</div>
+  </div>
   <div class="rings">
     <div class="orb" style="border-color:var(--p)">
-      <div class="orb-lbl">stBURN Price</div>
       <div class="orb-val" id="stPrice" style="color:var(--p)"><span class="skel" style="width:80px;height:18px"></span></div>
-      <div class="orb-sub" id="stPriceSub"></div>
+      <div class="orb-sub" id="stPriceSub">via chain</div>
     </div>
     <div class="orb orb-main" style="border-color:var(--o)">
-      <div class="orb-lbl">BURN Price</div>
       <div class="orb-val" id="dPrice" style="color:var(--o)"><span class="skel" style="width:100px;height:22px"></span></div>
       <div class="orb-sub" id="dPct"></div>
     </div>
     <div class="orb" style="border-color:var(--cy)">
-      <div class="orb-lbl">stBURN / BURN</div>
       <div class="orb-val" id="dRatio" style="color:var(--cy)"><span class="skel" style="width:80px;height:18px"></span></div>
       <div class="orb-sub">Ratio</div>
     </div>
   </div>
-  <div class="hero-row"><span id="dSrc"></span><span id="spark"></span></div>
-  <div class="nxt" id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
+  <div style="display:flex;justify-content:center;gap:0;margin:-4px 0 8px;font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dm)">
+    <div style="width:130px;text-align:center">stBURN</div>
+    <div style="width:155px;text-align:center;color:var(--o)">BURN Spot</div>
+    <div style="width:130px;text-align:center">st / BURN</div>
+  </div>
+  <div id="spark" style="margin-bottom:10px"></div>
+  <div class="hero-row">
+    <span id="dSrc"></span>
+  </div>
 </div>
 
-<!-- ═══ WALLET ═══ -->
-<div class="c" style="padding:8px 14px;border-left:2px solid #fb923c">
+<!-- ═══ NEXT FILL TARGET ═══ -->
+<div class="c" style="border-left:2px solid var(--o);padding:14px">
+  <div id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
+</div>
+
+<!-- ═══ LEDGER BALANCE ═══ -->
+<div class="c" style="padding:12px 14px;border-left:2px solid #fb923c">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;font-family:Inter,sans-serif">⬡ Ledger Balance</div>
+  </div>
   <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
 </div>
 
