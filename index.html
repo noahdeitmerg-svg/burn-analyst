@@ -362,7 +362,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ TRADES ═══ -->
-<div class="c" style="border-left:3px solid #22d3ee">
+<div class="c c-slim" style="border-left:3px solid #22d3ee">
   <div class="lb">Last Trade</div>
   <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
   <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">📋 All Trades (<span id="tradeCnt">0</span>)</div>
@@ -559,7 +559,13 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
-<div class="c" style="border-color:#34d39920;border-left:3px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">📊 P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
+<div class="c c-slim" style="border-color:#34d39920;border-left:3px solid #34d399">
+  <div class="col" onclick="tog(this,'sec-pnl')">📊 P&L — Active LPs</div>
+  <div id="sec-pnl" class="col-b">
+    <div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div>
+    <div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+  </div>
+</div>
 
 <!-- ═══ 3. LP POSITIONS ═══ -->
 <div class="c c-slim" style="border-color:#fb923c15;border-left:3px solid #fb923c">
@@ -581,12 +587,14 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->
-<div class="c" style="border-left:3px solid #475569">
-  <div class="lb">Closed Positions</div>
-  <div class="mg" id="histSummary"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
-  <div class="col" onclick="tog(this,'sec-hist')" style="margin-top:10px">📕 Closed Positions — Details</div>
-  <div id="sec-hist" class="col-b">
-    <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
+<div class="c c-slim" style="border-left:3px solid #475569">
+  <div class="col" onclick="tog(this,'sec-closed-all')">📕 Closed Positions</div>
+  <div id="sec-closed-all" class="col-b">
+    <div class="mg" id="histSummary"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div class="col" onclick="tog(this,'sec-hist')" style="margin-top:10px">📕 Details</div>
+    <div id="sec-hist" class="col-b">
+      <div class="ov"><table class="hist-tbl"><thead><tr><th>Date</th><th>BURN</th><th>Range</th><th>USDC</th><th>Ø</th></tr></thead><tbody id="histB"></tbody></table></div>
+    </div>
   </div>
 </div>
 
