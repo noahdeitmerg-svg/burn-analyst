@@ -64,6 +64,9 @@ box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset;
 transition:border-color .3s,box-shadow .3s}
 .c::after{content:'';position:absolute;top:0;left:15%;right:15%;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.06),transparent);pointer-events:none}
 .c0{padding:0;overflow:hidden}
+/* Slim cards — compact when collapsed */
+.c-slim{padding:8px 14px}
+.c-slim .col{padding:3px 0;font-size:9px;min-height:auto}
 
 /* Card glow based on border color */
 .c[style*="border-left:3px solid #fb923c"],.c[style*="border-left:3px solid #fb923c"]{box-shadow:0 8px 32px rgba(0,0,0,.5),0 1px 0 rgba(255,255,255,.04) inset,-6px 0 30px rgba(251,146,60,.12),0 0 2px rgba(251,146,60,.15) inset}
@@ -288,6 +291,9 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
   #walGrid{font-size:14px !important;gap:14px !important}
   a[href*="arbiscan"]{font-size:11px !important}
   #foot{font-size:10px;padding:20px 0}
+  /* Slim cards on mobile */
+  .c-slim{padding:6px 12px;margin-bottom:6px}
+  .c-slim .col{padding:2px 0;font-size:11px;min-height:40px;letter-spacing:1px}
   *{-webkit-tap-highlight-color:transparent}
   button,input,select,textarea{-webkit-appearance:none}
 }
@@ -309,6 +315,15 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><button class="btn" style="font-size:8px;padding:2px 8px" onclick="$('manBox').classList.toggle('hid')">⚙️</button></div>
 
 <div id="main" class="hid">
+
+<!-- ═══ LEDGER BALANCE ═══ -->
+<div class="c" style="padding:12px 14px;border-left:3px solid #fb923c">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+    <div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;font-family:Inter,sans-serif">⬡ Ledger Balance</div>
+  </div>
+  <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
+</div>
+
 
 <!-- ═══ 1. HERO: LIVE PRICING ═══ -->
 <div class="hero-card">
@@ -346,13 +361,34 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
   <div id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
 </div>
 
-<!-- ═══ LEDGER BALANCE ═══ -->
-<div class="c" style="padding:12px 14px;border-left:3px solid #fb923c">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-    <div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px;font-weight:600;font-family:Inter,sans-serif">⬡ Ledger Balance</div>
+<!-- ═══ TRADES ═══ -->
+<div class="c" style="border-left:3px solid #22d3ee">
+  <div class="lb">Last Trade</div>
+  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
+  <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">📋 All Trades (<span id="tradeCnt">0</span>)</div>
+  <div id="sec-trades" class="col-b">
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
+    <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
+      <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
+      <span style="font-size:10px;color:var(--mt)" id="tPgInfo">1/1</span>
+      <button class="btn" id="tNext" onclick="tradePg(1)">Next →</button>
+    </div>
+    <div style="text-align:center;margin-top:10px">
+      <button class="btn" id="tMore" onclick="fetchTradesOlder()" style="opacity:.7">Load Older ↓</button>
+      <span style="font-size:9px;color:var(--dm);margin-left:8px" id="tLoadStat"></span>
+    </div>
   </div>
-  <div id="walGrid" style="display:flex;align-items:center;justify-content:center;gap:16px;font-size:11px;flex-wrap:wrap"><span class="skel" style="width:160px;height:12px"></span></div>
 </div>
+
+<!-- ═══ WHALE ACTIVITY ═══ -->
+<div class="c c-slim" style="border-left:3px solid #fbbf24">
+  <div class="col" onclick="tog(this,'sec-whale')">🐋 Whale Activity</div>
+  <div id="sec-whale" class="col-b">
+    <div id="whaleSummary" class="mg" style="margin-bottom:10px"></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="whaleTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Loading trades...</td></tr></tbody></table></div>
+  </div>
+</div>
+
 
 <!-- ═══ ALERT BAR ═══ -->
 <div id="alertBar" class="c" style="padding:6px 12px;display:none;border-left:3px solid #fbbf24;background:rgba(251,191,36,.04)">
@@ -360,7 +396,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ PRICE ALERTS ═══ -->
-<div class="c" style="border-left:3px solid #fbbf24">
+<div class="c c-slim" style="border-left:3px solid #fbbf24">
   <div class="col" onclick="tog(this,'sec-palert')">🔔 Price & LP Alerts</div>
   <div id="sec-palert" class="col-b">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:8px">
@@ -395,7 +431,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ WALLET TRACKER ═══ -->
-<div class="c" style="border-left:3px solid #60a5fa">
+<div class="c c-slim" style="border-left:3px solid #60a5fa">
   <div class="col" onclick="tog(this,'sec-wt-wrap')">👛 Wallet Tracker</div>
   <div id="sec-wt-wrap" class="col-b">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:0 0 8px">
@@ -522,39 +558,11 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
   </div>
 </div>
 
-<!-- ═══ TRADES ═══ -->
-<div class="c" style="border-left:3px solid #22d3ee">
-  <div class="lb">Last Trade</div>
-  <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
-  <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">📋 All Trades (<span id="tradeCnt">0</span>)</div>
-  <div id="sec-trades" class="col-b">
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
-    <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
-      <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
-      <span style="font-size:10px;color:var(--mt)" id="tPgInfo">1/1</span>
-      <button class="btn" id="tNext" onclick="tradePg(1)">Next →</button>
-    </div>
-    <div style="text-align:center;margin-top:10px">
-      <button class="btn" id="tMore" onclick="fetchTradesOlder()" style="opacity:.7">Load Older ↓</button>
-      <span style="font-size:9px;color:var(--dm);margin-left:8px" id="tLoadStat"></span>
-    </div>
-  </div>
-</div>
-
-<!-- ═══ WHALE ACTIVITY ═══ -->
-<div class="c" style="border-left:3px solid #fbbf24">
-  <div class="col" onclick="tog(this,'sec-whale')">🐋 Whale Activity</div>
-  <div id="sec-whale" class="col-b">
-    <div id="whaleSummary" class="mg" style="margin-bottom:10px"></div>
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="whaleTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Loading trades...</td></tr></tbody></table></div>
-  </div>
-</div>
-
 <!-- ═══ 2. P&L — ACTIVE LPs ═══ -->
 <div class="c" style="border-color:#34d39920;border-left:3px solid #34d399"><div class="lb" style="font-size:11px;letter-spacing:1.5px">📊 P&L — Active LPs</div><div id="pnlHero"><div class="mb" style="padding:16px;text-align:center"><span class="skel" style="width:60px;height:10px;margin:0 auto 6px"></span><span class="skel" style="width:100px;height:22px;margin:0 auto"></span></div></div><div class="mg" id="pnlGrid" style="margin-top:8px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div></div>
 
 <!-- ═══ 3. LP POSITIONS ═══ -->
-<div class="c" style="border-color:#fb923c15;border-left:3px solid #fb923c">
+<div class="c c-slim" style="border-color:#fb923c15;border-left:3px solid #fb923c">
   <div class="col" onclick="tog(this,'sec-lps')">📌 Active LP Positions</div>
   <div id="sec-lps" class="col-b">
     <div class="prog-wrap"><div class="prog-bar" id="lpProg" style="width:0%"></div></div>
@@ -564,7 +572,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ LP P&L DETAIL ═══ -->
-<div class="c" style="border-left:3px solid #34d399">
+<div class="c c-slim" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-lppnl')">📈 LP P&L Detail</div>
   <div id="sec-lppnl" class="col-b">
     <div id="lpPnlSummary" class="mg" style="margin-bottom:10px"></div>
@@ -629,7 +637,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ CAPITAL FLOW ═══ -->
-<div class="c" style="border-left:3px solid #60a5fa">
+<div class="c c-slim" style="border-left:3px solid #60a5fa">
   <div class="col" onclick="tog(this,'sec-cflow')">💰 Capital Flow</div>
   <div id="sec-cflow" class="col-b">
     <div id="cflowSummary" class="mg" style="margin-bottom:10px"></div>
@@ -638,7 +646,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ POOL HEALTH ═══ -->
-<div class="c" style="border-left:3px solid #34d399">
+<div class="c c-slim" style="border-left:3px solid #34d399">
   <div class="col" onclick="tog(this,'sec-phealth')">🏥 Pool Health</div>
   <div id="sec-phealth" class="col-b">
     <div id="phealthGrid" class="mg" style="margin-bottom:10px"></div>
@@ -647,7 +655,7 @@ background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-ra
 </div>
 
 <!-- ═══ STAKING APY ═══ -->
-<div class="c" style="border-left:3px solid #c084fc">
+<div class="c c-slim" style="border-left:3px solid #c084fc">
   <div class="col" onclick="tog(this,'sec-stapy')">⚡ Staking APY Tracker</div>
   <div id="sec-stapy" class="col-b">
     <div id="stapySummary" class="mg" style="margin-bottom:10px"></div>

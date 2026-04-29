@@ -291,6 +291,7 @@ async function fetchWal(){
     if(newS<=0&&MY_STBURN>0)return;
     wal.prev.burn=MY_BURN;wal.prev.st=MY_STBURN;
     MY_BURN=newB;MY_STBURN=newS;
+    try{checkBalanceDecrease();}catch(e){}
     wal.burn=MY_BURN;wal.st=MY_STBURN;
     wal.ok=true;renderWal();
   }catch(e){console.log("Wallet err:",e);}}
@@ -2014,6 +2015,25 @@ function syncPortfolioToServer(){
     }
     var data={assets:assets,burnPrice:P||0,myBurn:MY_BURN||0,myStBurn:MY_STBURN||0,stRatio:stR||1,ts:Date.now()};
     fetch(SYNC_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),mode:"cors"}).catch(function(){});
+  }catch(e){}
+}
+
+// ═══ BALANCE DECREASE DETECTION ═══
+var _prevBurn=0,_prevStburn=0;
+function checkBalanceDecrease(){
+  try{
+    if(!MY_BURN||!MY_STBURN||MY_BURN<=0)return;
+    if(_prevBurn===0){_prevBurn=MY_BURN;_prevStburn=MY_STBURN;return;}
+    var burnDrop=_prevBurn-MY_BURN;
+    var stDrop=_prevStburn-MY_STBURN;
+    if(burnDrop>100){
+      if(typeof notify==="function")notify("⚠️ BURN Balance Drop",burnDrop.toFixed(0)+" BURN removed from wallet!");
+      var el=$("walGrid");if(el)el.style.borderColor="var(--r)";
+    }
+    if(stDrop>100){
+      if(typeof notify==="function")notify("⚠️ stBURN Balance Drop",stDrop.toFixed(0)+" stBURN removed from wallet!");
+    }
+    _prevBurn=MY_BURN;_prevStburn=MY_STBURN;
   }catch(e){}
 }
 
