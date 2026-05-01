@@ -130,7 +130,7 @@ function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
 var LD="…";
-function tog(el,id){var b=$(id);b.classList.toggle("open");el.classList.toggle("open");}
+// tog() defined in lmap section with cache support
 
 // ═══ RPC (uses rpcCall from fallback system above) ═══
 function bof(a){return"0x70a08231000000000000000000000000"+a.slice(2).toLowerCase();}
@@ -743,6 +743,23 @@ try{
   var cachedOwners=localStorage.getItem("lmap_owners");
   if(cachedOwners){window._lpOwners=JSON.parse(cachedOwners);console.log("LMAP: loaded "+window._lpOwners.length+" cached LP owners");}
 }catch(e){}
+
+// Render cached LPs immediately when section is toggled open
+var _origTog=window.tog;
+function tog(el,id){
+  // Call original toggle
+  var body=$(id);if(!body)return;
+  var isOpening=!body.classList.contains("open");
+  el.classList.toggle("open");body.classList.toggle("open");
+  // If opening LP Map and no scan data yet, render from cache
+  if(isOpening&&id==="sec-lmap"&&(!lmapCache||lmapTs===0)){
+    var cached=window._lpOwners||[];
+    if(cached.length>0&&aB>0){
+      console.log("LMAP: rendering "+cached.length+" cached owners");
+      renderLmap([]);
+    }
+  }
+}
 var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
 
 
@@ -822,7 +839,8 @@ async function scanLiqMap(){
     console.log("LMAP: "+tickData.length+" tick data decoded");
 
     // 4. Find LP owners: Pool Mint Events → Receipts → Token IDs → ownerOf
-    var lpOwners=window._lpOwners=[];
+    var lpOwners=[];
+    var _prevOwners=window._lpOwners||[];
     $("lmapStatus").textContent="Scanning pool history...";
     try{
       var myD=W_DEFI.toLowerCase(),myL=W_LEDGER.toLowerCase();
@@ -1066,6 +1084,7 @@ async function scanLiqMap(){
       for(var cli=0;cli<lpOwners.length;cli++){if(lpOwners[cli].closed)closedLPs.push(lpOwners[cli]);}
       if(closedLPs.length>0)localStorage.setItem("lmap_closed",JSON.stringify(closedLPs));
       localStorage.setItem("lmap_owners",JSON.stringify(lpOwners));
+      window._lpOwners=lpOwners;
       console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs");
     }catch(e){}
     // Update DAO Full Range LP with real on-chain data
@@ -1085,13 +1104,13 @@ async function scanLiqMap(){
     }catch(e){}
     renderLmap(buckets);
   }catch(e){console.log("LMAP err:",e);
-    // Show cached LP owners if available (closed positions never change)
+    // Keep previous owners if scan fails
+    if(!window._lpOwners||window._lpOwners.length===0){
+      try{var co=localStorage.getItem("lmap_owners");if(co)window._lpOwners=JSON.parse(co);}catch(e2){}
+    }
     var cachedOwn=window._lpOwners||[];
     if(cachedOwn.length>0){
-      var closedOnly=cachedOwn.filter(function(o){return o.closed;});
-      var activeOnly=cachedOwn.filter(function(o){return !o.closed;});
-      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions ('+closedOnly.length+' closed) <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
-      // Render cached data without buckets
+      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
       renderLmap([]);
     }else{
       $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
@@ -1120,7 +1139,7 @@ function renderLmap(buckets){
     if(a.activeCount===0&&b.activeCount>0)return 1;
     return b.activeLiq-a.activeLiq;
   });
-  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length,"var(--br)")+MB("Total BURN",F(tB,0),"var(--o)")+MB("Total USDC","$"+F(tU,0),"var(--g)")+
+  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length>0?buckets.length:(lpOwners.length>0?"cached":"—"),"var(--br)")+MB("Total BURN",tB>0?F(tB,0):(aB>0?F(aB,0)+"*":"—"),"var(--o)")+MB("Total USDC",tU>0?"$"+F(tU,0):(aU>0?"$"+F(aU,0)+"*":"—"),"var(--g)")+
     MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--cy)")+MB("Historical",Object.keys(allOwn).length+" total","var(--dm)");
   // Render by wallet
   var rows="";
@@ -2590,7 +2609,7 @@ function ptfSaveSnapshot(tv){
 
 function ptfSetChartRange(range){
   ptfChartRange=range;
-  var rs=["1d","7d","1m","1y"];
+  var rs=["1d","7d","1m","1y","all"];
   for(var i=0;i<rs.length;i++){var b=$("ptfTR"+rs[i]);if(b)b.style.borderColor=rs[i]===range?"var(--cy)":"";}
   ptfRenderTimeline();
 }
@@ -2606,7 +2625,7 @@ function ptfFmtDate(ts,range){
 function ptfRenderTimeline(){
   var el=$("ptfChartTimeline");if(!el)return;
   try{
-  var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000};
+  var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000,"all":Date.now()};
   var cutoff=Date.now()-(ranges[ptfChartRange]||604800000);
   var filtered=[];
   for(var fi=0;fi<ptfSnapshots.length;fi++){
@@ -2671,6 +2690,104 @@ function ptfRenderTimeline(){
     '<text x="'+(parseFloat(lastPt[0])-6)+'" y="'+valY+'" fill="#22d3ee" font-size="9" text-anchor="end">'+valLbl+'</text>'+
     '</svg>';
   }catch(e){console.log("PTF timeline err:",e);}
+}
+
+// ═══ FULLSCREEN CHART ═══
+function openChartModal(){
+  var m=$("chartModal");if(!m)return;
+  m.style.display="flex";m.style.flexDirection="column";
+  document.body.style.overflow="hidden";
+  ptfModalRange(ptfChartRange||"7d");
+}
+function closeChartModal(){
+  var m=$("chartModal");if(m)m.style.display="none";
+  document.body.style.overflow="";
+}
+function ptfModalRange(r){
+  ptfChartRange=r;
+  ["1d","7d","1m","1y","all"].forEach(function(k){
+    var b=$("cmR"+k);if(b){b.style.borderColor=k===r?"var(--cy)":"";b.style.color=k===r?"var(--cy)":"";}
+  });
+  ptfRenderFullscreen();
+}
+function ptfRenderFullscreen(){
+  var el=$("chartModalBody");if(!el)return;
+  var info=$("chartModalInfo");
+  var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000,"all":Date.now()};
+  var cutoff=Date.now()-(ranges[ptfChartRange]||604800000);
+  var filtered=[];
+  for(var i=0;i<ptfSnapshots.length;i++){
+    var s=ptfSnapshots[i];var ts=Array.isArray(s)?s[0]:s.ts;var val=Array.isArray(s)?s[1]:s.value;
+    if(ts>=cutoff)filtered.push([ts,val]);
+  }
+  if(filtered.length<2){el.innerHTML='<div style="color:var(--dm);font-size:12px;text-align:center;padding:40px">Not enough data for this range</div>';return;}
+  var maxPts=500;
+  if(filtered.length>maxPts){var step=Math.ceil(filtered.length/maxPts);var ds=[filtered[0]];for(var si=step;si<filtered.length-1;si+=step)ds.push(filtered[si]);ds.push(filtered[filtered.length-1]);filtered=ds;}
+  var minV=filtered[0][1],maxV=filtered[0][1];
+  for(var i2=1;i2<filtered.length;i2++){if(filtered[i2][1]<minV)minV=filtered[i2][1];if(filtered[i2][1]>maxV)maxV=filtered[i2][1];}
+  var pad3=(maxV-minV)*0.05||10;minV=Math.max(0,minV-pad3);maxV+=pad3;
+  var vRange=maxV-minV||1;
+  var W=1200,H=500,px=60,py=20,cw=W-px-20,ch=H-py-40;
+  var pts=[];
+  for(var j=0;j<filtered.length;j++){var x=px+j/(filtered.length-1)*cw;var y=py+ch-(filtered[j][1]-minV)/vRange*ch;pts.push(x.toFixed(1)+","+y.toFixed(1));}
+  var path="M"+pts.join("L");
+  var fillPath=path+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z";
+  var grid="";
+  for(var g=0;g<=8;g++){var gy=py+ch-ch*g/8;var gv=minV+(maxV-minV)*g/8;
+    grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-20)+'" y2="'+gy+'" stroke="rgba(30,41,59,.25)" stroke-dasharray="3,3"/>';
+    grid+='<text x="'+(px-6)+'" y="'+(gy+3)+'" fill="#94a3b8" font-size="10" text-anchor="end">$'+Math.round(gv).toLocaleString()+'</text>';}
+  var xLabels="";var nL=ptfChartRange==="1d"?8:ptfChartRange==="7d"?7:ptfChartRange==="1m"?10:ptfChartRange==="all"?12:12;
+  for(var xl=0;xl<=nL;xl++){var xi=Math.round(xl/nL*(filtered.length-1));var xx=px+xi/(filtered.length-1)*cw;
+    xLabels+='<text x="'+xx+'" y="'+(H-5)+'" fill="#64748b" font-size="9" text-anchor="middle">'+ptfFmtDate(filtered[xi][0],ptfChartRange==="all"?"1y":ptfChartRange)+'</text>';}
+  var firstV=filtered[0][1],lastV=filtered[filtered.length-1][1];
+  var chgAmt=lastV-firstV,chgPct=firstV>0?(chgAmt/firstV*100):0;
+  var chgClr=chgAmt>=0?"#34d399":"#f87171";
+  var lastPt=pts[pts.length-1].split(",");
+  // Chart with touch crosshair
+  el.innerHTML='<div style="position:relative;width:100%;height:100%"><svg id="fsChartSvg" viewBox="0 0 '+W+' '+H+'" style="width:100%;height:100%;max-height:75vh">'+
+    grid+xLabels+
+    '<defs><linearGradient id="ptfFsFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.2)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
+    '<path d="'+fillPath+'" fill="url(#ptfFsFill)"/>'+
+    '<path d="'+path+'" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linejoin="round"/>'+
+    '<circle cx="'+lastPt[0]+'" cy="'+lastPt[1]+'" r="5" fill="#22d3ee"/>'+
+    '<text x="'+(parseFloat(lastPt[0])-8)+'" y="'+(parseFloat(lastPt[1])-10)+'" fill="#22d3ee" font-size="12" text-anchor="end">$'+Math.round(lastV).toLocaleString()+'</text>'+
+    '<line id="fsCross" x1="0" y1="'+py+'" x2="0" y2="'+(py+ch)+'" stroke="rgba(251,146,60,.4)" stroke-width="1" stroke-dasharray="3,3" style="display:none"/>'+
+    '<circle id="fsDot" cx="0" cy="0" r="4" fill="#fb923c" style="display:none"/>'+
+    '<text id="fsLabel" x="0" y="0" fill="#fb923c" font-size="10" text-anchor="middle" style="display:none"></text>'+
+    '</svg><div id="fsTip" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);background:rgba(5,8,15,.9);border:1px solid rgba(251,146,60,.3);border-radius:8px;padding:4px 10px;font-size:11px;color:var(--o);pointer-events:none;white-space:nowrap;z-index:10"></div></div>';
+  // Touch/mouse crosshair handler
+  window._fsChartData=filtered;window._fsChartParams={W:W,H:H,px:px,py:py,cw:cw,ch:ch,minV:minV,maxV:maxV};
+  var svg=document.getElementById("fsChartSvg");
+  if(svg){
+    var handler=function(ex,ey){
+      var rect=svg.getBoundingClientRect();
+      var relX=(ex-rect.left)/rect.width*W;
+      var idx=Math.round((relX-px)/cw*(filtered.length-1));
+      idx=Math.max(0,Math.min(filtered.length-1,idx));
+      var pt=filtered[idx];
+      var cx=px+idx/(filtered.length-1)*cw;
+      var cy=py+ch-(pt[1]-minV)/(maxV-minV)*ch;
+      var cross=document.getElementById("fsCross");
+      var dot=document.getElementById("fsDot");
+      var tip=document.getElementById("fsTip");
+      if(cross){cross.setAttribute("x1",cx);cross.setAttribute("x2",cx);cross.style.display="";}
+      if(dot){dot.setAttribute("cx",cx);dot.setAttribute("cy",cy);dot.style.display="";}
+      if(tip){tip.style.display="";tip.innerHTML="$"+Math.round(pt[1]).toLocaleString()+" · "+new Date(pt[0]).toLocaleDateString()+" "+new Date(pt[0]).toLocaleTimeString().slice(0,5);}
+    };
+    svg.addEventListener("touchmove",function(e){e.preventDefault();var t=e.touches[0];handler(t.clientX,t.clientY);},{passive:false});
+    svg.addEventListener("mousemove",function(e){handler(e.clientX,e.clientY);});
+    svg.addEventListener("touchend",function(){
+      var c2=document.getElementById("fsCross");var d2=document.getElementById("fsDot");var t2=document.getElementById("fsTip");
+      if(c2)c2.style.display="none";if(d2)d2.style.display="none";if(t2)t2.style.display="none";
+    });
+  }
+  if(info){
+    var hi=filtered.reduce(function(a,b){return b[1]>a?b[1]:a;},0);
+    var lo=filtered.reduce(function(a,b){return b[1]<a?b[1]:a;},Infinity);
+    info.innerHTML='<span style="color:'+chgClr+'">'+(chgAmt>=0?"+":"")+F(chgAmt,2)+' ('+chgPct.toFixed(1)+'%)</span> · '+
+      'High: <span style="color:var(--g)">$'+F(hi,0)+'</span> · Low: <span style="color:var(--r)">$'+F(lo,0)+'</span> · '+
+      filtered.length+' pts · '+new Date(filtered[0][0]).toLocaleDateString()+" — "+new Date(filtered[filtered.length-1][0]).toLocaleDateString();
+  }
 }
 
 function ptfRenderPnlBars(){
