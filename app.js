@@ -1459,8 +1459,9 @@ function drawSimChart(days,mom,inf,liq){
 // ═══ LP P&L DETAIL ═══
 function renderLpPnl(){
   try{
-    if(!$("lpPnlB")||P<=0||!LP||LP.length===0)return;
+    if(!$("lpPnlB")||P<=0)return;
     var rows="",tVN=0,tHV=0,tIL=0,tSold=0,tUsdc=0;
+    // Active LPs
     for(var i=0;i<LP.length;i++){
       if(LP[i].fr)continue;
       if(LP[i].lo<=0||LP[i].hi<=0)continue;
@@ -1476,7 +1477,7 @@ function renderLpPnl(){
       var avgClr=avgSell>P?"var(--g)":avgSell>0?"var(--r)":"var(--dm)";
       var ilClr=il>=0?"var(--g)":"var(--r)";
       tVN+=valueNow;tHV+=hodlValue;tIL+=il;tSold+=sold;tUsdc+=cv.usdc;
-      rows+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(sold,0)+'</td>';
+      rows+='<tr><td class="bld">'+rng+' <span style="font-size:8px;color:var(--g)">ACTIVE</span></td><td style="color:var(--o)">'+F(sold,0)+'</td>';
       rows+='<td style="color:'+avgClr+'">'+(sold>0?"$"+avgSell.toFixed(4):"—")+'</td>';
       rows+='<td style="color:var(--br)">$'+F(valueNow,2)+'</td>';
       rows+='<td style="color:var(--dm)">$'+F(hodlValue,2)+'</td>';
@@ -1484,11 +1485,47 @@ function renderLpPnl(){
       rows+='<td style="color:'+ilClr+'">'+ilPct.toFixed(1)+'%</td>';
       rows+='<td style="color:var(--g)">$'+F(ff.usdc,0)+'</td></tr>';
     }
-    $("lpPnlB").innerHTML=rows||'<tr><td colspan="8" style="color:var(--dm)">No active LPs</td></tr>';
+    // Closed LPs
+    for(var ci2=0;ci2<CL.length;ci2++){
+      var c=CL[ci2];
+      var cAvg=c.b>0?c.u/c.b:0;
+      var cHodl=c.b*P;
+      var cIl=c.u-cHodl;
+      var cIlPct=cHodl>0?(cIl/cHodl*100):0;
+      var cRng=(c.lo>0&&c.hi>0)?"$"+c.lo.toFixed(c.lo<1?3:2)+"→$"+c.hi.toFixed(2):"Ø $"+(c.u/c.b).toFixed(4);
+      var cAvgClr=cAvg>P?"var(--g)":"var(--r)";
+      var cIlClr=cIl>=0?"var(--g)":"var(--r)";
+      tVN+=c.u;tHV+=cHodl;tIL+=cIl;tSold+=c.b;tUsdc+=c.u;
+      rows+='<tr style="opacity:.7"><td class="bld" style="font-size:10px">'+cRng+' <span style="font-size:8px;color:var(--dm)">'+c.d+'</span></td><td style="color:var(--o)">'+F(c.b,0)+'</td>';
+      rows+='<td style="color:'+cAvgClr+'">$'+cAvg.toFixed(4)+'</td>';
+      rows+='<td style="color:var(--g)">$'+F(c.u,2)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+F(cHodl,2)+'</td>';
+      rows+='<td style="color:'+cIlClr+'">'+(cIl>=0?"+":"-")+"$"+F(Math.abs(cIl),2)+'</td>';
+      rows+='<td style="color:'+cIlClr+'">'+cIlPct.toFixed(1)+'%</td>';
+      rows+='<td style="color:var(--dm)">closed</td></tr>';
+    }
+    // Market sales
+    for(var mi2=0;mi2<MS.length;mi2++){
+      var m=MS[mi2];
+      var mAvg=m.b>0?m.u/m.b:0;
+      var mHodl=m.b*P;
+      var mIl=m.u-mHodl;
+      var mIlClr=mIl>=0?"var(--g)":"var(--r)";
+      tVN+=m.u;tHV+=mHodl;tIL+=mIl;tSold+=m.b;tUsdc+=m.u;
+      rows+='<tr style="opacity:.7"><td class="bld" style="font-size:10px">Market <span style="font-size:8px;color:var(--dm)">'+m.d+'</span></td><td style="color:var(--o)">'+F(m.b,0)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+mAvg.toFixed(4)+'</td>';
+      rows+='<td style="color:var(--g)">$'+F(m.u,2)+'</td>';
+      rows+='<td style="color:var(--dm)">$'+F(mHodl,2)+'</td>';
+      rows+='<td style="color:'+mIlClr+'">'+(mIl>=0?"+":"-")+"$"+F(Math.abs(mIl),2)+'</td>';
+      rows+='<td style="color:'+mIlClr+'">'+(mHodl>0?(mIl/mHodl*100).toFixed(1):0)+'%</td>';
+      rows+='<td style="color:var(--dm)">market</td></tr>';
+    }
+    $("lpPnlB").innerHTML=rows||'<tr><td colspan="8" style="color:var(--dm)">No LP data</td></tr>';
     var wAvgSell=tSold>0?tUsdc/tSold:0;
-    $("lpPnlSummary").innerHTML=MB("Value Now","$"+F(tVN,0),"var(--br)")+MB("HODL Value","$"+F(tHV,0),"var(--dm)")+
-      MB("Total IL",(tIL>=0?"+":"-")+"$"+F(Math.abs(tIL),0),tIL>=0?"var(--g)":"var(--r)")+
-      MB("Avg Sell",wAvgSell>0?"$"+wAvgSell.toFixed(4):"—","var(--cy)");
+    $("lpPnlSummary").innerHTML=MB("Total Realized","$"+F(tUsdc,0),"var(--g)")+MB("If HODL","$"+F(tHV,0),"var(--dm)")+
+      MB("LP vs HODL",(tIL>=0?"+":"-")+"$"+F(Math.abs(tIL),0),tIL>=0?"var(--g)":"var(--r)")+
+      MB("Avg Sell",wAvgSell>0?"$"+wAvgSell.toFixed(4):"—","var(--cy)")+
+      MB("Total BURN Sold",F(tSold,0),"var(--o)");
   }catch(e){console.log("lpPnl err:",e);}
 }
 
