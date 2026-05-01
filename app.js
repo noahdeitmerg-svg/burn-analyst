@@ -509,7 +509,25 @@ function render(){
   function ring(p,cl,tx){p=Math.max(0,Math.min(100,p||0));return'<div style="width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:conic-gradient('+cl+' '+p+'%,#1a2235 '+p+'% 100%)"><div style="width:34px;height:34px;border-radius:50%;background:#0c1220;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+cl+'">'+tx+'</div></div>';}
   var lpR="",tBI=0,tBL=0,tU2=0;
   for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
-    if(pos.fr){rng="Full Range";bI=pos.b;bL=aB;uE=aU;var frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
+    if(pos.fr){
+      rng="Full Range";bI=pos.b;
+      // Calculate DAO's actual BURN left and USDC from pool scan data
+      bL=pos.b;uE=0;var frPct=0;
+      try{
+        var daoOwn=window._lpOwners?window._lpOwners.filter(function(o){return o.owner.toLowerCase()===DAO_VAULT.toLowerCase()&&!o.closed&&o.hi>100000;}):[];
+        if(daoOwn.length>0&&daoOwn[0].liq>0&&P>0){
+          var dLiq=daoOwn[0].liq;
+          var sqP=Math.sqrt(P);
+          var sqLo2=Math.pow(1.0001,daoOwn[0].tL/2)/1e9;
+          var sqHi2=Math.pow(1.0001,daoOwn[0].tU/2)/1e9;
+          if(sqHi2>sqLo2){
+            bL=dLiq/1e18*(1/sqP-1/sqHi2);if(bL<0)bL=0;
+            uE=dLiq/1e18*(sqP-sqLo2)*1e12;if(uE<0)uE=0;
+            frPct=bI>0?Math.max(0,((bI-bL)/bI)*100):0;
+          }
+        }
+      }catch(e){bL=aB;uE=aU;frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;}
+      ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
     else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
       var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
@@ -1051,6 +1069,17 @@ async function scanLiqMap(){
       localStorage.setItem("lmap_owners",JSON.stringify(lpOwners));
       console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs");
     }catch(e){}
+    // Update DAO Full Range LP with real on-chain data
+    try{
+      var daoAddr=DAO_VAULT.toLowerCase();
+      for(var doi=0;doi<lpOwners.length;doi++){
+        if(lpOwners[doi].owner.toLowerCase()===daoAddr&&!lpOwners[doi].closed&&lpOwners[doi].hi>100000){
+          var realBurn=wtLiqToBurn(lpOwners[doi].liq,lpOwners[doi].tL,lpOwners[doi].tU);
+          if(realBurn>0){LP_DAO.b=realBurn;console.log("LMAP: DAO LP updated: "+realBurn.toFixed(0)+" BURN (was 5M hardcoded)");}
+          break;
+        }
+      }
+    }catch(e){}
     renderLmap(buckets);
   }catch(e){console.log("LMAP err:",e);
     // Show cached LP owners if available (closed positions never change)
@@ -1130,13 +1159,26 @@ function renderLmap(buckets){
         // Calculate BURN deposited using wtLiqToBurn with original ticks
         var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
         try{
-          if(lp.tL!==undefined&&lp.tU!==undefined&&!isFullRange){
+          if(lp.tL!==undefined&&lp.tU!==undefined&&lp.liq>0){
             burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
           }
-          if(isFullRange){
-            burnDep=tB>0?tB:0;
-            lpLeft=burnDep;lpUsdc=burnDep*P;
-          } else if(burnDep>0&&P>0){
+          if(isFullRange&&burnDep>0&&P>0){
+            // Full Range: BURN left ≈ proportion of pool BURN based on liquidity share
+            var poolBurn=tB>0?tB:0;
+            // Use V3 math: at current price, how much BURN is in this position
+            var sqP=Math.sqrt(P);
+            var sqLo=Math.pow(1.0001,lp.tL/2)/1e9;
+            var sqHi=Math.pow(1.0001,lp.tU/2)/1e9;
+            if(sqP>0&&sqHi>sqLo){
+              var Lscaled=lp.liq/1e18;
+              lpLeft=Lscaled*(1/sqP-1/sqHi);
+              lpUsdc=Lscaled*(sqP-sqLo)*1e12;
+              if(lpLeft<0)lpLeft=0;if(lpUsdc<0)lpUsdc=0;
+              lpPct=burnDep>0?Math.max(0,((burnDep-lpLeft)/burnDep)*100):0;
+            }else{
+              lpLeft=burnDep;lpUsdc=burnDep*P;
+            }
+          } else if(burnDep>0&&P>0&&!isFullRange){
             var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
           }
         }catch(e){}
