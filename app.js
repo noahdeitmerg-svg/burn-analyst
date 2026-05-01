@@ -722,6 +722,11 @@ async function fetchTradesOlder(){
 
 // ═══ POOL LIQUIDITY MAP (bitmap + subgraph) ═══
 var lmapCache=null,lmapTs=0;
+// Load cached LP owners from localStorage (closed LPs never change)
+try{
+  var cachedOwners=localStorage.getItem("lmap_owners");
+  if(cachedOwners){window._lpOwners=JSON.parse(cachedOwners);console.log("LMAP: loaded "+window._lpOwners.length+" cached LP owners");}
+}catch(e){}
 var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
 
 
@@ -1038,9 +1043,27 @@ async function scanLiqMap(){
     var bucketsWithOwners=0;for(var boi=0;boi<buckets.length;boi++){if(buckets[boi].owners&&buckets[boi].owners.length>0)bucketsWithOwners++;}
     console.log("LMAP: "+buckets.length+" buckets, "+bucketsWithOwners+" have LP owners assigned");
     lmapCache=buckets;lmapTs=Date.now();
+    // Cache closed LPs permanently (they never change)
+    try{
+      var closedLPs=[];
+      for(var cli=0;cli<lpOwners.length;cli++){if(lpOwners[cli].closed)closedLPs.push(lpOwners[cli]);}
+      if(closedLPs.length>0)localStorage.setItem("lmap_closed",JSON.stringify(closedLPs));
+      localStorage.setItem("lmap_owners",JSON.stringify(lpOwners));
+      console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs");
+    }catch(e){}
     renderLmap(buckets);
   }catch(e){console.log("LMAP err:",e);
-    $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
+    // Show cached LP owners if available (closed positions never change)
+    var cachedOwn=window._lpOwners||[];
+    if(cachedOwn.length>0){
+      var closedOnly=cachedOwn.filter(function(o){return o.closed;});
+      var activeOnly=cachedOwn.filter(function(o){return !o.closed;});
+      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions ('+closedOnly.length+' closed) <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
+      // Render cached data without buckets
+      renderLmap([]);
+    }else{
+      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
+    }
     $("lmapStatus").textContent="";}
 }
 
