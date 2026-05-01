@@ -509,40 +509,21 @@ function render(){
   function ring(p,cl,tx){p=Math.max(0,Math.min(100,p||0));return'<div style="width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:conic-gradient('+cl+' '+p+'%,#1a2235 '+p+'% 100%)"><div style="width:34px;height:34px;border-radius:50%;background:#0c1220;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+cl+'">'+tx+'</div></div>';}
   var lpR="",tBI=0,tBL=0,tU2=0;
   for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
-    if(pos.fr){
-      rng="Full Range";bI=pos.b;
-      // Exact V3 amounts from scan data
-      bL=aB;uE=aU;var frPct=0;
-      try{
-        var daoOwn=window._lpOwners?window._lpOwners.filter(function(o){return o.owner.toLowerCase()===DAO_VAULT.toLowerCase()&&!o.closed&&o.hi>100000;}):[];
-        if(daoOwn.length>0&&daoOwn[0].liq>0&&P>0){
-          var dl=daoOwn[0],sqP3=Math.sqrt(1e12/P);
-          var sqPL3=Math.pow(1.0001,dl.tL/2),sqPU3=Math.pow(1.0001,dl.tU/2);
-          if(sqP3<=sqPL3){bL=0;uE=dl.liq*(1/sqPL3-1/sqPU3)/1e6;}
-          else if(sqP3>=sqPU3){bL=dl.liq*(sqPU3-sqPL3)/1e18;uE=0;}
-          else{uE=dl.liq*(1/sqP3-1/sqPU3)/1e6;bL=dl.liq*(sqP3-sqPL3)/1e18;}
-          if(bL<0)bL=0;if(uE<0)uE=0;
-          frPct=bI>0?Math.max(0,((bI-bL)/bI)*100):0;
-        }
-      }catch(e){frPct=bI>0&&aB>0?Math.max(0,((bI-aB)/bI)*100):0;}
-      ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
-    else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
+    if(pos.fr)continue; // DAO shown in Pool Liquidity Map, not here
+    rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
       var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
       else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:12px;color:var(--g)">✓</span>';}
-      else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:11px;color:var(--mt)">↓'+dLo.toFixed(0)+'%</span><br><span style="font-size:11px;color:var(--tx)">↑'+dHi.toFixed(0)+'%</span>';}}
+      else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:11px;color:var(--mt)">↓'+dLo.toFixed(0)+'%</span><br><span style="font-size:11px;color:var(--tx)">↑'+dHi.toFixed(0)+'%</span>';}
     // USDC to Fill
     var fillH="";
-    if(pos.fr){fillH='<span style="color:var(--dm)">—</span>';}
-    else if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
+    if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
     else if(P<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
     else{var dU2=K>0&&Y>0?Math.sqrt(K*pos.hi)-Y:0;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
     // 100% filled USDC
-    var maxH="";
-    if(pos.fr){maxH='<span style="color:var(--dm)">—</span>';}
-    else{var vMax=v3(pos.b,pos.lo,pos.hi,pos.hi);maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';}
+    var vMax=v3(pos.b,pos.lo,pos.hi,pos.hi);var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
     tBI+=bI;tBL+=bL;tU2+=uE;
-    lpR+='<tr><td class="bld">'+rng+(pos.fr?' <span style="font-size:10px;color:var(--p)">(DAO)</span>':"")+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
+    lpR+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
   lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td><td></td><td></td></tr>';
   $("lpB").innerHTML=lpR;
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
