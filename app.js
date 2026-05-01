@@ -75,7 +75,7 @@ var LP_FALLBACK=[
   {b:5000,lo:1,hi:1.5,label:"Sell"},
   {b:5000,lo:1.5,hi:2,label:"Sell"}
 ];
-var LP_DAO={b:5000000,lo:0,hi:0,label:"DAO Full Range",fr:true};
+var LP_DAO={b:6000000,lo:0,hi:0,label:"DAO Full Range",fr:true};
 var LP=LP_FALLBACK.concat([LP_DAO]);
 LP.sort(function(a,b){if(a.fr)return 1;if(b.fr)return-1;return a.lo-b.lo;});
 var ALP=0;for(var ai=0;ai<LP.length;ai++)if(!LP[ai].fr)ALP+=LP[ai].b;
@@ -511,22 +511,20 @@ function render(){
   for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
     if(pos.fr){
       rng="Full Range";bI=pos.b;
-      // Calculate DAO's actual BURN left and USDC from pool scan data
-      bL=pos.b;uE=0;var frPct=0;
+      // Exact V3 amounts from scan data
+      bL=aB;uE=aU;var frPct=0;
       try{
         var daoOwn=window._lpOwners?window._lpOwners.filter(function(o){return o.owner.toLowerCase()===DAO_VAULT.toLowerCase()&&!o.closed&&o.hi>100000;}):[];
         if(daoOwn.length>0&&daoOwn[0].liq>0&&P>0){
-          var dLiq=daoOwn[0].liq;
-          var sqP=Math.sqrt(P);
-          var sqLo2=Math.pow(1.0001,daoOwn[0].tL/2)/1e9;
-          var sqHi2=Math.pow(1.0001,daoOwn[0].tU/2)/1e9;
-          if(sqHi2>sqLo2){
-            bL=dLiq/1e18*(1/sqP-1/sqHi2);if(bL<0)bL=0;
-            uE=dLiq/1e18*(sqP-sqLo2)*1e12;if(uE<0)uE=0;
-            frPct=bI>0?Math.max(0,((bI-bL)/bI)*100):0;
-          }
+          var dl=daoOwn[0],sqP3=Math.sqrt(1e12/P);
+          var sqPL3=Math.pow(1.0001,dl.tL/2),sqPU3=Math.pow(1.0001,dl.tU/2);
+          if(sqP3<=sqPL3){bL=0;uE=dl.liq*(1/sqPL3-1/sqPU3)/1e6;}
+          else if(sqP3>=sqPU3){bL=dl.liq*(sqPU3-sqPL3)/1e18;uE=0;}
+          else{uE=dl.liq*(1/sqP3-1/sqPU3)/1e6;bL=dl.liq*(sqP3-sqPL3)/1e18;}
+          if(bL<0)bL=0;if(uE<0)uE=0;
+          frPct=bI>0?Math.max(0,((bI-bL)/bI)*100):0;
         }
-      }catch(e){bL=aB;uE=aU;frPct=pos.b>0&&aB>0?Math.max(0,((pos.b-aB)/pos.b)*100):0;}
+      }catch(e){frPct=bI>0&&aB>0?Math.max(0,((bI-aB)/bI)*100):0;}
       ringH=ring(frPct,"#c084fc",frPct.toFixed(0)+"%");distH='<span style="color:var(--dm)">—</span>';}
     else{rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
       var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
@@ -783,6 +781,7 @@ async function scanLiqMap(){
     if(tSpacing<=0)tSpacing=60;
     var liqH=await wtRpc(POOL,"0x1a686502");
     var curLiq=0;if(liqH&&liqH.length>2)curLiq=Number(BigInt("0x"+liqH.slice(2)));
+    POOL_LIQ=curLiq; // Also update global for buyflow
     console.log("LMAP: tick="+curTick+" spacing="+tSpacing+" liq="+curLiq);
 
     // 2. Batch bitmap scan (±8 words)
@@ -1074,8 +1073,12 @@ async function scanLiqMap(){
       var daoAddr=DAO_VAULT.toLowerCase();
       for(var doi=0;doi<lpOwners.length;doi++){
         if(lpOwners[doi].owner.toLowerCase()===daoAddr&&!lpOwners[doi].closed&&lpOwners[doi].hi>100000){
-          var realBurn=wtLiqToBurn(lpOwners[doi].liq,lpOwners[doi].tL,lpOwners[doi].tU);
-          if(realBurn>0){LP_DAO.b=realBurn;console.log("LMAP: DAO LP updated: "+realBurn.toFixed(0)+" BURN (was 5M hardcoded)");}
+          // Full range: can't use wtLiqToBurn (overflow). Use pool reserves proportion.
+          var poolLiq3=POOL_LIQ||0;
+          if(poolLiq3>0&&aB>0){
+            var realBurn=aB*(lpOwners[doi].liq/poolLiq3);
+            if(realBurn>0){LP_DAO.b=realBurn;console.log("LMAP: DAO LP updated: "+realBurn.toFixed(0)+" BURN (pool share: "+(lpOwners[doi].liq/poolLiq3*100).toFixed(1)+"%)");}
+          }
           break;
         }
       }
@@ -1161,23 +1164,28 @@ function renderLmap(buckets){
         try{
           if(lp.tL!==undefined&&lp.tU!==undefined&&lp.liq>0){
             burnDep=wtLiqToBurn(lp.liq,lp.tL,lp.tU);
-          }
-          if(isFullRange&&burnDep>0&&P>0){
-            // Full Range: BURN left ≈ proportion of pool BURN based on liquidity share
-            var poolBurn=tB>0?tB:0;
-            // Use V3 math: at current price, how much BURN is in this position
-            var sqP=Math.sqrt(P);
-            var sqLo=Math.pow(1.0001,lp.tL/2)/1e9;
-            var sqHi=Math.pow(1.0001,lp.tU/2)/1e9;
-            if(sqP>0&&sqHi>sqLo){
-              var Lscaled=lp.liq/1e18;
-              lpLeft=Lscaled*(1/sqP-1/sqHi);
-              lpUsdc=Lscaled*(sqP-sqLo)*1e12;
-              if(lpLeft<0)lpLeft=0;if(lpUsdc<0)lpUsdc=0;
-              lpPct=burnDep>0?Math.max(0,((burnDep-lpLeft)/burnDep)*100):0;
-            }else{
-              lpLeft=burnDep;lpUsdc=burnDep*P;
+            // Sanity check: if overflow or negative, estimate from pool share
+            if(isFullRange&&(isNaN(burnDep)||burnDep<=0||burnDep>1e12)){
+              var poolLiq=POOL_LIQ||0;
+              burnDep=(poolLiq>0&&aB>0)?aB*(lp.liq/poolLiq):0;
             }
+          }
+          if(isFullRange&&P>0){
+            // Exact V3: compute amounts from liquidity + sqrtPrices
+            // Raw sqrtPrice = sqrt(1e12/P) to match tick-based sqrtPL/sqrtPU
+            var sqrtP2=Math.sqrt(1e12/P);
+            var sqrtPL2=Math.pow(1.0001,lp.tL/2);
+            var sqrtPU2=Math.pow(1.0001,lp.tU/2);
+            if(sqrtP2<=sqrtPL2){
+              lpLeft=0;lpUsdc=lp.liq*(1/sqrtPL2-1/sqrtPU2)/1e6;
+            }else if(sqrtP2>=sqrtPU2){
+              lpLeft=lp.liq*(sqrtPU2-sqrtPL2)/1e18;lpUsdc=0;
+            }else{
+              lpUsdc=lp.liq*(1/sqrtP2-1/sqrtPU2)/1e6;
+              lpLeft=lp.liq*(sqrtP2-sqrtPL2)/1e18;
+            }
+            if(lpLeft<0)lpLeft=0;if(lpUsdc<0)lpUsdc=0;
+            lpPct=burnDep>0?Math.max(0,((burnDep-lpLeft)/burnDep)*100):0;
           } else if(burnDep>0&&P>0&&!isFullRange){
             var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
           }
@@ -1188,7 +1196,7 @@ function renderLmap(buckets){
           var avgSell=(lp.lo+lp.hi)/2;
           ifFilled=burnDep*avgSell;
         }else if(isFullRange){
-          ifFilled=burnDep*P;
+          ifFilled=lpLeft*P+lpUsdc; // Current total value
         }
         var isInRange=P>=lp.lo&&P<lp.hi;
         // Fill bar as percentage
