@@ -988,8 +988,11 @@ async function scanLiqMap(){
       // STEP 5: Also scan extra wallets from input field
       try{
         var extraInput=$("lmapExtra")?$("lmapExtra").value:"";
-        if(extraInput){
-          var extras=extraInput.split(/[,\n\s]+/).map(function(a){return a.trim().toLowerCase();}).filter(function(a){return/^0x[0-9a-f]{40}$/.test(a);});
+        // ALWAYS scan: DAO Vault + Ledger + DeFi — guarantees they appear even if Mint-event scan misses them
+        var alwaysScan=[DAO_VAULT.toLowerCase(),W_LEDGER.toLowerCase(),W_DEFI.toLowerCase()];
+        var extras=extraInput?extraInput.split(/[,\n\s]+/).map(function(a){return a.trim().toLowerCase();}).filter(function(a){return/^0x[0-9a-f]{40}$/.test(a);}):[];
+        for(var asi=0;asi<alwaysScan.length;asi++){if(extras.indexOf(alwaysScan[asi])===-1)extras.push(alwaysScan[asi]);}
+        if(extras.length>0){
           for(var ei=0;ei<extras.length;ei++){
             var eAddr=extras[ei];
             if(uniqueOwners[eAddr])continue; // already found via Mint scan
@@ -1024,7 +1027,7 @@ async function scanLiqMap(){
               }
             }catch(e4b){continue;}
           }
-          localStorage.setItem("lmap_extra",extraInput);
+          if(extraInput)localStorage.setItem("lmap_extra",extraInput);
         }
       }catch(ee2){}
 
