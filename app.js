@@ -783,8 +783,11 @@ function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math
 
 async function scanLiqMap(){
   if(lmapCache&&lmapTs>Date.now()-600000){renderLmap(lmapCache);return;}
-  $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
-  $("lmapStatus").textContent="Scanning ticks...";
+  var hasCached=window._lpOwners&&window._lpOwners.length>0;
+  if(!hasCached){
+    $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
+  }
+  $("lmapStatus").textContent=hasCached?"Refreshing...":"Scanning ticks...";
   try{
     // 1. slot0 + tickSpacing + liquidity (3 calls)
     var s0=await wtRpc(POOL,"0x3850c7bd");
