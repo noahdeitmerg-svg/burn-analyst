@@ -2220,6 +2220,23 @@ function ptfLoad(){try{
   if(l)ptfLedger=JSON.parse(l);
   if(t)ptfSimTargets=JSON.parse(t);
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
+  // Merge server history (Hetzner collects data 24/7 even when app is closed)
+  setTimeout(function(){try{
+    fetch("http://95.216.152.31:8082/history").then(function(r){return r.json();}).then(function(data){
+      if(!data||!data.length)return;
+      var existing={};
+      for(var mi=0;mi<ptfSnapshots.length;mi++){existing[ptfSnapshots[mi][0]]=true;}
+      var added=0;
+      for(var mj=0;mj<data.length;mj++){if(!existing[data[mj][0]]){ptfSnapshots.push(data[mj]);added++;}}
+      if(added>0){
+        ptfSnapshots.sort(function(a,b){return a[0]-b[0];});
+        if(ptfSnapshots.length>200000)ptfSnapshots=ptfSnapshots.slice(-200000);
+        try{localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));}catch(e2){}
+        console.log("PTF: merged "+added+" server snapshots (total: "+ptfSnapshots.length+")");
+        ptfRenderTimeline();
+      }
+    }).catch(function(){});
+  }catch(e3){}},5000);
   try{var lb=localStorage.getItem("ptf_last_balances");if(lb)ptfLastBalances=JSON.parse(lb);}catch(e){}
   var storedVer=localStorage.getItem("ptf_version");
   if(!storedVer||parseInt(storedVer)<PTF_VERSION){
