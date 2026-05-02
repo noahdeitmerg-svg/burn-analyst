@@ -915,7 +915,7 @@ async function scanLiqMap(){
   if(lmapCache&&lmapTs>Date.now()-600000){renderLmap(lmapCache);return;}
   var hasCached=window._lpOwners&&window._lpOwners.length>0;
   if(!hasCached){
-    $("lmapB").innerHTML='<tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="5"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
+    $("lmapB").innerHTML='<tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
   }
   $("lmapStatus").textContent=hasCached?"Refreshing...":"Scanning ticks...";
   try{
@@ -1264,10 +1264,10 @@ async function scanLiqMap(){
     }
     var cachedOwn=window._lpOwners||[];
     if(cachedOwn.length>0){
-      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
+      $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
       renderLmap([]);
     }else{
-      $("lmapB").innerHTML='<tr><td colspan="5" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
+      $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
     }
     $("lmapStatus").textContent="";}
 }
@@ -1353,7 +1353,7 @@ function renderLmap(buckets){
     var labelHtml=wLabel?' <span style="font-size:9px;color:var(--cy);margin-left:4px">'+wLabel+'</span>':'';
     var statusTxt=ow.activeCount>0?ow.activeCount+" active"+(ow.closedCount>0?", "+ow.closedCount+" closed":""):ow.closedCount+" closed";
     // Wallet header row
-    rows+='<tr style="background:rgba(30,41,59,.3);border-top:2px solid var(--bd)"><td colspan="5" style="padding:8px 6px">'+
+    rows+='<tr style="background:rgba(30,41,59,.3);border-top:2px solid var(--bd)"><td colspan="6" style="padding:8px 6px">'+
       '<span style="font-weight:600;font-size:11px">'+wLink+'</span>'+labelHtml+
       ' <span style="font-size:8px;color:var(--dm);margin-left:6px">'+statusTxt+'</span></td></tr>';
     // Sort positions: active first, then by lo price
@@ -1423,13 +1423,14 @@ function renderLmap(buckets){
         var fillClr=lpPct>=90?"var(--r)":lpPct>=50?"var(--warn)":lpPct>0?"var(--g)":"var(--dm)";
         rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.04);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--g)">'+(isInRange?"► ":"")+rng+'</td>';
         rows+='<td style="color:var(--o)">'+F(burnDep,0)+'</td>';
+        rows+='<td style="color:var(--cy)">'+F(lpLeft,0)+'</td>';
         rows+='<td style="color:var(--g)">$'+F(lpUsdc,0)+'</td>';
         rows+='<td style="color:var(--cy)">$'+F(ifFilled,0)+'</td>';
         rows+='<td style="color:'+fillClr+';font-weight:600">'+lpPct.toFixed(0)+'%</td></tr>';
       }
     }
   }
-  $("lmapB").innerHTML=rows||'<tr><td colspan="5" style="color:var(--dm)">No data</td></tr>';
+  $("lmapB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No data</td></tr>';
   $("lmapStatus").textContent=Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+lpOwners.length+" positions · "+new Date().toLocaleTimeString();
 }
 
