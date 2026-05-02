@@ -125,6 +125,15 @@ background:rgba(6,10,18,.6);border:1px solid var(--glass-border)}
 
 /* ═══ ANIMATIONS ═══ */
 @keyframes shimmer{0%{background-position:-200px 0}100%{background-position:200px 0}}
+@keyframes skelPulse{0%,100%{opacity:.6;filter:brightness(1)}50%{opacity:1;filter:brightness(1.4)}}
+@keyframes cardLoadGlow{0%,100%{box-shadow:0 0 0 0 rgba(96,165,250,0)}50%{box-shadow:0 0 24px 2px rgba(96,165,250,.18)}}
+@keyframes mbBorderPulse{
+  0%{border-color:rgba(96,165,250,.4);box-shadow:0 0 0 1px rgba(96,165,250,.2),0 0 16px rgba(96,165,250,.25)}
+  25%{border-color:rgba(192,132,252,.5);box-shadow:0 0 0 1px rgba(192,132,252,.3),0 0 20px rgba(192,132,252,.3)}
+  50%{border-color:rgba(34,211,238,.5);box-shadow:0 0 0 1px rgba(34,211,238,.3),0 0 22px rgba(34,211,238,.35)}
+  75%{border-color:rgba(251,146,60,.5);box-shadow:0 0 0 1px rgba(251,146,60,.3),0 0 20px rgba(251,146,60,.3)}
+  100%{border-color:rgba(96,165,250,.4);box-shadow:0 0 0 1px rgba(96,165,250,.2),0 0 16px rgba(96,165,250,.25)}
+}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 @keyframes heartPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:.6}}
@@ -256,8 +265,13 @@ font-family:'Inter','Geist Mono',sans-serif;transition:color .2s,text-shadow .3s
 /* ═══ MISC ═══ */
 .live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:5px;vertical-align:middle;animation:pulse 2s ease-in-out infinite}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px;vertical-align:middle}
-.skel{background:linear-gradient(90deg,rgba(12,18,32,.6) 25%,rgba(30,41,59,.4) 50%,rgba(12,18,32,.6) 75%);
-background-size:400px 100%;animation:shimmer 1.5s ease-in-out infinite;border-radius:6px;height:14px;width:60px;display:inline-block}
+.skel{background:linear-gradient(90deg,rgba(20,30,55,.5) 0%,rgba(40,55,90,.7) 35%,rgba(96,165,250,.25) 50%,rgba(40,55,90,.7) 65%,rgba(20,30,55,.5) 100%);
+background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse 3.2s ease-in-out infinite;border-radius:6px;height:14px;width:60px;display:inline-block;position:relative;overflow:hidden}
+.skel::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(96,165,250,.12),transparent 70%);animation:skelPulse 2.8s ease-in-out infinite alternate;pointer-events:none;border-radius:inherit}
+/* Card-level loading aura: subtle pulsing border-glow when card contains skeletons */
+.c:has(.skel),.hero-card:has(.skel){animation:cardLoadGlow 6s ease-in-out infinite}
+/* Inner mb boxes get a soft pulse when loading */
+.mb:has(.skel){animation:mbBorderPulse 8s ease-in-out infinite !important}
 .ptr{text-align:center;font-size:9px;color:var(--dm);padding:0;max-height:0;overflow:hidden;transition:max-height .2s,padding .2s}
 .ptr.show{max-height:40px;padding:10px 0}
 .ld{display:flex;align-items:center;gap:6px;padding:16px;color:var(--dm);font-size:10px}
