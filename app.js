@@ -345,26 +345,79 @@ async function fetchWal(){
 function renderWal(){
   if(!wal.ok)return;
   var bDrop=wal.prev.burn>0&&MY_BURN<wal.prev.burn,sDrop=wal.prev.st>0&&MY_STBURN<wal.prev.st;
-  var alert=bDrop||sDrop;
-  if(alert&&soundOn)beep();
-  if(alert)notify("⚠ Wallet Alert","Balance decreased! BURN:"+(bDrop?MY_BURN-wal.prev.burn:0)+" stBURN:"+(sDrop?MY_STBURN-wal.prev.st:0));
+  var oldDropAlert=bDrop||sDrop;
+  if(oldDropAlert&&soundOn)beep();
+  if(oldDropAlert)notify("⚠ Wallet Alert","Balance decreased! BURN:"+(bDrop?MY_BURN-wal.prev.burn:0)+" stBURN:"+(sDrop?MY_STBURN-wal.prev.st:0));
   var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   var totalTokens=MY_BURN+MY_STBURN;
   var totalBurnEq=MY_BURN+(MY_STBURN*stR);
+
+  // ─── Wallet Change Detection ───
+  // Persist last confirmed total. If current total deviates >1 BURN → ALARM
+  var lastConfirmed=parseFloat(localStorage.getItem("walConfirmedTotal")||"0");
+  if(lastConfirmed===0&&totalTokens>0){
+    // First-ever load: silently set baseline
+    localStorage.setItem("walConfirmedTotal",totalTokens.toString());
+    lastConfirmed=totalTokens;
+  }
+  var totalDelta=totalTokens-lastConfirmed;
+  var isChanged=Math.abs(totalDelta)>1;
+  // Push notification once per new change event (track via ts+delta hash)
+  if(isChanged){
+    var changeKey=lastConfirmed.toFixed(0)+"_"+totalTokens.toFixed(0);
+    var lastNotifKey=localStorage.getItem("walNotifKey")||"";
+    if(lastNotifKey!==changeKey){
+      localStorage.setItem("walNotifKey",changeKey);
+      var dirTxt=totalDelta>0?"+"+F(totalDelta,0):F(totalDelta,0);
+      notify("⚠ Wallet Balance Changed","Total: "+F(lastConfirmed,0)+" → "+F(totalTokens,0)+" ("+dirTxt+" BURN). Tap to confirm.");
+      if(soundOn)beep();
+    }
+  }
+  var totalClr=isChanged?"var(--r)":"var(--g)";
+  var totalAlertIcon=isChanged?'<span style="color:var(--r);font-weight:900;margin-right:4px;animation:skelPulse 1.5s ease-in-out infinite">⚠</span>':'';
+
+  // Confirm banner (shown only when change detected)
+  var banner='';
+  if(isChanged){
+    var dirTxt2=totalDelta>0?"+"+F(totalDelta,0):F(totalDelta,0);
+    banner='<div style="margin:-4px -2px 10px;padding:10px 12px;border-radius:10px;'+
+      'background:linear-gradient(180deg,rgba(248,113,113,.15),rgba(248,113,113,.05));'+
+      'border:1px solid rgba(248,113,113,.4);'+
+      'box-shadow:0 0 16px rgba(248,113,113,.2),0 0 0 1px rgba(248,113,113,.15) inset;'+
+      'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+      '<div style="font-size:10px;color:var(--tx);line-height:1.4">'+
+        '<div style="font-weight:700;color:var(--r);text-transform:uppercase;letter-spacing:1px;font-size:9px;font-family:Inter,sans-serif;margin-bottom:2px">⚠ Balance Changed</div>'+
+        '<div style="color:var(--mt)"><span style="color:var(--dm)">prev:</span> '+F(lastConfirmed,0)+' → <span style="color:var(--br);font-weight:600">'+F(totalTokens,0)+'</span> <span style="color:'+(totalDelta>0?"var(--g)":"var(--r)")+';font-weight:600">('+dirTxt2+')</span></div>'+
+      '</div>'+
+      '<button onclick="walConfirmChange()" style="background:linear-gradient(180deg,rgba(52,211,153,.18),rgba(52,211,153,.05));border:1px solid rgba(52,211,153,.5);color:var(--g);padding:8px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:36px;white-space:nowrap">✓ Ich war\'s</button>'+
+    '</div>';
+  }
+
   $("walGrid").innerHTML=
-    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:6px">'+
+    banner+
+    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">'+
       '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span>'+
       '<span style="color:var(--dm)">·</span>'+
       '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
       '<span style="color:var(--dm)">·</span>'+
-      '<span style="color:var(--br);font-weight:700">'+F(totalTokens,0)+' Total</span>'+
-      (alert?' <span style="color:var(--r);font-weight:700">⚠ DROP</span>':'')+
+      '<span style="color:'+totalClr+';font-weight:700">'+totalAlertIcon+F(totalTokens,0)+' Total</span>'+
+      (oldDropAlert?' <span style="color:var(--r);font-weight:700">⚠ DROP</span>':'')+
     '</div>'+
-    '<div style="text-align:center;font-size:10px;color:var(--dm);letter-spacing:.5px">'+
-      '<span style="text-transform:uppercase;letter-spacing:1.2px;font-size:8px">BURN-Equivalent ≈</span> '+
-      '<span style="color:var(--cy);font-weight:600;font-size:11px">'+F(totalBurnEq,0)+' BURN</span>'+
-    '</div>';}
+    '<div style="text-align:center">'+
+      '<span style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px">BURN-Equivalent ≈</span> '+
+      '<span style="color:var(--br);font-weight:600;font-size:13px">'+F(totalBurnEq,0)+'</span>'+
+      '<span style="font-size:10px;color:var(--dm);margin-left:3px">BURN</span>'+
+    '</div>';
+}
+
+// Confirm wallet balance change — invoked by inline onclick
+function walConfirmChange(){
+  var totalNow=MY_BURN+MY_STBURN;
+  localStorage.setItem("walConfirmedTotal",totalNow.toString());
+  localStorage.removeItem("walNotifKey");
+  try{renderWal();}catch(e){}
+}
 
 // ═══ FETCH: Live LP Positions (DeFi wallet NFTs) ═══
 async function fetchLPs(){
