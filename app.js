@@ -452,12 +452,13 @@ function render(){
       '</div></div>';
   }
 
-  // NEXT FILL — show only the FIRST LP to be filled (lowest upper bound)
+  // NEXT FILL — show LP with lowest hi above current price (next to be fully filled)
   var nxtFill="";
   if(P>0){
     var bestNf=null,bestHi=Infinity;
     for(var nf=0;nf<LP.length;nf++){if(LP[nf].fr)continue;
-      if(P>=LP[nf].lo&&P<LP[nf].hi&&LP[nf].hi<bestHi){bestHi=LP[nf].hi;bestNf=nf;}}
+      // LP's hi must be above current P (not yet filled). Pick lowest hi.
+      if(LP[nf].hi>P&&LP[nf].hi<bestHi){bestHi=LP[nf].hi;bestNf=nf;}}
     if(bestNf!==null){var nfDist=((LP[bestNf].hi-P)/P*100);
       var nfBuy=0;
       if(lmapCache&&lmapCache.length>0){
@@ -574,9 +575,10 @@ function render(){
     else{var dU2=K>0&&Y>0?Math.sqrt(K*pos.hi)-Y:0;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
     // 100% filled USDC
     var vMax=v3(pos.b,pos.lo,pos.hi,pos.hi);var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
+    var bSold=Math.max(0,bI-bL);
     tBI+=bI;tBL+=bL;tU2+=uE;
-    lpR+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
-  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td><td></td><td></td></tr>';
+    lpR+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td style="color:var(--cy)">'+F(bSold,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
+  lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td style="color:var(--cy)">'+F(Math.max(0,tBI-tBL),0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td><td></td><td></td></tr>';
   $("lpB").innerHTML=lpR;
   $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
@@ -1178,8 +1180,45 @@ function renderLmap(buckets){
     if(a.activeCount===0&&b.activeCount>0)return 1;
     return b.activeLiq-a.activeLiq;
   });
-  $("lmapSummary").innerHTML=MB("Active Buckets",buckets.length>0?buckets.length:(lpOwners.length>0?"cached":"—"),"var(--br)")+MB("Total BURN",tB>0?F(tB,0):(aB>0?F(aB,0)+"*":"—"),"var(--o)")+MB("Total USDC",tU>0?"$"+F(tU,0):(aU>0?"$"+F(aU,0)+"*":"—"),"var(--g)")+
-    MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--cy)")+MB("Historical",Object.keys(allOwn).length+" total","var(--dm)");
+  // Per-LP BURN/USDC calc using V3 math (ground truth: liq + tL + tU)
+  // Avoids bucket reconstruction issues from incomplete Mint event scan
+  function lpToBurnUsdc(dl){
+    var bn=0,uc=0;
+    if(!dl||!dl.liq||dl.liq<=0||P<=0)return{b:bn,u:uc};
+    try{
+      var sq=Math.sqrt(1e12/P);
+      var sL=Math.pow(1.0001,(dl.tL!==undefined?dl.tL:-887272)/2);
+      var sU=Math.pow(1.0001,(dl.tU!==undefined?dl.tU:887272)/2);
+      if(sq<=sL){uc=dl.liq*(1/sL-1/sU)/1e6;}
+      else if(sq>=sU){bn=dl.liq*(sU-sL)/1e18;}
+      else{bn=dl.liq*(sq-sL)/1e18;uc=dl.liq*(1/sq-1/sU)/1e6;}
+      // Full-range overflow guard: use pool-share fallback
+      if(dl.hi>100000&&(isNaN(bn)||bn<0||bn>1e10)){
+        if(POOL_LIQ>0&&aB>0)bn=aB*(dl.liq/POOL_LIQ);
+        if(POOL_LIQ>0&&aU>0)uc=aU*(dl.liq/POOL_LIQ);
+      }
+    }catch(e){}
+    if(isNaN(bn)||bn<0)bn=0;
+    if(isNaN(uc)||uc<0)uc=0;
+    return{b:bn,u:uc};
+  }
+  // Compute DAO vs non-DAO BURN/USDC split (active only)
+  var daoBurn=0,nonDaoBurn=0,daoUsdc=0,nonDaoUsdc=0,sumActiveBurn=0,sumActiveUsdc=0;
+  for(var ddi=0;ddi<lpOwners.length;ddi++){
+    var dl=lpOwners[ddi];if(dl.closed)continue;
+    var bu=lpToBurnUsdc(dl);
+    sumActiveBurn+=bu.b;sumActiveUsdc+=bu.u;
+    if(dl.hi>100000){daoBurn+=bu.b;daoUsdc+=bu.u;}
+    else{nonDaoBurn+=bu.b;nonDaoUsdc+=bu.u;}
+  }
+  var unaccountedBurn=(aB>0&&sumActiveBurn>0)?Math.max(0,aB-sumActiveBurn):0;
+  $("lmapSummary").innerHTML=MB("Pool BURN (on-chain)",aB>0?F(aB,0):"—","var(--br)")+
+    MB("Pool USDC (on-chain)",aU>0?"$"+F(aU,0):"—","var(--g)")+
+    MB("DAO BURN",daoBurn>0?F(daoBurn,0):"—","var(--p)")+
+    MB("LP BURN (excl. DAO)",nonDaoBurn>0?F(nonDaoBurn,0):"—","var(--cy)")+
+    MB("Unaccounted",unaccountedBurn>1000?F(unaccountedBurn,0)+" BURN":"all detected","var(--dm)")+
+    MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--br)");
+  console.log("LMAP SUMMARY: pool aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN, others="+F(nonDaoBurn,0)+" BURN | bucket-tB="+F(tB,0));
   // Render by wallet
   var rows="";
   for(var wi=0;wi<owners.length;wi++){
