@@ -119,16 +119,26 @@ async function fetchPoolLiq(){try{var r=await rpc(POOL,"0x1a686502");if(r&&r.len
 // ═══ FETCH: 30-day BURN price (GeckoTerminal OHLCV daily) ═══
 var burn30d=[];
 async function fetchBurn30d(){
+  // Cache hydrate first — sofortiger Sparkline-Render aus localStorage
   try{
     var cached=localStorage.getItem("burn_30d");
     if(cached){
       var c=JSON.parse(cached);
-      if(c&&c.ts&&Date.now()-c.ts<6*3600*1000&&c.data&&c.data.length>0){
-        burn30d=c.data;return;
+      if(c&&c.ts&&c.data&&c.data.length>0){
+        // Tolerant gegen altes Format (ts,close) — auf neues (t,p) normalisieren
+        burn30d=c.data.map(function(d){return d.p!==undefined?d:{t:d.ts/1000,p:d.close};}).filter(function(d){return d.p>0;});
+        if(P>0)try{render();}catch(re){}
+        // Wenn jünger als 6h: nicht erneut fetchen
+        if(Date.now()-c.ts<6*3600*1000)return;
       }
     }
+  }catch(e){}
+  // Fetch frisch von GeckoTerminal
+  try{
     var url="https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/ohlcv/day?aggregate=1&limit=30&currency=usd";
-    var r=await fetch(url);
+    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+    var r=await fetch(url,{signal:ac.signal});
+    clearTimeout(tm);
     if(!r||!r.ok)return;
     var j=await r.json();
     if(j&&j.data&&j.data.attributes&&j.data.attributes.ohlcv_list){
@@ -136,6 +146,7 @@ async function fetchBurn30d(){
       burn30d=list.map(function(c){return{t:c[0],p:c[4]};}).filter(function(d){return d.p>0;});
       localStorage.setItem("burn_30d",JSON.stringify({ts:Date.now(),data:burn30d}));
       console.log("BURN30D loaded:",burn30d.length,"days, range $"+Math.min.apply(null,burn30d.map(function(d){return d.p;})).toFixed(4)+" → $"+Math.max.apply(null,burn30d.map(function(d){return d.p;})).toFixed(4));
+      if(P>0)try{render();}catch(re){}
     }
   }catch(e){console.log("burn30d fetch err:",e.message);}
 }
@@ -1198,22 +1209,40 @@ function renderLmap(buckets){
     if(a.activeCount===0&&b.activeCount>0)return 1;
     return b.activeLiq-a.activeLiq;
   });
-  // Per-LP BURN/USDC via POOL SHARE (single source of truth: aB/aU on-chain)
-  // Avoids wtLiqToBurn() overflow on Full Range LPs entirely.
-  // Each LP's BURN = aB * (lp.liq / POOL_LIQ), capped at total pool reserves.
+  // Per-LP BURN/USDC via V3 EXACT MATH using liquidity + tick range.
+  // CRITICAL: sqrtP = sqrt(1e12 / P) — NOT sqrt(P) — because pool stores token1/token0
+  // with USDC (1e6) and BURN (1e18) decimal scaling.
+  // Out-of-range LPs (current price outside their tL/tU) hold either pure BURN or pure USDC,
+  // calculated correctly without depending on POOL_LIQ (which only reflects active-tick liq).
   function lpToBurnUsdc(dl){
     var bn=0,uc=0;
-    if(!dl||!dl.liq||dl.liq<=0)return{b:bn,u:uc};
-    if(POOL_LIQ>0&&aB>0){
-      var share=dl.liq/POOL_LIQ;
-      bn=aB*share;
-      if(aU>0)uc=aU*share;
-    }
+    if(!dl||!dl.liq||dl.liq<=0||P<=0)return{b:bn,u:uc};
+    try{
+      var sqP=Math.sqrt(1e12/P);
+      var sL=Math.pow(1.0001,(dl.tL!==undefined?dl.tL:-887272)/2);
+      var sU=Math.pow(1.0001,(dl.tU!==undefined?dl.tU:887272)/2);
+      if(sqP<=sL){
+        // Price below range — LP is 100% USDC
+        uc=dl.liq*(1/sL-1/sU)/1e6;
+      }else if(sqP>=sU){
+        // Price above range — LP is 100% BURN
+        bn=dl.liq*(sU-sL)/1e18;
+      }else{
+        // In range — mixed
+        bn=dl.liq*(sqP-sL)/1e18;
+        uc=dl.liq*(1/sqP-1/sU)/1e6;
+      }
+      // Full-range overflow guard: if Math.pow yields infinity for extreme ticks, fall back to pool-share
+      if(!isFinite(bn)||!isFinite(uc)||bn>1e10||uc>1e15){
+        if(POOL_LIQ>0&&aB>0){bn=aB*(dl.liq/POOL_LIQ);if(aU>0)uc=aU*(dl.liq/POOL_LIQ);}
+        else{bn=0;uc=0;}
+      }
+    }catch(e){}
     if(isNaN(bn)||bn<0)bn=0;
     if(isNaN(uc)||uc<0)uc=0;
     return{b:bn,u:uc};
   }
-  // Compute DAO vs non-DAO BURN/USDC split (active only) — via on-chain pool share
+  // Compute DAO vs non-DAO BURN/USDC split (active only) — V3 exact math
   var daoBurn=0,nonDaoBurn=0,daoUsdc=0,nonDaoUsdc=0,sumActiveBurn=0,sumActiveUsdc=0;
   for(var ddi=0;ddi<lpOwners.length;ddi++){
     var dl=lpOwners[ddi];if(dl.closed)continue;
@@ -1222,14 +1251,13 @@ function renderLmap(buckets){
     if(dl.hi>100000){daoBurn+=bu.b;daoUsdc+=bu.u;}
     else{nonDaoBurn+=bu.b;nonDaoUsdc+=bu.u;}
   }
-  var unaccountedBurn=(aB>0&&sumActiveBurn>0)?Math.max(0,aB-sumActiveBurn):0;
   $("lmapSummary").innerHTML=MB("Pool BURN (on-chain)",aB>0?F(aB,0):"—","var(--br)")+
     MB("Pool USDC (on-chain)",aU>0?"$"+F(aU,0):"—","var(--g)")+
     MB("DAO BURN",daoBurn>0?F(daoBurn,0):"—","var(--p)")+
     MB("LP BURN (excl. DAO)",nonDaoBurn>0?F(nonDaoBurn,0):"—","var(--cy)")+
-    MB("Unaccounted",unaccountedBurn>1000?F(unaccountedBurn,0)+" BURN":"all detected","var(--dm)")+
+    MB("Sum All LPs",sumActiveBurn>0?F(sumActiveBurn,0)+" BURN":"—","var(--o)")+
     MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--br)");
-  console.log("LMAP SUMMARY (pool-share method): aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" POOL_LIQ="+POOL_LIQ+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN ("+F(daoUsdc,0)+" USDC), others="+F(nonDaoBurn,0)+" BURN | unaccounted="+F(unaccountedBurn,0)+" | bucket-tB(unused)="+F(tB,0));
+  console.log("LMAP SUMMARY (V3 exact math): aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN ($"+F(daoUsdc,0)+" USDC), others="+F(nonDaoBurn,0)+" BURN");
   // Render by wallet
   var rows="";
   for(var wi=0;wi<owners.length;wi++){
@@ -3155,8 +3183,6 @@ function startRefresh(){
     // Sync portfolio to Hetzner for push alerts
     if(_refreshCount%5===0){try{syncPortfolioToServer();}catch(e){}}
     if(_refreshCount%60===0){try{fetchBurn30d();}catch(e){}}
-    // BURN 30-day history refresh every 60 minutes
-    if(_refreshCount%60===0){try{fetchBurnHistory();}catch(e){}}
     // Check portfolio value alerts
     try{checkPortfolioAlerts();}catch(e){}
     saveOffline();updateSysStatus();},60000);
@@ -3205,42 +3231,6 @@ function updateSysStatus(){
   $("foot").innerHTML="My Crypto Portfolio · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
 
-// ═══ 30-DAY BURN HISTORY (GeckoTerminal) ═══
-window._burnHist30d=null;
-async function fetchBurnHistory(){
-  // Try cache first (1h TTL)
-  try{
-    var cached=localStorage.getItem("burn_30d");
-    if(cached){
-      var c=JSON.parse(cached);
-      if(c&&c.ts&&Date.now()-c.ts<3600000&&c.data&&c.data.length>=7){
-        window._burnHist30d=c.data;
-        if(P>0)render();
-        return;
-      }
-    }
-  }catch(e){}
-  // Fetch from GeckoTerminal
-  try{
-    var url="https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/ohlcv/day?aggregate=1&limit=30";
-    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-    var r=await fetch(url,{signal:ac.signal});
-    clearTimeout(tm);
-    if(!r.ok)return;
-    var j=await r.json();
-    var ohlcv=j&&j.data&&j.data.attributes&&j.data.attributes.ohlcv_list;
-    if(!ohlcv||ohlcv.length<2)return;
-    // GeckoTerminal returns DESC (newest first) → reverse to chronological
-    // Each entry: [timestamp, open, high, low, close, volume]
-    var data=ohlcv.slice().reverse().map(function(p){return{ts:p[0]*1000,close:parseFloat(p[4])};}).filter(function(p){return isFinite(p.close)&&p.close>0;});
-    if(data.length<2)return;
-    window._burnHist30d=data;
-    try{localStorage.setItem("burn_30d",JSON.stringify({ts:Date.now(),data:data}));}catch(e){}
-    console.log("BURN history: "+data.length+" daily points loaded");
-    if(P>0)render();
-  }catch(e){console.log("BURN history fetch err:",e.message);}
-}
-
 loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
@@ -3251,7 +3241,5 @@ try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 // Auto-scan LP Map after 10s (let other data load first)
 setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
-// 30-day BURN history (loads from cache instantly, then refreshes from API)
-fetchBurnHistory();
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
