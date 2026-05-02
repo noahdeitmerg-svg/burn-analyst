@@ -1116,6 +1116,24 @@ async function scanLiqMap(){
       for(var oi=0;oi<lpOwners.length;oi++){if(lpOwners[oi].hi>bLo&&lpOwners[oi].lo<bHi)owners.push(lpOwners[oi]);}
       owners.sort(function(a,b2){return b2.liq-a.liq;});
       buckets.push({lo:bLo,hi:bHi,burn:burnD,usdc:burnD*(bLo+bHi)/2,active:P>=bLo&&P<bHi,owners:owners});}
+    // CALIBRATE BUCKETS to on-chain pool reserves — eliminates wtLiqToBurn() Full-Range overflow
+    // Without this, DAO 6M BURN deposit pollutes every bucket via tick-overlap math.
+    // Strategy: keep relative distribution across price ranges, scale absolute values to aB/aU truth.
+    try{
+      var sumBucketBurn=0,sumBucketUsdc=0;
+      for(var sbi=0;sbi<buckets.length;sbi++){sumBucketBurn+=buckets[sbi].burn;sumBucketUsdc+=buckets[sbi].usdc;}
+      if(sumBucketBurn>0&&aB>0){
+        var calB=aB/sumBucketBurn;
+        var calU=(sumBucketUsdc>0&&aU>0)?(aU/sumBucketUsdc):calB;
+        for(var cbi=0;cbi<buckets.length;cbi++){
+          buckets[cbi].burnRaw=buckets[cbi].burn;
+          buckets[cbi].usdcRaw=buckets[cbi].usdc;
+          buckets[cbi].burn*=calB;
+          buckets[cbi].usdc*=calU;
+        }
+        console.log("LMAP CALIBRATION: raw-sum="+F(sumBucketBurn,0)+" BURN → on-chain aB="+F(aB,0)+" (factor "+calB.toFixed(4)+") | usdc factor "+calU.toFixed(4));
+      }
+    }catch(e){console.log("LMAP calib err:",e.message);}
     var bucketsWithOwners=0;for(var boi=0;boi<buckets.length;boi++){if(buckets[boi].owners&&buckets[boi].owners.length>0)bucketsWithOwners++;}
     console.log("LMAP: "+buckets.length+" buckets, "+bucketsWithOwners+" have LP owners assigned");
     lmapCache=buckets;lmapTs=Date.now();
@@ -1180,29 +1198,22 @@ function renderLmap(buckets){
     if(a.activeCount===0&&b.activeCount>0)return 1;
     return b.activeLiq-a.activeLiq;
   });
-  // Per-LP BURN/USDC calc using V3 math (ground truth: liq + tL + tU)
-  // Avoids bucket reconstruction issues from incomplete Mint event scan
+  // Per-LP BURN/USDC via POOL SHARE (single source of truth: aB/aU on-chain)
+  // Avoids wtLiqToBurn() overflow on Full Range LPs entirely.
+  // Each LP's BURN = aB * (lp.liq / POOL_LIQ), capped at total pool reserves.
   function lpToBurnUsdc(dl){
     var bn=0,uc=0;
-    if(!dl||!dl.liq||dl.liq<=0||P<=0)return{b:bn,u:uc};
-    try{
-      var sq=Math.sqrt(1e12/P);
-      var sL=Math.pow(1.0001,(dl.tL!==undefined?dl.tL:-887272)/2);
-      var sU=Math.pow(1.0001,(dl.tU!==undefined?dl.tU:887272)/2);
-      if(sq<=sL){uc=dl.liq*(1/sL-1/sU)/1e6;}
-      else if(sq>=sU){bn=dl.liq*(sU-sL)/1e18;}
-      else{bn=dl.liq*(sq-sL)/1e18;uc=dl.liq*(1/sq-1/sU)/1e6;}
-      // Full-range overflow guard: use pool-share fallback
-      if(dl.hi>100000&&(isNaN(bn)||bn<0||bn>1e10)){
-        if(POOL_LIQ>0&&aB>0)bn=aB*(dl.liq/POOL_LIQ);
-        if(POOL_LIQ>0&&aU>0)uc=aU*(dl.liq/POOL_LIQ);
-      }
-    }catch(e){}
+    if(!dl||!dl.liq||dl.liq<=0)return{b:bn,u:uc};
+    if(POOL_LIQ>0&&aB>0){
+      var share=dl.liq/POOL_LIQ;
+      bn=aB*share;
+      if(aU>0)uc=aU*share;
+    }
     if(isNaN(bn)||bn<0)bn=0;
     if(isNaN(uc)||uc<0)uc=0;
     return{b:bn,u:uc};
   }
-  // Compute DAO vs non-DAO BURN/USDC split (active only)
+  // Compute DAO vs non-DAO BURN/USDC split (active only) — via on-chain pool share
   var daoBurn=0,nonDaoBurn=0,daoUsdc=0,nonDaoUsdc=0,sumActiveBurn=0,sumActiveUsdc=0;
   for(var ddi=0;ddi<lpOwners.length;ddi++){
     var dl=lpOwners[ddi];if(dl.closed)continue;
@@ -1218,7 +1229,7 @@ function renderLmap(buckets){
     MB("LP BURN (excl. DAO)",nonDaoBurn>0?F(nonDaoBurn,0):"—","var(--cy)")+
     MB("Unaccounted",unaccountedBurn>1000?F(unaccountedBurn,0)+" BURN":"all detected","var(--dm)")+
     MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--br)");
-  console.log("LMAP SUMMARY: pool aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN, others="+F(nonDaoBurn,0)+" BURN | bucket-tB="+F(tB,0));
+  console.log("LMAP SUMMARY (pool-share method): aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" POOL_LIQ="+POOL_LIQ+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN ("+F(daoUsdc,0)+" USDC), others="+F(nonDaoBurn,0)+" BURN | unaccounted="+F(unaccountedBurn,0)+" | bucket-tB(unused)="+F(tB,0));
   // Render by wallet
   var rows="";
   for(var wi=0;wi<owners.length;wi++){
