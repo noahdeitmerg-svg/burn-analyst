@@ -350,11 +350,21 @@ function renderWal(){
   if(alert)notify("⚠ Wallet Alert","Balance decreased! BURN:"+(bDrop?MY_BURN-wal.prev.burn:0)+" stBURN:"+(sDrop?MY_STBURN-wal.prev.st:0));
   var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
+  var totalTokens=MY_BURN+MY_STBURN;
+  var totalBurnEq=MY_BURN+(MY_STBURN*stR);
   $("walGrid").innerHTML=
-    '<span style="font-size:9px;color:var(--dm)">⛓ Ledger Balance</span> '+
-    '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span> · '+
-    '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
-    (alert?' <span style="color:var(--r);font-weight:700"> ⚠ DROP</span>':'');}
+    '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:6px">'+
+      '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span>'+
+      '<span style="color:var(--dm)">·</span>'+
+      '<span style="color:'+sClr+';font-weight:600">'+(sDrop?"":"+")+F(MY_STBURN,0)+' stBURN</span>'+
+      '<span style="color:var(--dm)">·</span>'+
+      '<span style="color:var(--br);font-weight:700">'+F(totalTokens,0)+' Total</span>'+
+      (alert?' <span style="color:var(--r);font-weight:700">⚠ DROP</span>':'')+
+    '</div>'+
+    '<div style="text-align:center;font-size:10px;color:var(--dm);letter-spacing:.5px">'+
+      '<span style="text-transform:uppercase;letter-spacing:1.2px;font-size:8px">BURN-Equivalent ≈</span> '+
+      '<span style="color:var(--cy);font-weight:600;font-size:11px">'+F(totalBurnEq,0)+' BURN</span>'+
+    '</div>';}
 
 // ═══ FETCH: Live LP Positions (DeFi wallet NFTs) ═══
 async function fetchLPs(){
@@ -508,8 +518,7 @@ function render(){
   // Group 2 — Holdings (guarded)
   if(wal.ok||MY_BURN>0){
   $("portG2").innerHTML=[
-    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("LP Left",F(pL,0),"var(--b)"),
-    '<div class="mb"><small>BURN EQUIVALENT</small><b class="key-val" style="color:var(--br)">'+F(TOTAL_BURN_EQ,0)+'</b></div>'
+    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("LP Left",F(pL,0),"var(--b)")
   ].join("");}
   // Portfolio Real — V3 sell impact via lmapCache (more accurate for V3 pool than V2 K=X*Y)
   var realSellUsdc=0,realImpact=0,realSrc="V2";
