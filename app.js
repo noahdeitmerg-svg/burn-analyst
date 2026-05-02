@@ -167,6 +167,8 @@ function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
+// Skeleton MB: zeigt Shimmer + Status-Text statt "—" wenn Daten noch laden
+function MBL(l,c,statusTxt){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+';display:flex;align-items:center;gap:8px"><span class="skel" style="width:60%;height:18px;border-radius:4px"></span></b>'+(statusTxt?'<span style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;display:block">'+statusTxt+'</span>':'')+'</div>'}
 var LD="…";
 // tog() defined in lmap section with cache support
 
@@ -1403,12 +1405,17 @@ function renderLmap(buckets){
     if(dl.hi>100000){daoBurn+=bu.b;daoUsdc+=bu.u;}
     else{nonDaoBurn+=bu.b;nonDaoUsdc+=bu.u;}
   }
-  $("lmapSummary").innerHTML=MB("Pool BURN (on-chain)",aB>0?F(aB,0):"—","var(--br)")+
-    MB("Pool USDC (on-chain)",aU>0?"$"+F(aU,0):"—","var(--g)")+
-    MB("DAO BURN",daoBurn>0?F(daoBurn,0):"—","var(--p)")+
-    MB("LP BURN (excl. DAO)",nonDaoBurn>0?F(nonDaoBurn,0):"—","var(--cy)")+
-    MB("Sum All LPs",sumActiveBurn>0?F(sumActiveBurn,0)+" BURN":"—","var(--o)")+
-    MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--br)");
+  // Per-card loading state: skeleton shimmer + status text instead of empty "—"
+  var poolReady=aB>0&&aU>0;
+  var lpScanReady=lpOwners&&lpOwners.length>0;
+  var splitReady=daoBurn>0||nonDaoBurn>0;
+  $("lmapSummary").innerHTML=
+    (poolReady?MB("Pool BURN (on-chain)",F(aB,0),"var(--br)"):MBL("Pool BURN (on-chain)","var(--br)","fetching pool"))+
+    (poolReady?MB("Pool USDC (on-chain)","$"+F(aU,0),"var(--g)"):MBL("Pool USDC (on-chain)","var(--g)","fetching pool"))+
+    (splitReady?MB("DAO BURN",daoBurn>0?F(daoBurn,0):"—","var(--p)"):MBL("DAO BURN","var(--p)",lpScanReady?"calculating":"scanning LPs"))+
+    (splitReady?MB("LP BURN (excl. DAO)",nonDaoBurn>0?F(nonDaoBurn,0):"—","var(--cy)"):MBL("LP BURN (excl. DAO)","var(--cy)",lpScanReady?"calculating":"scanning LPs"))+
+    (sumActiveBurn>0?MB("Sum All LPs",F(sumActiveBurn,0)+" BURN","var(--o)"):MBL("Sum All LPs","var(--o)",lpScanReady?"summing":"scanning LPs"))+
+    (lpScanReady?MB("Active LPs",Object.keys(activeOwn).length+" wallets","var(--br)"):MBL("Active LPs","var(--br)","scanning pool ticks"));
   console.log("LMAP SUMMARY (V3 exact math): aB="+(aB?F(aB,0):"?")+" aU=$"+(aU?F(aU,0):"?")+" | LP-sum BURN="+F(sumActiveBurn,0)+" USDC=$"+F(sumActiveUsdc,0)+" | DAO="+F(daoBurn,0)+" BURN ($"+F(daoUsdc,0)+" USDC), others="+F(nonDaoBurn,0)+" BURN");
   // Render by wallet
   var rows="";
