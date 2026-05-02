@@ -678,7 +678,7 @@ function render(){
     var remaining=burnSold,usdcOut=0,curP=P;
     for(var si=0;si<sorted.length;si++){
       var bk=sorted[si];
-      if(bk.hi>curP||bk.burn<=0||bk.lo<=0)continue;
+      if(bk.lo>=curP||bk.burn<=0||bk.lo<=0)continue;
       // Walk down from min(curP, bk.hi) to bk.lo
       var pHi=Math.min(curP,bk.hi),pLo=bk.lo;
       var sqHi=1/Math.sqrt(bk.lo),sqLo2=1/Math.sqrt(bk.hi);
@@ -1444,8 +1444,10 @@ function renderLmap(buckets){
         var cUsdc=lp.usdcOut>0?'$'+F(lp.usdcOut,0):'—';
         rows+='<tr><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--r)">'+rng+'</td>';
         rows+='<td style="color:var(--o)">'+cBurn+'</td>';
-        rows+='<td>'+cUsdc+'</td>';
-        rows+='<td>'+nftLink+'</td><td style="color:var(--r);font-weight:600">CLOSED</td></tr>';
+        rows+='<td style="color:var(--dm)">—</td>';
+        rows+='<td style="color:var(--g)">'+cUsdc+'</td>';
+        rows+='<td>'+nftLink+'</td>';
+        rows+='<td style="color:var(--r);font-weight:600">CLOSED</td></tr>';
       }else{
         // Calculate BURN deposited using wtLiqToBurn with original ticks
         var burnDep=0,lpLeft=0,lpUsdc=0,lpPct=0;
