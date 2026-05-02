@@ -105,7 +105,10 @@ function v3(B,lo,hi,P){
   var sL=Math.sqrt(lo),sH=Math.sqrt(hi),L=B*sL*sH/(sH-sL);
   if(P>=hi)return{left:0,usdc:L*(sH-sL),pct:100};
   var sP=Math.sqrt(P);
-  return{left:L*(sH-sP)/(sP*sH),usdc:L*(sP-sL),pct:(P-lo)/(hi-lo)*100};
+  var left=L*(sH-sP)/(sP*sH);
+  // pct = real BURN-fill (sold/deposited), NOT linear price interpolation
+  var pct=B>0?Math.max(0,Math.min(100,((B-left)/B)*100)):0;
+  return{left:left,usdc:L*(sP-sL),pct:pct};
 }
 
 // ═══ STATE ═══
@@ -383,7 +386,6 @@ async function fetchLPs(){
       // Keep DAO Full Range, replace user LPs
       var dao=null;for(var di=0;di<LP.length;di++){if(LP[di].fr)dao=LP[di];}
       newLP.sort(function(a,b){return a.lo-b.lo;});
-      newLP.sort(function(a,b){return a.lo-b.lo;});
       LP=newLP;if(dao)LP.push(dao);
       LP.sort(function(a,b){if(a.fr)return 1;if(b.fr)return-1;return a.lo-b.lo;});
       ALP=0;for(var ai2=0;ai2<LP.length;ai2++)if(!LP[ai2].fr)ALP+=LP[ai2].b;
@@ -507,16 +509,29 @@ function render(){
     MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("LP Left",F(pL,0),"var(--b)"),
     '<div class="mb"><small>BURN EQUIVALENT</small><b class="key-val" style="color:var(--br)">'+F(TOTAL_BURN_EQ,0)+'</b></div>'
   ].join("");}
-  // Portfolio Real
-  var realSellUsdc=0,realImpact=0;
-  if(X>0&&K>0&&TOTAL_BURN_EQ>0){var newX=X+TOTAL_BURN_EQ;var newY=K/newX;realSellUsdc=Y-newY;realImpact=portUsd>0?((realSellUsdc+pU-portUsd)/portUsd*100):0;}
+  // Portfolio Real — V3 sell impact via lmapCache (more accurate for V3 pool than V2 K=X*Y)
+  var realSellUsdc=0,realImpact=0,realSrc="V2";
+  if(TOTAL_BURN_EQ>0){
+    if(lmapCache&&lmapCache.length>0){
+      var v3SellPort=v3SellImpact(TOTAL_BURN_EQ);
+      if(v3SellPort){
+        realSellUsdc=v3SellPort.usdc;
+        realSrc="V3";
+      }else if(X>0&&K>0){
+        var newX=X+TOTAL_BURN_EQ,newY=K/newX;realSellUsdc=Y-newY;
+      }
+    }else if(X>0&&K>0){
+      var newX2=X+TOTAL_BURN_EQ,newY2=K/newX2;realSellUsdc=Y-newY2;
+    }
+    realImpact=portUsd>0?((realSellUsdc+pU-portUsd)/portUsd*100):0;
+  }
   var portReal=realSellUsdc+pU;
   // Group 3 — Value (guarded)
   if(wal.ok||MY_BURN>0){
   var realizedProfit=TR-(TS*AVG_ENTRY);
   $("portG3").innerHTML=[
     '<div class="mb"><small>PORTFOLIO</small><b class="key-val neon-w" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
-    '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val neon-cy" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage</span></div>',
+    '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val neon-cy" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage <span style="color:var(--dm);font-size:8px">'+realSrc+'</span></span></div>',
     MB("Realized","$"+realizedProfit.toLocaleString("en",{minimumFractionDigits:0,maximumFractionDigits:0}),"var(--g)"),
     '<div class="mb"><small>PROFIT REAL</small><b class="key-val neon-cy" style="color:'+(portReal+TR-INVESTED>=0?"var(--cy)":"var(--r)")+'">'+(portReal+TR-INVESTED>=0?"+":"-")+"$"+F(Math.abs(portReal+TR-INVESTED),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">if sold now</span></div>'
   ].join("");}
@@ -574,11 +589,11 @@ function render(){
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
       else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:12px;color:var(--g)">✓</span>';}
       else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:11px;color:var(--mt)">↓'+dLo.toFixed(0)+'%</span><br><span style="font-size:11px;color:var(--tx)">↑'+dHi.toFixed(0)+'%</span>';}
-    // USDC to Fill
+    // USDC to Fill — uses buyflowEstimate (same V3/V2 hierarchy as Next Fill + Market Analysis)
     var fillH="";
     if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
     else if(P<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
-    else{var dU2=K>0&&Y>0?Math.sqrt(K*pos.hi)-Y:0;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
+    else{var bfFill=buyflowEstimate(P,pos.hi);var dU2=bfFill.usdc;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
     // 100% filled USDC
     var vMax=v3(pos.b,pos.lo,pos.hi,pos.hi);var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
     var bSold=Math.max(0,bI-bL);
@@ -586,7 +601,19 @@ function render(){
     lpR+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td style="color:var(--cy)">'+F(bSold,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
   lpR+='<tr style="border-top:1px solid var(--bd)"><td class="bld">TOT</td><td style="color:var(--o)">'+F(tBI,0)+'</td><td style="color:var(--cy)">'+F(Math.max(0,tBI-tBL),0)+'</td><td>'+F(tBL,0)+'</td><td style="color:var(--g);font-weight:600">$'+F(tU2,2)+'</td><td></td><td></td><td></td><td></td></tr>';
   $("lpB").innerHTML=lpR;
-  $("lpS").textContent=P<.149?"All above.":P<.2?"20.3K active.":P<.5?"5K ($0.14–$0.50) active.":P<1?"($0.50–$1) active.":P<2?"Upper ranges active.":"ALL sold.";
+  // Dynamic status: which LPs have current price within their range
+  var lpsActive=[],lpsBelow=0,lpsFilled=0;
+  for(var lsi=0;lsi<LP.length;lsi++){var ls=LP[lsi];if(ls.fr)continue;
+    if(P>=ls.lo&&P<ls.hi)lpsActive.push(ls);
+    else if(P<ls.lo)lpsBelow++;
+    else lpsFilled++;
+  }
+  if(lpsActive.length===0){
+    $("lpS").textContent=lpsBelow>0?lpsBelow+" position"+(lpsBelow>1?"s":"")+" above current price.":"All "+lpsFilled+" filled.";
+  }else{
+    var actBurn=0;for(var lai=0;lai<lpsActive.length;lai++){var av=v3(lpsActive[lai].b,lpsActive[lai].lo,lpsActive[lai].hi,P);actBurn+=(lpsActive[lai].b-av.left);}
+    $("lpS").textContent=lpsActive.length+" active in $"+lpsActive[0].lo.toFixed(lpsActive[0].lo<1?3:2)+"–$"+lpsActive[lpsActive.length-1].hi.toFixed(2)+" range · "+F(actBurn,0)+" BURN sold";
+  }
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
   try{renderLpPnl();}catch(e){}
   try{checkAlerts();}catch(e){}
@@ -643,9 +670,50 @@ function render(){
     bR+='<tr style="opacity:'+(ok?1:.3)+'"><td class="bld">$'+tp.toFixed(2)+'</td><td style="color:'+(ok?"var(--g)":"var(--mt)")+'">'+(ok?"$"+F(uN,0):"—")+(ok&&bSrc?' <span style="font-size:7px;color:var(--dm)">'+bSrc+'</span>':"")+'</td><td style="color:var(--o)">'+(ok?F(bB,0):"—")+'</td><td style="color:var(--cy)">'+(ok&&dS>0?F(dS,0):"—")+'</td><td style="color:var(--g)">'+(ok&&dU>0?"$"+F(dU,0):"—")+'</td><td>'+TG(m.toFixed(1)+"x",m>5?"#c084fc":m>2?"#fb923c":"#60a5fa")+'</td></tr>';}
   $("bfB").innerHTML=bR;
 
-  // SELL IMPACT
-  var siR="";for(var s=0;s<SEL.length;s++){var n=SEL[s],xn=X+n,yn=K/xn,np=yn/xn,imp=P>0?((np-P)/P)*100:0,uo=Math.max(0,Y-yn);
-    siR+='<tr><td class="bld">'+F(n,0)+'</td><td style="color:var(--g)">$'+F(uo,2)+'</td><td style="color:var(--o)">'+FP(np)+'</td><td>'+TG(imp.toFixed(1)+"%",imp<-50?"#f87171":imp<-20?"#fb923c":"#60a5fa")+'</td></tr>';}
+  // SELL IMPACT — V3 walks down through buckets, V2 fallback as labeled estimate
+  function v3SellImpact(burnSold){
+    if(!lmapCache||lmapCache.length===0||!burnSold||burnSold<=0||P<=0)return null;
+    // Sort buckets descending (highest hi first), walk down from current price
+    var sorted=lmapCache.slice().sort(function(a,b){return b.hi-a.hi;});
+    var remaining=burnSold,usdcOut=0,curP=P;
+    for(var si=0;si<sorted.length;si++){
+      var bk=sorted[si];
+      if(bk.hi>curP||bk.burn<=0||bk.lo<=0)continue;
+      // Walk down from min(curP, bk.hi) to bk.lo
+      var pHi=Math.min(curP,bk.hi),pLo=bk.lo;
+      var sqHi=1/Math.sqrt(bk.lo),sqLo2=1/Math.sqrt(bk.hi);
+      var fullRange=sqHi-sqLo2;
+      if(fullRange<=0)continue;
+      var L=bk.burn/fullRange;
+      // BURN that fits in this bucket from pHi down to pLo
+      var burnAvail=L*(1/Math.sqrt(pLo)-1/Math.sqrt(pHi));
+      if(burnAvail<=0)continue;
+      if(remaining<=burnAvail){
+        // Sale ends within this bucket — solve for endP
+        var endInvSq=1/Math.sqrt(pHi)+remaining/L;
+        var endP=1/(endInvSq*endInvSq);
+        usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(endP));
+        curP=endP;remaining=0;break;
+      }else{
+        usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(pLo));
+        remaining-=burnAvail;curP=pLo;
+      }
+    }
+    if(remaining>0)return null; // Not enough liquidity
+    return{usdc:usdcOut,newPrice:curP};
+  }
+  var siR="",siSrc=lmapCache&&lmapCache.length>0?"V3":"V2";
+  for(var s=0;s<SEL.length;s++){
+    var n=SEL[s],uo=0,np=0,imp=0;
+    var v3si=v3SellImpact(n);
+    if(v3si){
+      uo=v3si.usdc;np=v3si.newPrice;imp=P>0?((np-P)/P)*100:0;
+    }else if(K>0&&Y>0){
+      // V2 K=X*Y fallback
+      var xn=X+n,yn=K/xn;np=yn/xn;imp=P>0?((np-P)/P)*100:0;uo=Math.max(0,Y-yn);
+    }
+    siR+='<tr><td class="bld">'+F(n,0)+'</td><td style="color:var(--g)">$'+F(uo,2)+(siSrc?' <span style="font-size:7px;color:var(--dm)">'+siSrc+'</span>':'')+'</td><td style="color:var(--o)">'+FP(np)+'</td><td>'+TG(imp.toFixed(1)+"%",imp<-50?"#f87171":imp<-20?"#fb923c":"#60a5fa")+'</td></tr>';
+  }
   $("siB").innerHTML=siR;
 
   // NOTIFICATIONS
