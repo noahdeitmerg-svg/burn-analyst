@@ -115,6 +115,30 @@ var POOL_LIQ=0;
 function v3Buy(target){if(POOL_LIQ<=0||P<=0||target<=P)return{usdc:0,burn:0};
   return{usdc:POOL_LIQ*(Math.sqrt(target)-Math.sqrt(P))/1e12,burn:POOL_LIQ*(1/Math.sqrt(P)-1/Math.sqrt(target))/1e12};}
 async function fetchPoolLiq(){try{var r=await rpc(POOL,"0x1a686502");if(r&&r.length>=34)POOL_LIQ=Number(BigInt("0x"+(r||"0").slice(2)));console.log("Pool L:",POOL_LIQ);}catch(e){}}
+
+// ═══ FETCH: 30-day BURN price (GeckoTerminal OHLCV daily) ═══
+var burn30d=[];
+async function fetchBurn30d(){
+  try{
+    var cached=localStorage.getItem("burn_30d");
+    if(cached){
+      var c=JSON.parse(cached);
+      if(c&&c.ts&&Date.now()-c.ts<6*3600*1000&&c.data&&c.data.length>0){
+        burn30d=c.data;return;
+      }
+    }
+    var url="https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/ohlcv/day?aggregate=1&limit=30&currency=usd";
+    var r=await fetch(url);
+    if(!r||!r.ok)return;
+    var j=await r.json();
+    if(j&&j.data&&j.data.attributes&&j.data.attributes.ohlcv_list){
+      var list=j.data.attributes.ohlcv_list.slice().sort(function(a,b){return a[0]-b[0];});
+      burn30d=list.map(function(c){return{t:c[0],p:c[4]};}).filter(function(d){return d.p>0;});
+      localStorage.setItem("burn_30d",JSON.stringify({ts:Date.now(),data:burn30d}));
+      console.log("BURN30D loaded:",burn30d.length,"days, range $"+Math.min.apply(null,burn30d.map(function(d){return d.p;})).toFixed(4)+" → $"+Math.max.apply(null,burn30d.map(function(d){return d.p;})).toFixed(4));
+    }
+  }catch(e){console.log("burn30d fetch err:",e.message);}
+}
 var aB=0,aU=0,tU=0;
 var stR=1,stOK=false,stSrc="";
 var sup={total:0,burned:0,locked:0,circ:0,stSup:0};
@@ -399,10 +423,34 @@ function render(){
   }
   $("dSrc").innerHTML=TG(SRC==="api"?"✓ LIVE":"◇ "+SRC,SRC==="api"?"#34d399":"#fb923c");
 
-  // Sparkline
-  if(hst.length>=2){var mn=Math.min.apply(null,hst),mx2=Math.max.apply(null,hst),rg=mx2-mn||mn*.01,sw=130,sh=24,co=[];
-    for(var si=0;si<hst.length;si++)co.push(((si/(hst.length-1))*sw).toFixed(1)+","+(sh-((hst[si]-mn)/rg)*(sh-4)-2).toFixed(1));
-    $("spark").innerHTML='<svg viewBox="0 0 '+sw+' '+sh+'" style="width:130px;height:24px;opacity:.6"><polyline points="'+co.join(" ")+'" fill="none" stroke="'+(hst[hst.length-1]>=hst[0]?"var(--g)":"var(--r)")+'" stroke-width="1.5" stroke-linejoin="round"/></svg>';}
+  // Sparkline — prefers 30-day history from GeckoTerminal, falls back to session hst[]
+  var sparkData=null,sparkLabel="";
+  if(burn30d&&burn30d.length>=7){
+    sparkData=burn30d.map(function(d){return d.p;});
+    if(P>0)sparkData.push(P); // append today's live price
+    sparkLabel="30d";
+  } else if(hst.length>=2){
+    sparkData=hst;
+    sparkLabel="session";
+  }
+  if(sparkData&&sparkData.length>=2){
+    var mn=Math.min.apply(null,sparkData),mx2=Math.max.apply(null,sparkData),rg=mx2-mn||mn*.01;
+    var sw=300,sh=60,co=[];
+    for(var si=0;si<sparkData.length;si++)co.push(((si/(sparkData.length-1))*sw).toFixed(1)+","+(sh-((sparkData[si]-mn)/rg)*(sh-8)-4).toFixed(1));
+    var sparkColor=sparkData[sparkData.length-1]>=sparkData[0]?"var(--g)":"var(--r)";
+    var lastPt=co[co.length-1].split(",");
+    // Build SVG with gradient fill area + line + endpoint dot
+    var areaPath="M0,"+sh+" L"+co.join(" L")+" L"+sw+","+sh+" Z";
+    $("spark").innerHTML='<div style="position:relative"><svg viewBox="0 0 '+sw+' '+sh+'" preserveAspectRatio="none" style="width:100%;height:50px;display:block">'+
+      '<defs><linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+sparkColor+'" stop-opacity=".25"/><stop offset="100%" stop-color="'+sparkColor+'" stop-opacity="0"/></linearGradient></defs>'+
+      '<path d="'+areaPath+'" fill="url(#sparkGrad)"/>'+
+      '<polyline points="'+co.join(" ")+'" fill="none" stroke="'+sparkColor+'" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" filter="drop-shadow(0 0 4px '+sparkColor+')"/>'+
+      '<circle cx="'+lastPt[0]+'" cy="'+lastPt[1]+'" r="2.5" fill="'+sparkColor+'"><animate attributeName="r" values="2.5;5;2.5" dur="2s" repeatCount="indefinite"/></circle>'+
+      '</svg>'+
+      '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dm);margin-top:2px;letter-spacing:1px;text-transform:uppercase;opacity:.7">'+
+        '<span>'+FP(mn)+'</span><span>'+sparkLabel+' · '+sparkData.length+'pt</span><span>'+FP(mx2)+'</span>'+
+      '</div></div>';
+  }
 
   // NEXT FILL — show only the FIRST LP to be filled (lowest upper bound)
   var nxtFill="";
@@ -414,11 +462,15 @@ function render(){
       var nfBuy=0;
       if(lmapCache&&lmapCache.length>0){
         var nfCalc=v3BuyflowCalc(P,LP[bestNf].hi);nfBuy=nfCalc.usdc;
-      }else if(POOL_LIQ>0){
-        nfBuy=POOL_LIQ*(Math.sqrt(LP[bestNf].hi)-Math.sqrt(P))/1e12;
       }else{
+        // V2 K=X*Y fallback (POOL_LIQ-Fallback removed: included DAO full-range liq → unrealistic high)
         nfBuy=K>0&&Y>0?Math.sqrt(K*LP[bestNf].hi)-Y:0;
       }
+      // DEBUG: log buyflow components so user can verify
+      console.log("NEXTFILL:","P=$"+P.toFixed(4),"target=$"+LP[bestNf].hi.toFixed(2),"src="+(lmapCache&&lmapCache.length>0?"v3 ("+lmapCache.length+" buckets)":"v2 K"),"K="+K.toFixed(0),"Y="+Y.toFixed(0),"nfBuy=$"+nfBuy.toFixed(0));
+      // Sanity: cap absurd values (>$10M) — likely DAO full-range pollution in lmap buckets
+      if(!isFinite(nfBuy)||nfBuy<0)nfBuy=0;
+      if(nfBuy>10000000){console.log("NEXTFILL: capped from $"+nfBuy.toFixed(0)+" — likely DAO full-range pollution");nfBuy=0;}
       var nfV=v3(LP[bestNf].b,LP[bestNf].lo,LP[bestNf].hi,LP[bestNf].hi);
       nxtFill='<div style="line-height:1.8">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(2)+'</b> <span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span><br>'+
         '<span style="color:var(--cy)">$'+F(nfBuy,0)+'</span> <span style="color:var(--tx)">buying power needed</span> · '+
@@ -3052,6 +3104,9 @@ function startRefresh(){
     if(_refreshCount%5===0){try{lmapCache=null;lmapTs=0;scanLiqMap();}catch(e){}}
     // Sync portfolio to Hetzner for push alerts
     if(_refreshCount%5===0){try{syncPortfolioToServer();}catch(e){}}
+    if(_refreshCount%60===0){try{fetchBurn30d();}catch(e){}}
+    // BURN 30-day history refresh every 60 minutes
+    if(_refreshCount%60===0){try{fetchBurnHistory();}catch(e){}}
     // Check portfolio value alerts
     try{checkPortfolioAlerts();}catch(e){}
     saveOffline();updateSysStatus();},60000);
@@ -3099,14 +3154,54 @@ function updateSysStatus(){
     "LP:"+(lpLive?"<span style='color:var(--g)'>LIVE</span>":"<span style='color:var(--o)'>static</span>")];
   $("foot").innerHTML="My Crypto Portfolio · "+new Date().toLocaleTimeString()+" · "+parts.join(" · ");
 }
+
+// ═══ 30-DAY BURN HISTORY (GeckoTerminal) ═══
+window._burnHist30d=null;
+async function fetchBurnHistory(){
+  // Try cache first (1h TTL)
+  try{
+    var cached=localStorage.getItem("burn_30d");
+    if(cached){
+      var c=JSON.parse(cached);
+      if(c&&c.ts&&Date.now()-c.ts<3600000&&c.data&&c.data.length>=7){
+        window._burnHist30d=c.data;
+        if(P>0)render();
+        return;
+      }
+    }
+  }catch(e){}
+  // Fetch from GeckoTerminal
+  try{
+    var url="https://api.geckoterminal.com/api/v2/networks/arbitrum/pools/"+POOL+"/ohlcv/day?aggregate=1&limit=30";
+    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+    var r=await fetch(url,{signal:ac.signal});
+    clearTimeout(tm);
+    if(!r.ok)return;
+    var j=await r.json();
+    var ohlcv=j&&j.data&&j.data.attributes&&j.data.attributes.ohlcv_list;
+    if(!ohlcv||ohlcv.length<2)return;
+    // GeckoTerminal returns DESC (newest first) → reverse to chronological
+    // Each entry: [timestamp, open, high, low, close, volume]
+    var data=ohlcv.slice().reverse().map(function(p){return{ts:p[0]*1000,close:parseFloat(p[4])};}).filter(function(p){return isFinite(p.close)&&p.close>0;});
+    if(data.length<2)return;
+    window._burnHist30d=data;
+    try{localStorage.setItem("burn_30d",JSON.stringify({ts:Date.now(),data:data}));}catch(e){}
+    console.log("BURN history: "+data.length+" daily points loaded");
+    if(P>0)render();
+  }catch(e){console.log("BURN history fetch err:",e.message);}
+}
+
 loadOffline();
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
+fetchBurn30d().then(function(){if(P>0)try{render();}catch(e){}});
 try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtra"))$("lmapExtra").value=savedExtra;}catch(e){}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 // Auto-scan LP Map after 10s (let other data load first)
 setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
+// 30-day BURN history (loads from cache instantly, then refreshes from API)
+fetchBurnHistory();
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
