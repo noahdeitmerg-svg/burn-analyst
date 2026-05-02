@@ -471,15 +471,10 @@ function render(){
       // LP's hi must be above current P (not yet filled). Pick lowest hi.
       if(LP[nf].hi>P&&LP[nf].hi<bestHi){bestHi=LP[nf].hi;bestNf=nf;}}
     if(bestNf!==null){var nfDist=((LP[bestNf].hi-P)/P*100);
-      var nfBuy=0;
-      if(lmapCache&&lmapCache.length>0){
-        var nfCalc=v3BuyflowCalc(P,LP[bestNf].hi);nfBuy=nfCalc.usdc;
-      }else{
-        // V2 K=X*Y fallback (POOL_LIQ-Fallback removed: included DAO full-range liq → unrealistic high)
-        nfBuy=K>0&&Y>0?Math.sqrt(K*LP[bestNf].hi)-Y:0;
-      }
-      // DEBUG: log buyflow components so user can verify
-      console.log("NEXTFILL:","P=$"+P.toFixed(4),"target=$"+LP[bestNf].hi.toFixed(2),"src="+(lmapCache&&lmapCache.length>0?"v3 ("+lmapCache.length+" buckets)":"v2 K"),"K="+K.toFixed(0),"Y="+Y.toFixed(0),"nfBuy=$"+nfBuy.toFixed(0));
+      var nfBuy=0,nfSrc="";
+      var nfEst=buyflowEstimate(P,LP[bestNf].hi);
+      nfBuy=nfEst.usdc;nfSrc=nfEst.src;
+      console.log("NEXTFILL:","P=$"+P.toFixed(4),"target=$"+LP[bestNf].hi.toFixed(2),"src="+nfSrc+(lmapCache&&lmapCache.length>0?" ("+lmapCache.length+" buckets)":""),"K="+K.toFixed(0),"Y="+Y.toFixed(0),"nfBuy=$"+nfBuy.toFixed(0));
       // Sanity: cap absurd values (>$10M) — likely DAO full-range pollution in lmap buckets
       if(!isFinite(nfBuy)||nfBuy<0)nfBuy=0;
       if(nfBuy>10000000){console.log("NEXTFILL: capped from $"+nfBuy.toFixed(0)+" — likely DAO full-range pollution");nfBuy=0;}
@@ -620,21 +615,32 @@ function render(){
     }
     return{usdc:totalUsdc,burn:totalBurn};
   }
+  // SHARED: identical buyflow estimation for Next Fill + Market Analysis.
+  // 3-tier hierarchy: V3 buckets (most accurate, post-LP-scan) → V2 K=X*Y → 0
+  // POOL_LIQ tier removed because it includes DAO Full-Range liq → unrealistic for wide price moves.
+  function buyflowEstimate(curP,tgtP){
+    if(!curP||!tgtP||tgtP<=curP)return{usdc:0,burn:0,src:""};
+    if(lmapCache&&lmapCache.length>0){
+      var bf=v3BuyflowCalc(curP,tgtP);
+      return{usdc:bf.usdc,burn:bf.burn,src:"V3"};
+    }
+    if(K>0&&Y>0&&X>0){
+      var u=Math.sqrt(K*tgtP)-Y;
+      var b=X-Math.sqrt(K/tgtP);
+      return{usdc:Math.max(0,u),burn:Math.max(0,b),src:"V2"};
+    }
+    return{usdc:0,burn:0,src:""};
+  }
   var bR="",hasV3=lmapCache&&lmapCache.length>0;
   for(var i=0;i<TGT.length;i++){var tp=TGT[i],ok=tp>P&&P>0,m=P>0?tp/P:0;
-    var uN=0,bB=0;
+    var uN=0,bB=0,bSrc="";
     if(ok){
-      if(hasV3){
-        var bf=v3BuyflowCalc(P,tp);uN=bf.usdc;bB=bf.burn;
-      }else if(POOL_LIQ>0){
-        uN=POOL_LIQ*(Math.sqrt(tp)-Math.sqrt(P))/1e12;bB=POOL_LIQ*(1/Math.sqrt(P)-1/Math.sqrt(tp))/1e12;
-      }else{
-        uN=K>0&&Y>0?Math.sqrt(K*tp)-Y:0;bB=K>0?X-Math.sqrt(K/tp):0;
-      }
+      var bfE=buyflowEstimate(P,tp);
+      uN=bfE.usdc;bB=bfE.burn;bSrc=bfE.src;
     }
     var lS=0,lU=0;if(ok){for(var lj=0;lj<LP.length;lj++){if(LP[lj].fr)continue;var tv=v3(LP[lj].b,LP[lj].lo,LP[lj].hi,tp);lS+=(LP[lj].b-tv.left);lU+=tv.usdc;}}
     var dS=lS-cS,dU=lU-cU;
-    bR+='<tr style="opacity:'+(ok?1:.3)+'"><td class="bld">$'+tp.toFixed(2)+'</td><td style="color:'+(ok?"var(--g)":"var(--mt)")+'">'+(ok?"$"+F(uN,0):"—")+(ok&&hasV3?' <span style="font-size:7px;color:var(--dm)">V3</span>':(ok&&POOL_LIQ>0?' <span style="font-size:7px;color:var(--dm)">L</span>':""))+'</td><td style="color:var(--o)">'+(ok?F(bB,0):"—")+'</td><td style="color:var(--cy)">'+(ok&&dS>0?F(dS,0):"—")+'</td><td style="color:var(--g)">'+(ok&&dU>0?"$"+F(dU,0):"—")+'</td><td>'+TG(m.toFixed(1)+"x",m>5?"#c084fc":m>2?"#fb923c":"#60a5fa")+'</td></tr>';}
+    bR+='<tr style="opacity:'+(ok?1:.3)+'"><td class="bld">$'+tp.toFixed(2)+'</td><td style="color:'+(ok?"var(--g)":"var(--mt)")+'">'+(ok?"$"+F(uN,0):"—")+(ok&&bSrc?' <span style="font-size:7px;color:var(--dm)">'+bSrc+'</span>':"")+'</td><td style="color:var(--o)">'+(ok?F(bB,0):"—")+'</td><td style="color:var(--cy)">'+(ok&&dS>0?F(dS,0):"—")+'</td><td style="color:var(--g)">'+(ok&&dU>0?"$"+F(dU,0):"—")+'</td><td>'+TG(m.toFixed(1)+"x",m>5?"#c084fc":m>2?"#fb923c":"#60a5fa")+'</td></tr>';}
   $("bfB").innerHTML=bR;
 
   // SELL IMPACT
@@ -659,6 +665,66 @@ function render(){
 // ═══ TRADES: On-Chain Swap Events ═══
 var SWAP_SIG="0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67";
 var allTrades=[],tradeLatest=0,tradeOldestFetched=0,tradePg_=0,TRADES_PP=20,BLOCK_CHUNK=5000000;
+// Trade Cache: persist all fetched trades for simulation + history
+// Target: 370 days (~123M blocks @ 0.26s/block on Arbitrum)
+var TRADE_CACHE_TARGET_DAYS=370;
+var TRADE_CACHE_TARGET_BLOCKS=Math.round(TRADE_CACHE_TARGET_DAYS*86400/0.26);
+var tradeBackfillRunning=false;
+function tradeCacheLoad(){
+  try{
+    var raw=localStorage.getItem("trades_cache");
+    if(!raw)return false;
+    var c=JSON.parse(raw);
+    if(!c||!c.trades||!Array.isArray(c.trades)||c.trades.length===0)return false;
+    allTrades=c.trades;
+    tradeOldestFetched=c.oldestBlock||0;
+    console.log("TRADE CACHE: hydrated "+allTrades.length+" trades, oldest block "+tradeOldestFetched);
+    return true;
+  }catch(e){console.log("trade cache load err:",e.message);return false;}
+}
+function tradeCacheSave(){
+  try{
+    // Cap at 10000 trades to stay safely under 5MB localStorage limit
+    var slice=allTrades.length>10000?allTrades.slice(0,10000):allTrades;
+    localStorage.setItem("trades_cache",JSON.stringify({trades:slice,oldestBlock:tradeOldestFetched,ts:Date.now()}));
+  }catch(e){console.log("trade cache save err:",e.message);}
+}
+async function tradeAutoBackfill(){
+  if(tradeBackfillRunning)return;
+  tradeBackfillRunning=true;
+  try{
+    if(!tradeLatest||!tradeOldestFetched){tradeBackfillRunning=false;return;}
+    var targetBlock=Math.max(300000000,tradeLatest-TRADE_CACHE_TARGET_BLOCKS);
+    var chunksFetched=0,maxChunksPerCall=20;
+    while(tradeOldestFetched>targetBlock&&chunksFetched<maxChunksPerCall){
+      var to=tradeOldestFetched-1;
+      var from=Math.max(targetBlock,to-BLOCK_CHUNK);
+      if(from<=300000000)break;
+      try{
+        var logs=await fetchTradesChunk(from,to);
+        if(!Array.isArray(logs)){tradeBackfillRunning=false;return;}
+        if(logs.length===0){tradeOldestFetched=from;chunksFetched++;continue;}
+        logs.reverse();
+        var added=0;
+        for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t){allTrades.push(t);added++;}}
+        tradeOldestFetched=from;
+        chunksFetched++;
+        var days=Math.round((tradeLatest-tradeOldestFetched)*0.26/86400);
+        try{$("tLoadStat").textContent=allTrades.length+" trades · ~"+days+"d history (backfilling)";}catch(e){}
+        // Save after each chunk so partial progress survives reload
+        tradeCacheSave();
+        // Yield to event loop, throttle RPC
+        await new Promise(function(r){setTimeout(r,250);});
+      }catch(e){console.log("backfill chunk err:",e.message);break;}
+    }
+    var finalDays=Math.round((tradeLatest-tradeOldestFetched)*0.26/86400);
+    try{$("tLoadStat").textContent=allTrades.length+" trades · ~"+finalDays+"d history";}catch(e){}
+    console.log("TRADE BACKFILL: "+chunksFetched+" chunks, "+allTrades.length+" total, "+finalDays+"d depth");
+    tradeCacheSave();
+    try{renderTrades();}catch(e){}
+  }catch(e){console.log("backfill err:",e.message);}
+  tradeBackfillRunning=false;
+}
 
 function decodeSwap(log,latest){
   var data=log.data||"";if(data.length<258)return null;
@@ -729,33 +795,45 @@ async function fetchTrades(){
     if(!bnJ||!bnJ.result)return;
     tradeLatest=parseInt(bnJ.result,16);
     if(!tradeLatest)return;
-    var isFirst=allTrades.length===0;
-    var from=isFirst?tradeLatest-BLOCK_CHUNK:tradeLatest-200000; // refresh: only last ~15min
+    var hadCache=allTrades.length>0;
+    var topBlk=hadCache?allTrades[0].blk:0;
+    // Determine fetch range:
+    // - If cache present and fresh: just fetch from top of cache to latest
+    // - If cache stale (>1 chunk gap): fetch last BLOCK_CHUNK like initial
+    // - If no cache: initial fetch of last BLOCK_CHUNK
+    var from;
+    if(hadCache&&topBlk>0&&(tradeLatest-topBlk)<BLOCK_CHUNK){
+      from=topBlk+1;
+    }else{
+      from=tradeLatest-BLOCK_CHUNK;
+      if(!hadCache)tradeOldestFetched=from;
+    }
     var logs=await fetchTradesChunk(from,tradeLatest);
     if(!Array.isArray(logs))return;
-    if(isFirst){
-      tradeOldestFetched=tradeLatest-BLOCK_CHUNK;
+    logs.reverse();
+    if(!hadCache){
+      // First-ever load (no cache hydrated)
       allTrades=[];
-      logs.reverse();
       for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
       renderTrades();
       whaleFirstLoad=false;
-      $("tLoadStat").textContent="Loaded ~"+Math.round(BLOCK_CHUNK*0.26/86400)+"d";
+      var initDays=Math.round(BLOCK_CHUNK*0.26/86400);
+      $("tLoadStat").textContent="Loaded ~"+initDays+"d";
+      tradeCacheSave();
+      // Kick off backfill to reach target depth
+      setTimeout(function(){tradeAutoBackfill();},3000);
     }else{
-      // Merge: add new trades at front, dedupe by block number
-      var topBlk=allTrades.length>0?allTrades[0].blk:0;
-      logs.reverse();
+      // Merge new trades at front, dedupe by block
       var added=0;
       for(var i2=0;i2<logs.length;i2++){var t2=decodeSwap(logs[i2],tradeLatest);if(t2&&t2.blk>topBlk){allTrades.unshift(t2);added++;}}
-      // Update time estimates for all trades
+      // Update time estimates
       for(var u=0;u<allTrades.length;u++){allTrades[u].minAgo=Math.round((tradeLatest-allTrades[u].blk)*0.26/60);}
-      // Only update top trade + count, don't touch pagination
       var top1="";if(allTrades.length>0)top1=tradeRow(allTrades[0]);
       $("tradeTop").innerHTML=top1||'';
       $("tradeCnt").textContent=allTrades.length;
       if(added>0){
         renderTrades();
-        // Whale alert for new trades
+        tradeCacheSave();
         if(!whaleFirstLoad){
           for(var wi2=0;wi2<added;wi2++){if(allTrades[wi2].usdc>=WHALE_MIN){
             if(typeof beep==="function"&&typeof soundOn!=="undefined"&&soundOn)beep();
@@ -763,6 +841,11 @@ async function fetchTrades(){
         }
       }
       whaleFirstLoad=false;
+      // Continue backfill if we haven't reached target depth yet
+      var depthDays=Math.round((tradeLatest-tradeOldestFetched)*0.26/86400);
+      if(depthDays<TRADE_CACHE_TARGET_DAYS-30&&!tradeBackfillRunning){
+        setTimeout(function(){tradeAutoBackfill();},5000);
+      }
     }
   }catch(e){console.log("Trades err:",e);}}
 
@@ -777,6 +860,7 @@ async function fetchTradesOlder(){
     logs.reverse();
     for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
     renderTrades();
+    tradeCacheSave();
     var days=Math.round((tradeLatest-from)*0.26/86400);
     $("tLoadStat").textContent=allTrades.length+" trades · ~"+days+"d history";
   }catch(e){$("tLoadStat").textContent="Error loading";}
@@ -3232,6 +3316,7 @@ function updateSysStatus(){
 }
 
 loadOffline();
+if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
 ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
