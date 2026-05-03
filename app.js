@@ -2838,20 +2838,70 @@ function ptfShowDetection(symbol,delta,newBalance){
         '<div style="font-size:18px;font-weight:700;color:'+headerClr+';font-family:Geist Mono,monospace">'+sign+absDelta.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</div>'+
       '</div>'+
       '<div style="font-size:9px;color:var(--mt);margin-bottom:10px;letter-spacing:.5px">New balance: <span style="color:var(--br);font-weight:600">'+newBalance.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</span></div>'+
+      // Mode toggle
+      '<div style="display:flex;gap:6px;margin-bottom:8px">'+
+        '<button id="ptfModeP" onclick="ptfSetMode(\'price\')" style="flex:1;padding:6px;font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;background:rgba(96,165,250,.18);border:1px solid rgba(96,165,250,.5);color:var(--b);border-radius:6px;cursor:pointer">Price/Token</button>'+
+        '<button id="ptfModeT" onclick="ptfSetMode(\'total\')" style="flex:1;padding:6px;font-size:8px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;background:rgba(12,18,32,.6);border:1px solid rgba(60,80,110,.3);color:var(--dm);border-radius:6px;cursor:pointer">Total USD</button>'+
+      '</div>'+
       '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'+
-        '<div style="flex:1;min-width:130px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">'+(isBuy?"Purchase":"Sell")+' price (USD)</div>'+
-          '<input class="inp" id="ptfDetectPrice" type="number" step="any" style="width:100%;font-size:13px;padding:8px;background:rgba(8,12,22,.6);border:1px solid rgba(60,80,110,.4);border-radius:6px;color:var(--br)" placeholder="'+(symbol==="BTC"?"68000":"2300")+'"></div>'+
+        '<div style="flex:1;min-width:130px"><div id="ptfDetectLbl" style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">'+(isBuy?"Purchase":"Sell")+' price per '+symbol+' (USD)</div>'+
+          '<input class="inp" id="ptfDetectPrice" type="number" step="any" oninput="ptfUpdatePreview()" style="width:100%;font-size:13px;padding:8px;background:rgba(8,12,22,.6);border:1px solid rgba(60,80,110,.4);border-radius:6px;color:var(--br)" placeholder="'+(symbol==="BTC"?"68000":"2300")+'"></div>'+
         '<button onclick="ptfConfirmDetection()" style="background:linear-gradient(180deg,'+btnBg+',rgba(0,0,0,.05));border:1px solid '+btnBd+';color:'+btnClr+';padding:9px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:38px;white-space:nowrap">✓ Save</button>'+
         '<button onclick="ptfDismissDetection()" style="background:rgba(12,18,32,.6);border:1px solid rgba(60,80,110,.3);color:var(--dm);padding:9px 12px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:38px">Dismiss</button>'+
       '</div>'+
+      '<div id="ptfDetectPreview" style="margin-top:8px;font-size:9px;color:var(--dm);letter-spacing:.3px;min-height:14px"></div>'+
     '</div>';
+  ptfDetectMode="price";
+}
+
+var ptfDetectMode="price";
+function ptfSetMode(m){
+  ptfDetectMode=m;
+  var sym=ptfPendingDetection?ptfPendingDetection.symbol.toUpperCase():"";
+  var pBtn=document.getElementById("ptfModeP"),tBtn=document.getElementById("ptfModeT");
+  var lbl=document.getElementById("ptfDetectLbl"),inp=document.getElementById("ptfDetectPrice");
+  if(m==="price"){
+    if(pBtn){pBtn.style.background="rgba(96,165,250,.18)";pBtn.style.borderColor="rgba(96,165,250,.5)";pBtn.style.color="var(--b)";}
+    if(tBtn){tBtn.style.background="rgba(12,18,32,.6)";tBtn.style.borderColor="rgba(60,80,110,.3)";tBtn.style.color="var(--dm)";}
+    if(lbl)lbl.textContent=(ptfPendingDetection&&ptfPendingDetection.isBuy?"Purchase":"Sell")+" price per "+sym+" (USD)";
+    if(inp)inp.placeholder=sym==="BTC"?"68000":(sym==="ETH"?"2300":"0");
+  }else{
+    if(tBtn){tBtn.style.background="rgba(96,165,250,.18)";tBtn.style.borderColor="rgba(96,165,250,.5)";tBtn.style.color="var(--b)";}
+    if(pBtn){pBtn.style.background="rgba(12,18,32,.6)";pBtn.style.borderColor="rgba(60,80,110,.3)";pBtn.style.color="var(--dm)";}
+    if(lbl)lbl.textContent="Total "+(ptfPendingDetection&&ptfPendingDetection.isBuy?"paid":"received")+" (USD)";
+    if(inp)inp.placeholder="500";
+  }
+  ptfUpdatePreview();
+}
+
+function ptfUpdatePreview(){
+  if(!ptfPendingDetection)return;
+  var inp=document.getElementById("ptfDetectPrice"),pv=document.getElementById("ptfDetectPreview");
+  if(!inp||!pv)return;
+  var val=parseFloat(inp.value);
+  if(!val||val<=0){pv.textContent="";return;}
+  var d=ptfPendingDetection,sym=d.symbol.toUpperCase();
+  if(ptfDetectMode==="price"){
+    var total=d.delta*val;
+    pv.innerHTML='= <span style="color:var(--cy);font-weight:600">$'+total.toFixed(2)+'</span> total for '+d.delta.toFixed(6)+' '+sym;
+  }else{
+    var price=val/d.delta;
+    pv.innerHTML='= <span style="color:var(--cy);font-weight:600">$'+price.toFixed(2)+'</span> per '+sym;
+  }
 }
 
 function ptfConfirmDetection(){
   if(!ptfPendingDetection)return;
-  var price=parseFloat($("ptfDetectPrice").value);
-  if(!price||price<=0){$("ptfDetectPrice").style.borderColor="var(--r)";return;}
+  var inputVal=parseFloat($("ptfDetectPrice").value);
+  if(!inputVal||inputVal<=0){$("ptfDetectPrice").style.borderColor="var(--r)";return;}
   var d=ptfPendingDetection;
+  // Convert input to price/token based on mode
+  var price;
+  if(ptfDetectMode==="total"){
+    price=inputVal/d.delta;
+  }else{
+    price=inputVal;
+  }
   ptfLedger.push({id:"ptx_"+Date.now(),asset:d.symbol,amount:d.delta,price:price,total:d.delta*price,
     date:new Date().toISOString().split("T")[0],wallet:"Ledger",note:d.isBuy?"Auto detected transfer":"Auto detected outflow"});
   // Recalc avgEntry
@@ -2865,7 +2915,7 @@ function ptfConfirmDetection(){
     asset.amount=d.newBalance;
   }
   ptfSave();ptfRenderTable();ptfRenderLedger();
-  console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price);
+  console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price+" (mode:"+ptfDetectMode+")");
   ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
 }
 
