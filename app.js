@@ -3711,56 +3711,46 @@ function updateSysStatus(){
 loadOffline();
 if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
 ptfLoad();
-// One-time BTC migration v2: repair botched state where asset.amount was overwritten incorrectly
+// One-time BTC migration v4: HARD RESET — recreates BTC asset if missing, clears all BTC ledger entries, sets clean state
 try{
-  var migrated=localStorage.getItem("btc_migration_v2");
+  var migrated=localStorage.getItem("btc_migration_v4");
   if(!migrated){
-    var btcA=null;
-    for(var bi=0;bi<ptfAssets.length;bi++){if(ptfAssets[bi].id==="btc"){btcA=ptfAssets[bi];break;}}
-    if(btcA){
-      var btcEntries=ptfLedger.filter(function(e){return e.asset==="btc";});
-      var ledgerSumCost=0,ledgerSumAmt=0;
-      for(var bj=0;bj<btcEntries.length;bj++){ledgerSumCost+=btcEntries[bj].total;ledgerSumAmt+=btcEntries[bj].amount;}
-      // Case A: Asset has cost but no ledger entries → create pre-existing entry
-      if(btcEntries.length===0&&btcA.amount>0&&(btcA.totalCost||0)>0){
-        ptfLedger.unshift({
-          id:"ptx_pre_btc",asset:"btc",amount:btcA.amount,price:btcA.avgEntry||(btcA.totalCost/btcA.amount),
-          total:btcA.totalCost,date:"2024-01-01",wallet:"Ledger",note:"Pre-existing holdings (auto-recovered)"
-        });
-        ledgerSumAmt=btcA.amount;ledgerSumCost=btcA.totalCost;
-        console.log("BTC migration v2 [A]: created pre-existing entry");
-      }
-      // Case B: Asset amount < ledger sum (botched state from broken btcConfirmBuy) — trust ledger
-      else if(btcEntries.length>0&&btcA.amount<ledgerSumAmt-0.0000001){
-        console.log("BTC migration v2 [B]: asset.amount("+btcA.amount+") < ledger sum("+ledgerSumAmt+") — trusting ledger");
-        // Check if pre-existing entry is missing (ledger only contains the recent buy)
-        var hasPreExisting=false;
-        for(var be=0;be<btcEntries.length;be++){
-          if(btcEntries[be].note&&btcEntries[be].note.indexOf("Pre-existing")>=0){hasPreExisting=true;break;}
-        }
-        if(!hasPreExisting){
-          // Add pre-existing entry from PTF_DEFAULTS values
-          ptfLedger.unshift({
-            id:"ptx_pre_btc",asset:"btc",amount:0.00692908,price:68000,total:471.18,
-            date:"2024-01-01",wallet:"Ledger",note:"Pre-existing holdings (auto-recovered)"
-          });
-          console.log("BTC migration v2 [B]: added missing pre-existing entry 0.00692908 BTC");
-        }
-      }
-      // Case C: Ledger has pre-existing + new buy, but asset.amount is wrong → recompute from ledger
-      // (This is the actual fix path)
-      var allBtc=ptfLedger.filter(function(e){return e.asset==="btc";});
-      var finalAmt=0,finalCost=0;
-      for(var bk=0;bk<allBtc.length;bk++){finalAmt+=allBtc[bk].amount;finalCost+=allBtc[bk].total;}
-      if(finalAmt>0){
-        btcA.amount=finalAmt;
-        btcA.totalCost=finalCost;
-        btcA.avgEntry=finalCost/finalAmt;
-        ptfSave();
-        console.log("BTC migration v2: final state — amount "+finalAmt.toFixed(8)+" BTC, avg $"+btcA.avgEntry.toFixed(2)+", cost $"+finalCost.toFixed(2));
-      }
+    var btcA=null,btcIdx=-1;
+    for(var bi=0;bi<ptfAssets.length;bi++){if(ptfAssets[bi].id==="btc"){btcA=ptfAssets[bi];btcIdx=bi;break;}}
+    // 1. If BTC asset is missing → recreate it from PTF_DEFAULTS
+    if(!btcA){
+      btcA={id:"btc",symbol:"BTC",name:"Bitcoin",geckoId:"bitcoin",amount:0,avgEntry:0,totalCost:0,source:"ledger",decimals:8,contract:null};
+      // Insert at same position as in PTF_DEFAULTS (after AR, before TIA)
+      var insertPos=ptfAssets.length;
+      for(var ai=0;ai<ptfAssets.length;ai++){if(ptfAssets[ai].id==="ar"){insertPos=ai+1;break;}}
+      ptfAssets.splice(insertPos,0,btcA);
+      console.log("BTC migration v4: BTC asset was MISSING — recreated");
     }
-    localStorage.setItem("btc_migration_v2","done");
+    // 2. Remove ALL existing BTC entries from ledger
+    var beforeCount=ptfLedger.length;
+    ptfLedger=ptfLedger.filter(function(e){return e.asset!=="btc";});
+    var removed=beforeCount-ptfLedger.length;
+    // 3. Add ONE clean Pre-existing holdings entry
+    ptfLedger.unshift({
+      id:"ptx_pre_btc",asset:"btc",amount:0.00692908,price:68000,total:471.18,
+      date:"2024-01-01",wallet:"Ledger",note:"Pre-existing holdings"
+    });
+    // 4. Add the buy from 2026-05-03
+    var newBuyAmt=0.00075;var newBuyCost=58.50;
+    ptfLedger.push({
+      id:"ptx_buy_20260503",asset:"btc",amount:newBuyAmt,price:newBuyCost/newBuyAmt,total:newBuyCost,
+      date:"2026-05-03",wallet:"Ledger",note:"Bitpanda buy"
+    });
+    // 5. Recalc asset from clean ledger
+    var allBtc=ptfLedger.filter(function(e){return e.asset==="btc";});
+    var finalAmt=0,finalCost=0;
+    for(var bk=0;bk<allBtc.length;bk++){finalAmt+=allBtc[bk].amount;finalCost+=allBtc[bk].total;}
+    btcA.amount=finalAmt;
+    btcA.totalCost=finalCost;
+    btcA.avgEntry=finalCost/finalAmt;
+    ptfSave();
+    console.log("BTC migration v4 (HARD RESET): removed "+removed+" old entries, set: "+finalAmt.toFixed(8)+" BTC, avg $"+btcA.avgEntry.toFixed(2)+", cost $"+finalCost.toFixed(2));
+    localStorage.setItem("btc_migration_v4","done");
   }
 }catch(e){console.log("BTC migration error:",e);}
 ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
