@@ -402,9 +402,9 @@ function renderWal(){
       (oldDropAlert?' <span style="color:var(--r);font-weight:700">⚠ DROP</span>':'')+
     '</div>'+
     '<div style="text-align:center">'+
-      '<span style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px">BURN-Equivalent ≈</span> '+
-      '<span style="color:var(--br);font-weight:600;font-size:13px">'+F(totalBurnEq,0)+'</span>'+
-      '<span style="font-size:10px;color:var(--dm);margin-left:3px">BURN</span>'+
+      '<span style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px">BURN-Equivalent ≈</span> '+
+      '<span style="color:#ffffff;font-weight:700;font-size:17px;margin-left:2px">'+F(totalBurnEq,0)+'</span>'+
+      '<span style="font-size:11px;color:var(--mt);margin-left:4px;font-weight:500">BURN</span>'+
     '</div>';
 }
 
