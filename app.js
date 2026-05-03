@@ -2998,7 +2998,25 @@ function btcConfirmBuy(){
   if(!paid||paid<=0){paidInp.style.borderColor="var(--r)";return;}
   var delta=newAmt-current;
   var pricePerBtc=paid/delta;
-  // Add to ledger
+  // Check if asset has prior holdings (totalCost set) but NO ledger entries yet
+  // If so, create a "Pre-existing holdings" ledger entry first to preserve old cost basis
+  var existingEntries=ptfLedger.filter(function(e){return e.asset==="btc";});
+  var hasPriorHoldings=current>0&&(btcAsset.totalCost||0)>0&&existingEntries.length===0;
+  if(hasPriorHoldings){
+    var priorAvg=btcAsset.avgEntry||(btcAsset.totalCost/current);
+    ptfLedger.push({
+      id:"ptx_"+(Date.now()-1),
+      asset:"btc",
+      amount:current,
+      price:priorAvg,
+      total:btcAsset.totalCost,
+      date:"2024-01-01",
+      wallet:"Ledger",
+      note:"Pre-existing holdings (auto-imported)"
+    });
+    console.log("BTC: added pre-existing holdings entry: "+current+" BTC @ $"+priorAvg+" = $"+btcAsset.totalCost);
+  }
+  // Add the new buy
   ptfLedger.push({
     id:"ptx_"+Date.now(),
     asset:"btc",
@@ -3009,24 +3027,19 @@ function btcConfirmBuy(){
     wallet:"Ledger",
     note:"Manual BTC buy"
   });
-  // Update asset: recalc avgEntry from full ledger
+  // Recalc avgEntry/totalCost from full ledger
   var entries=ptfLedger.filter(function(e){return e.asset==="btc";});
   var sumCost=0,sumAmt=0;
   for(var j=0;j<entries.length;j++){sumCost+=entries[j].total;sumAmt+=entries[j].amount;}
   if(sumAmt>0){
     btcAsset.avgEntry=sumCost/sumAmt;
     btcAsset.totalCost=sumCost;
-  }else{
-    // First entry — no prior ledger
-    btcAsset.avgEntry=pricePerBtc;
-    btcAsset.totalCost=paid;
   }
   btcAsset.amount=newAmt;
   ptfSave();
   try{ptfRenderTable();}catch(e){}
   try{ptfRenderLedger();}catch(e){}
-  console.log("BTC buy added: +"+delta+" BTC for $"+paid+" (price $"+pricePerBtc.toFixed(2)+"/BTC)");
-  // Close banner
+  console.log("BTC buy added: +"+delta+" BTC for $"+paid+" → new total: "+newAmt+" BTC, avg $"+btcAsset.avgEntry.toFixed(2)+", cost $"+btcAsset.totalCost.toFixed(2));
   $("ptfDetectDiv").innerHTML="";
 }
 
@@ -3697,7 +3710,45 @@ function updateSysStatus(){
 
 loadOffline();
 if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
-ptfLoad();ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
+ptfLoad();
+// One-time BTC migration: fix botched manual buys where pre-existing holdings were lost
+try{
+  var migrated=localStorage.getItem("btc_migration_v1");
+  if(!migrated){
+    var btcA=null;
+    for(var bi=0;bi<ptfAssets.length;bi++){if(ptfAssets[bi].id==="btc"){btcA=ptfAssets[bi];break;}}
+    if(btcA){
+      var btcEntries=ptfLedger.filter(function(e){return e.asset==="btc";});
+      // Detect botched state: amount > 0 but totalCost suspiciously low (only matches recent buy) OR ledger sum != asset.totalCost
+      var ledgerSumCost=0,ledgerSumAmt=0;
+      for(var bj=0;bj<btcEntries.length;bj++){ledgerSumCost+=btcEntries[bj].total;ledgerSumAmt+=btcEntries[bj].amount;}
+      // If ledger has entries but total amount in ledger < actual asset amount → missing pre-existing holdings
+      if(btcEntries.length>0&&ledgerSumAmt<btcA.amount-0.0000001){
+        var missingAmt=btcA.amount-ledgerSumAmt;
+        // Reconstruct pre-existing entry: 0.00692908 BTC @ avg $68000 = $471.18 (from PTF_DEFAULTS)
+        ptfLedger.unshift({
+          id:"ptx_pre_btc",
+          asset:"btc",
+          amount:missingAmt,
+          price:68000,
+          total:Math.round(missingAmt*68000*100)/100,
+          date:"2024-01-01",
+          wallet:"Ledger",
+          note:"Pre-existing holdings (recovered)"
+        });
+        // Recalc
+        var allBtc=ptfLedger.filter(function(e){return e.asset==="btc";});
+        var sc=0,sa=0;
+        for(var bk=0;bk<allBtc.length;bk++){sc+=allBtc[bk].total;sa+=allBtc[bk].amount;}
+        if(sa>0){btcA.avgEntry=sc/sa;btcA.totalCost=sc;}
+        ptfSave();
+        console.log("BTC migration v1: recovered "+missingAmt+" BTC pre-existing holdings, new avgEntry $"+btcA.avgEntry.toFixed(2)+", total cost $"+btcA.totalCost.toFixed(2));
+      }
+    }
+    localStorage.setItem("btc_migration_v1","done");
+  }
+}catch(e){console.log("BTC migration error:",e);}
+ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 fetchBurn30d().then(function(){if(P>0)try{render();}catch(e){}});
