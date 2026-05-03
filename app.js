@@ -413,7 +413,41 @@ function walConfirmChange(){
   var totalNow=MY_BURN+MY_STBURN;
   localStorage.setItem("walConfirmedTotal",totalNow.toString());
   localStorage.removeItem("walNotifKey");
+  // Sync to Hetzner server (so monitor stops alerting)
+  try{
+    fetch("http://95.216.152.31:8082/wallet/confirm",{method:"POST",mode:"cors"})
+      .then(function(r){return r.json();})
+      .then(function(d){console.log("server confirm:",d);})
+      .catch(function(e){console.log("server confirm sync failed (browser blocks HTTP, APK ok):",e&&e.message);});
+  }catch(e){}
   try{renderWal();}catch(e){}
+}
+
+// Hydrate from server on app load — server is source of truth
+function fetchServerWalletState(){
+  try{
+    fetch("http://95.216.152.31:8082/wallet/state",{mode:"cors"})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d||d.error)return;
+        // Sync confirmed_total — server wins
+        if(d.confirmed_total>0){
+          localStorage.setItem("walConfirmedTotal",d.confirmed_total.toString());
+        }
+        // ETH balance: take higher value (server vs local cache)
+        if(d.eth>0&&typeof ptfAssets!=="undefined"){
+          for(var i=0;i<ptfAssets.length;i++){
+            if(ptfAssets[i].id==="eth"&&d.eth>ptfAssets[i].amount){
+              ptfAssets[i].amount=d.eth;
+            }
+          }
+          try{ptfSave();ptfRenderTable();}catch(e){}
+        }
+        try{renderWal();}catch(e){}
+        console.log("server wallet state hydrated:",d);
+      })
+      .catch(function(e){console.log("server state fetch failed (browser blocks HTTP, APK ok):",e&&e.message);});
+  }catch(e){}
 }
 
 // ═══ FETCH: Live LP Positions (DeFi wallet NFTs) ═══
@@ -3515,5 +3549,6 @@ try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 // Auto-scan LP Map after 10s (let other data load first)
 setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
+setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
