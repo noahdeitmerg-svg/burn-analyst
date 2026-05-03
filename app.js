@@ -64,9 +64,9 @@ var PTF_DEFAULTS=[
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
-  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.832427,avgEntry:2342.49,totalCost:1950,source:"ledger",decimals:6,contract:null}
+  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.856702,avgEntry:2344.42,totalCost:2008.50,source:"ledger",decimals:6,contract:null}
 ];
-var PTF_VERSION=4;
+var PTF_VERSION=5;
 
 // ═══ LP POSITIONS (fallback — overwritten by on-chain if available) ═══
 var LP_FALLBACK=[
