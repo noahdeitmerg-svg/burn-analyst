@@ -409,57 +409,87 @@ function renderWal(){
 }
 
 // Confirm wallet balance change — invoked by inline onclick
-// ═══ SHARE: Live Pricing Hero Card als HD-PNG ═══
+// ═══ SHARE: Hero Card direkt als PNG downloaden (1 Klick) ═══
 async function shareHeroCard(){
   var el=document.getElementById("heroCardCapture");
   if(!el){alert("Card not found");return;}
-  if(typeof html2canvas==="undefined"){alert("Image library not loaded — refresh page");return;}
-  // Hide share button + connection status during capture
+  // Hide UI elements during capture
   var hideEls=el.querySelectorAll('[data-noshare="1"], #astat');
   for(var i=0;i<hideEls.length;i++)hideEls[i].style.visibility="hidden";
+  // Inject watermark INTO the DOM so it's part of capture (not post-processed)
+  var existingWm=document.getElementById("shareWatermark");
+  if(existingWm)existingWm.remove();
+  var ts=new Date().toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  var wm=document.createElement("div");
+  wm.id="shareWatermark";
+  wm.style.cssText="position:absolute;bottom:8px;right:14px;font-size:9px;font-family:Inter,sans-serif;font-weight:500;color:rgba(148,163,184,0.6);letter-spacing:.3px;z-index:5;pointer-events:none";
+  wm.textContent=ts+" · @noah.eth";
+  el.appendChild(wm);
+
   try{
-    var canvas=await html2canvas(el,{
-      scale:3,
-      backgroundColor:"#05080f",
-      logging:false,
-      useCORS:true,
-      allowTaint:false
-    });
-    // Watermark: Datum + Uhrzeit + Handle, dezent unten rechts
-    var ctx=canvas.getContext("2d");
-    var ts=new Date().toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-    ctx.fillStyle="rgba(148,163,184,0.45)";
-    ctx.font="500 "+(canvas.width*0.013)+"px Inter, sans-serif";
-    ctx.textAlign="right";
-    ctx.fillText(ts+" · @noah.eth",canvas.width-canvas.width*0.03,canvas.height-canvas.height*0.02);
-    // Convert to blob
-    canvas.toBlob(async function(blob){
-      if(!blob){alert("Capture failed");return;}
-      var ts=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
-      var filename="burn-live-"+ts+".png";
-      // Try Web Share API first (mobile)
-      if(navigator.share&&navigator.canShare){
-        try{
-          var file=new File([blob],filename,{type:"image/png"});
-          if(navigator.canShare({files:[file]})){
-            await navigator.share({files:[file],title:"BURN Live Pricing"});
-            console.log("shared via Web Share API");
-            return;
+    var dataUrl=null;
+    var rect=el.getBoundingClientRect();
+    var w=Math.round(rect.width),h=Math.round(rect.height);
+    // Primary: dom-to-image-more (better CSS handling)
+    if(typeof domtoimage!=="undefined"){
+      try{
+        dataUrl=await domtoimage.toPng(el,{
+          width:w*3,
+          height:h*3,
+          quality:1,
+          bgcolor:"#05080f",
+          style:{
+            transform:"scale(3)",
+            transformOrigin:"top left",
+            width:w+"px",
+            height:h+"px"
           }
-        }catch(shareErr){console.log("Web Share failed, falling back to download:",shareErr);}
-      }
-      // Fallback: download
-      var url=URL.createObjectURL(blob);
-      var a=document.createElement("a");
-      a.href=url;a.download=filename;
-      document.body.appendChild(a);a.click();document.body.removeChild(a);
-      setTimeout(function(){URL.revokeObjectURL(url);},1000);
-    },"image/png",1.0);
+        });
+      }catch(domErr){console.log("dom-to-image failed:",domErr);}
+    }
+    // Fallback: html2canvas
+    if(!dataUrl&&typeof html2canvas!=="undefined"){
+      var canvas=await html2canvas(el,{
+        scale:3,
+        backgroundColor:"#05080f",
+        logging:false,
+        useCORS:true,
+        allowTaint:false
+      });
+      dataUrl=canvas.toDataURL("image/png",1.0);
+    }
+    if(!dataUrl){alert("Capture failed");return;}
+    // Direct download via blob
+    var resp=await fetch(dataUrl);
+    var blob=await resp.blob();
+    var url=URL.createObjectURL(blob);
+    var tsFile=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+    var a=document.createElement("a");
+    a.href=url;
+    a.download="burn-live-"+tsFile+".png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(url);},2000);
+    // Quick visual feedback
+    var btn=el.querySelector('[data-noshare="1"]');
+    if(btn){
+      var orig=btn.innerHTML;
+      btn.innerHTML="✓ Saved";
+      btn.style.color="var(--g)";
+      btn.style.borderColor="rgba(52,211,153,.5)";
+      btn.style.background="rgba(52,211,153,.12)";
+      setTimeout(function(){
+        btn.innerHTML=orig;
+        btn.style.color="";btn.style.borderColor="";btn.style.background="";
+      },1800);
+    }
   }catch(e){
     console.log("share err:",e);
     alert("Capture failed: "+(e&&e.message?e.message:e));
   }finally{
-    // Re-show hidden elements
+    var wmFinal=document.getElementById("shareWatermark");
+    if(wmFinal)wmFinal.remove();
     for(var j=0;j<hideEls.length;j++)hideEls[j].style.visibility="";
   }
 }
