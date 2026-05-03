@@ -2798,16 +2798,11 @@ function ptfDetectLedgerBalances(){
         if(newEth>0&&Math.abs(ethDelta)>0.001){
           ptfShowDetection("ETH",ethDelta,newEth);
         }
-        // Check BTC delta
-        var btcDelta=newBtc-ptfLastBalances.btc;
-        if(newBtc>0&&Math.abs(btcDelta)>0.00001){
-          if(!ptfPendingDetection){ptfShowDetection("BTC",btcDelta,newBtc);}
-        }
-        // Update stored balances + asset amounts
-        var ea2=null,ba2=null;
-        for(var j=0;j<ptfAssets.length;j++){if(ptfAssets[j].id==="eth")ea2=ptfAssets[j];if(ptfAssets[j].id==="btc")ba2=ptfAssets[j];}
+        // BTC detection DISABLED — managed via manual "+ BTC Kauf" Banner (Ledger uses rotating addresses)
+        // Update stored balances + ETH asset amount only
+        var ea2=null;
+        for(var j=0;j<ptfAssets.length;j++){if(ptfAssets[j].id==="eth"){ea2=ptfAssets[j];break;}}
         if(newEth>0){ptfLastBalances.eth=newEth;if(ea2)ea2.amount=newEth;}
-        if(newBtc>0){ptfLastBalances.btc=newBtc;if(ba2)ba2.amount=newBtc;}
         ptfSave();ptfRenderTable();
         try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
       });
@@ -3753,6 +3748,31 @@ try{
     localStorage.setItem("btc_migration_v4","done");
   }
 }catch(e){console.log("BTC migration error:",e);}
+// One-time BTC migration v5: fix amount that was overwritten by ptfDetectBalances after v4
+try{
+  var migratedV5=localStorage.getItem("btc_migration_v5");
+  if(!migratedV5){
+    var btcA5=null;
+    for(var bi5=0;bi5<ptfAssets.length;bi5++){if(ptfAssets[bi5].id==="btc"){btcA5=ptfAssets[bi5];break;}}
+    if(btcA5){
+      // Recompute from existing ledger entries (Migration v4 already created clean ledger)
+      var allBtc5=ptfLedger.filter(function(e){return e.asset==="btc";});
+      var fAmt=0,fCost=0;
+      for(var bk5=0;bk5<allBtc5.length;bk5++){fAmt+=allBtc5[bk5].amount;fCost+=allBtc5[bk5].total;}
+      if(fAmt>0){
+        btcA5.amount=fAmt;
+        btcA5.totalCost=fCost;
+        btcA5.avgEntry=fCost/fAmt;
+        // Also reset ptfLastBalances.btc so detection won't override
+        if(typeof ptfLastBalances!=="undefined")ptfLastBalances.btc=fAmt;
+        try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
+        ptfSave();
+        console.log("BTC migration v5: re-fixed amount to "+fAmt.toFixed(8)+" BTC, cost $"+fCost.toFixed(2));
+      }
+    }
+    localStorage.setItem("btc_migration_v5","done");
+  }
+}catch(e){console.log("BTC migration v5 err:",e);}
 ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
 try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
