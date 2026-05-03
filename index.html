@@ -377,10 +377,13 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 
 
 <!-- ═══ 1. HERO: LIVE PRICING ═══ -->
-<div class="hero-card">
+<div class="hero-card" id="heroCardCapture">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:9px;color:var(--o);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;font-family:Inter,sans-serif"><span style="color:var(--o);margin-right:4px">◆</span> LIVE PRICING</div>
-    <div id="astat" style="font-size:9px;color:var(--g);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--g)"></span>Connecting...</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="shareHeroCard()" data-noshare="1" style="background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.4);color:var(--o);padding:5px 9px;border-radius:7px;font-family:Inter,sans-serif;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;cursor:pointer;display:flex;align-items:center;gap:4px" title="Share as image">📤 Share</button>
+      <div id="astat" style="font-size:9px;color:var(--g);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--g)"></span>Connecting...</div>
+    </div>
   </div>
   <div class="rings">
     <div class="orb" style="border-color:var(--p)">
@@ -787,6 +790,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="app.js"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
