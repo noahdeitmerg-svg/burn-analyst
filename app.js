@@ -409,14 +409,12 @@ function renderWal(){
 }
 
 // Confirm wallet balance change — invoked by inline onclick
-// ═══ SHARE: Hero Card direkt als PNG downloaden (1 Klick) ═══
+// ═══ SHARE: Hero Card als PNG (Web Share API + Long-press Fallback) ═══
 async function shareHeroCard(){
   var el=document.getElementById("heroCardCapture");
   if(!el){alert("Card not found");return;}
-  // Hide UI elements during capture
   var hideEls=el.querySelectorAll('[data-noshare="1"], #astat');
   for(var i=0;i<hideEls.length;i++)hideEls[i].style.visibility="hidden";
-  // Inject watermark INTO the DOM so it's part of capture (not post-processed)
   var existingWm=document.getElementById("shareWatermark");
   if(existingWm)existingWm.remove();
   var ts=new Date().toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
@@ -430,60 +428,44 @@ async function shareHeroCard(){
     var dataUrl=null;
     var rect=el.getBoundingClientRect();
     var w=Math.round(rect.width),h=Math.round(rect.height);
-    // Primary: dom-to-image-more (better CSS handling)
     if(typeof domtoimage!=="undefined"){
       try{
         dataUrl=await domtoimage.toPng(el,{
-          width:w*3,
-          height:h*3,
-          quality:1,
-          bgcolor:"#05080f",
-          style:{
-            transform:"scale(3)",
-            transformOrigin:"top left",
-            width:w+"px",
-            height:h+"px"
-          }
+          width:w*3,height:h*3,quality:1,bgcolor:"#05080f",
+          style:{transform:"scale(3)",transformOrigin:"top left",width:w+"px",height:h+"px"}
         });
       }catch(domErr){console.log("dom-to-image failed:",domErr);}
     }
-    // Fallback: html2canvas
     if(!dataUrl&&typeof html2canvas!=="undefined"){
-      var canvas=await html2canvas(el,{
-        scale:3,
-        backgroundColor:"#05080f",
-        logging:false,
-        useCORS:true,
-        allowTaint:false
-      });
+      var canvas=await html2canvas(el,{scale:3,backgroundColor:"#05080f",logging:false,useCORS:true});
       dataUrl=canvas.toDataURL("image/png",1.0);
     }
     if(!dataUrl){alert("Capture failed");return;}
-    // Direct download via blob
+
+    var tsFile=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+    var filename="burn-live-"+tsFile+".png";
+
+    // Convert dataUrl to Blob/File
     var resp=await fetch(dataUrl);
     var blob=await resp.blob();
-    var url=URL.createObjectURL(blob);
-    var tsFile=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
-    var a=document.createElement("a");
-    a.href=url;
-    a.download="burn-live-"+tsFile+".png";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(function(){URL.revokeObjectURL(url);},2000);
-    // Quick visual feedback
-    var btn=el.querySelector('[data-noshare="1"]');
-    if(btn){
-      var orig=btn.innerHTML;
-      btn.innerHTML="✓ Saved";
-      btn.style.color="var(--g)";
-      btn.style.borderColor="rgba(52,211,153,.5)";
-      btn.style.background="rgba(52,211,153,.12)";
-      setTimeout(function(){
-        btn.innerHTML=orig;
-        btn.style.color="";btn.style.borderColor="";btn.style.background="";
-      },1800);
+    var file=new File([blob],filename,{type:"image/png"});
+
+    // PRIMARY: Web Share API with file (best Android UX)
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({files:[file],title:"BURN Live Pricing"});
+        // Success — Android share-sheet opened, user picks "Save to Gallery"/"Telegram"/etc.
+        flashSavedFeedback(el);
+        return;
+      }catch(shareErr){
+        if(shareErr.name==="AbortError")return; // user cancelled, no fallback
+        console.log("Web Share failed, opening fallback modal:",shareErr);
+      }
     }
+
+    // FALLBACK: Show image fullscreen, user long-presses to save
+    showImageFallback(dataUrl,filename);
+
   }catch(e){
     console.log("share err:",e);
     alert("Capture failed: "+(e&&e.message?e.message:e));
@@ -492,6 +474,33 @@ async function shareHeroCard(){
     if(wmFinal)wmFinal.remove();
     for(var j=0;j<hideEls.length;j++)hideEls[j].style.visibility="";
   }
+}
+
+function flashSavedFeedback(el){
+  var btn=el.querySelector('[data-noshare="1"]');
+  if(!btn)return;
+  var orig=btn.innerHTML;
+  btn.innerHTML="✓ Shared";
+  btn.style.color="var(--g)";
+  btn.style.borderColor="rgba(52,211,153,.5)";
+  btn.style.background="rgba(52,211,153,.12)";
+  setTimeout(function(){
+    btn.innerHTML=orig;
+    btn.style.color="";btn.style.borderColor="";btn.style.background="";
+  },1800);
+}
+
+function showImageFallback(dataUrl,filename){
+  var existing=document.getElementById("imgFallback");
+  if(existing)existing.remove();
+  var modal=document.createElement("div");
+  modal.id="imgFallback";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px";
+  modal.innerHTML=
+    '<div style="margin-bottom:14px;text-align:center"><div style="font-size:11px;color:#fb923c;font-family:Inter,sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:4px">📥 Bild speichern</div><div style="font-size:10px;color:#cbd5e1;font-family:Inter,sans-serif">Long-press auf das Bild → <b style="color:#fff">Bild speichern</b></div></div>'+
+    '<div style="max-width:100%;max-height:65vh;overflow:auto;border-radius:12px;box-shadow:0 0 60px rgba(251,146,60,.3);margin-bottom:18px"><img src="'+dataUrl+'" style="width:100%;max-width:480px;display:block;border-radius:12px" alt="Live Pricing"></div>'+
+    '<button onclick="document.getElementById(\'imgFallback\').remove()" style="background:rgba(20,30,55,.6);border:1px solid rgba(60,80,110,.4);color:#94a3b8;padding:10px 20px;border-radius:8px;font-family:Inter,sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer">✕ Close</button>';
+  document.body.appendChild(modal);
 }
 
 function walConfirmChange(){
