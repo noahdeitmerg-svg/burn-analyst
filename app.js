@@ -3711,41 +3711,56 @@ function updateSysStatus(){
 loadOffline();
 if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
 ptfLoad();
-// One-time BTC migration: fix botched manual buys where pre-existing holdings were lost
+// One-time BTC migration v2: repair botched state where asset.amount was overwritten incorrectly
 try{
-  var migrated=localStorage.getItem("btc_migration_v1");
+  var migrated=localStorage.getItem("btc_migration_v2");
   if(!migrated){
     var btcA=null;
     for(var bi=0;bi<ptfAssets.length;bi++){if(ptfAssets[bi].id==="btc"){btcA=ptfAssets[bi];break;}}
     if(btcA){
       var btcEntries=ptfLedger.filter(function(e){return e.asset==="btc";});
-      // Detect botched state: amount > 0 but totalCost suspiciously low (only matches recent buy) OR ledger sum != asset.totalCost
       var ledgerSumCost=0,ledgerSumAmt=0;
       for(var bj=0;bj<btcEntries.length;bj++){ledgerSumCost+=btcEntries[bj].total;ledgerSumAmt+=btcEntries[bj].amount;}
-      // If ledger has entries but total amount in ledger < actual asset amount → missing pre-existing holdings
-      if(btcEntries.length>0&&ledgerSumAmt<btcA.amount-0.0000001){
-        var missingAmt=btcA.amount-ledgerSumAmt;
-        // Reconstruct pre-existing entry: 0.00692908 BTC @ avg $68000 = $471.18 (from PTF_DEFAULTS)
+      // Case A: Asset has cost but no ledger entries → create pre-existing entry
+      if(btcEntries.length===0&&btcA.amount>0&&(btcA.totalCost||0)>0){
         ptfLedger.unshift({
-          id:"ptx_pre_btc",
-          asset:"btc",
-          amount:missingAmt,
-          price:68000,
-          total:Math.round(missingAmt*68000*100)/100,
-          date:"2024-01-01",
-          wallet:"Ledger",
-          note:"Pre-existing holdings (recovered)"
+          id:"ptx_pre_btc",asset:"btc",amount:btcA.amount,price:btcA.avgEntry||(btcA.totalCost/btcA.amount),
+          total:btcA.totalCost,date:"2024-01-01",wallet:"Ledger",note:"Pre-existing holdings (auto-recovered)"
         });
-        // Recalc
-        var allBtc=ptfLedger.filter(function(e){return e.asset==="btc";});
-        var sc=0,sa=0;
-        for(var bk=0;bk<allBtc.length;bk++){sc+=allBtc[bk].total;sa+=allBtc[bk].amount;}
-        if(sa>0){btcA.avgEntry=sc/sa;btcA.totalCost=sc;}
+        ledgerSumAmt=btcA.amount;ledgerSumCost=btcA.totalCost;
+        console.log("BTC migration v2 [A]: created pre-existing entry");
+      }
+      // Case B: Asset amount < ledger sum (botched state from broken btcConfirmBuy) — trust ledger
+      else if(btcEntries.length>0&&btcA.amount<ledgerSumAmt-0.0000001){
+        console.log("BTC migration v2 [B]: asset.amount("+btcA.amount+") < ledger sum("+ledgerSumAmt+") — trusting ledger");
+        // Check if pre-existing entry is missing (ledger only contains the recent buy)
+        var hasPreExisting=false;
+        for(var be=0;be<btcEntries.length;be++){
+          if(btcEntries[be].note&&btcEntries[be].note.indexOf("Pre-existing")>=0){hasPreExisting=true;break;}
+        }
+        if(!hasPreExisting){
+          // Add pre-existing entry from PTF_DEFAULTS values
+          ptfLedger.unshift({
+            id:"ptx_pre_btc",asset:"btc",amount:0.00692908,price:68000,total:471.18,
+            date:"2024-01-01",wallet:"Ledger",note:"Pre-existing holdings (auto-recovered)"
+          });
+          console.log("BTC migration v2 [B]: added missing pre-existing entry 0.00692908 BTC");
+        }
+      }
+      // Case C: Ledger has pre-existing + new buy, but asset.amount is wrong → recompute from ledger
+      // (This is the actual fix path)
+      var allBtc=ptfLedger.filter(function(e){return e.asset==="btc";});
+      var finalAmt=0,finalCost=0;
+      for(var bk=0;bk<allBtc.length;bk++){finalAmt+=allBtc[bk].amount;finalCost+=allBtc[bk].total;}
+      if(finalAmt>0){
+        btcA.amount=finalAmt;
+        btcA.totalCost=finalCost;
+        btcA.avgEntry=finalCost/finalAmt;
         ptfSave();
-        console.log("BTC migration v1: recovered "+missingAmt+" BTC pre-existing holdings, new avgEntry $"+btcA.avgEntry.toFixed(2)+", total cost $"+btcA.totalCost.toFixed(2));
+        console.log("BTC migration v2: final state — amount "+finalAmt.toFixed(8)+" BTC, avg $"+btcA.avgEntry.toFixed(2)+", cost $"+finalCost.toFixed(2));
       }
     }
-    localStorage.setItem("btc_migration_v1","done");
+    localStorage.setItem("btc_migration_v2","done");
   }
 }catch(e){console.log("BTC migration error:",e);}
 ptfRenderTable();ptfRenderLedger();ptfUpdateDropdown();
