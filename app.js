@@ -114,9 +114,6 @@ function v3(B,lo,hi,P){
 // ═══ STATE ═══
 var X=0,Y=0,K=0,P=0,SRC="",TAB="auto",RAW=null;
 var POOL_LIQ=0;
-// V3 buyflow: USDC needed to push price from P to target
-function v3Buy(target){if(POOL_LIQ<=0||P<=0||target<=P)return{usdc:0,burn:0};
-  return{usdc:POOL_LIQ*(Math.sqrt(target)-Math.sqrt(P))/1e12,burn:POOL_LIQ*(1/Math.sqrt(P)-1/Math.sqrt(target))/1e12};}
 async function fetchPoolLiq(){try{var r=await rpc(POOL,"0x1a686502");if(r&&r.length>=34)POOL_LIQ=Number(BigInt("0x"+(r||"0").slice(2)));console.log("Pool L:",POOL_LIQ);}catch(e){}}
 
 // ═══ FETCH: 30-day BURN price (GeckoTerminal OHLCV daily) ═══
@@ -2684,33 +2681,64 @@ function ptfDetectBalances(){
 
 // ETH (Mainnet) + BTC detection with change dialog
 var ptfLastLedgerDetect=0;
+// Failure tracking for ETH/BTC fetch — 3 retries with 30s delay, then alert
+var ptfFetchFails={eth:0,btc:0,ethLastErr:0,btcLastErr:0};
 function ptfDetectLedgerBalances(){
   try{
-    if(Date.now()-ptfLastLedgerDetect<600000)return;
+    if(Date.now()-ptfLastLedgerDetect<300000)return;
     ptfLastLedgerDetect=Date.now();
-    // Step 1: Fetch ETH via Mainnet
+    // Step 1: Fetch ETH via Mainnet (3 retries with 30s delay built-in via cycle re-runs)
     var tried=0;
     function fetchEth(cb){
-      if(tried>=PTF_ETH_RPC.length){cb(0);return;}
+      if(tried>=PTF_ETH_RPC.length){
+        // All RPCs failed this cycle
+        ptfFetchFails.eth++;
+        ptfFetchFails.ethLastErr=Date.now();
+        console.log("PTF detect: ETH fetch failed (attempt "+ptfFetchFails.eth+"/3)");
+        if(ptfFetchFails.eth>=3){
+          notify("⚠ ETH Balance Check Failed","Using cached value. RPC unreachable after 3 attempts.");
+          ptfFetchFails.eth=0; // Reset, will warn again on next failure cycle
+        }
+        cb(0);return;
+      }
       var url=PTF_ETH_RPC[tried];tried++;
       var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},8000);
       fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({jsonrpc:"2.0",method:"eth_getBalance",params:[PTF_LEDGER_WALLET,"latest"],id:1}),signal:ac.signal})
         .then(function(r){clearTimeout(tm);return r.json();})
-        .then(function(j){if(j.result){cb(parseInt(j.result,16)/1e18);}else{fetchEth(cb);}})
+        .then(function(j){if(j.result){ptfFetchFails.eth=0;cb(parseInt(j.result,16)/1e18);}else{fetchEth(cb);}})
         .catch(function(){clearTimeout(tm);fetchEth(cb);});
     }
-    // Step 2: Fetch BTC via Mempool
+    // Step 2: Fetch BTC via Mempool with fallback to blockstream
     function fetchBtc(cb){
-      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-      fetch("https://mempool.space/api/address/"+PTF_LEDGER_BTC_ADDR,{signal:ac.signal})
-        .then(function(r){clearTimeout(tm);return r.json();})
-        .then(function(d){
-          if(d&&d.chain_stats){
-            var sat=(d.chain_stats.funded_txo_sum||0)-(d.chain_stats.spent_txo_sum||0);
-            cb(sat/100000000);
-          }else{cb(0);}
-        }).catch(function(){clearTimeout(tm);cb(0);});
+      var btcTried=0;
+      var btcUrls=[
+        "https://mempool.space/api/address/"+PTF_LEDGER_BTC_ADDR,
+        "https://blockstream.info/api/address/"+PTF_LEDGER_BTC_ADDR
+      ];
+      function tryNext(){
+        if(btcTried>=btcUrls.length){
+          ptfFetchFails.btc++;
+          ptfFetchFails.btcLastErr=Date.now();
+          console.log("PTF detect: BTC fetch failed (attempt "+ptfFetchFails.btc+"/3)");
+          if(ptfFetchFails.btc>=3){
+            notify("⚠ BTC Balance Check Failed","Using cached value. Both APIs unreachable.");
+            ptfFetchFails.btc=0;
+          }
+          cb(0);return;
+        }
+        var u=btcUrls[btcTried];btcTried++;
+        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+        fetch(u,{signal:ac.signal})
+          .then(function(r){clearTimeout(tm);return r.json();})
+          .then(function(d){
+            if(d&&d.chain_stats){
+              var sat=(d.chain_stats.funded_txo_sum||0)-(d.chain_stats.spent_txo_sum||0);
+              ptfFetchFails.btc=0;cb(sat/100000000);
+            }else{tryNext();}
+          }).catch(function(){clearTimeout(tm);tryNext();});
+      }
+      tryNext();
     }
     fetchEth(function(newEth){
       fetchBtc(function(newBtc){
@@ -2755,18 +2783,32 @@ function ptfDetectLedgerBalances(){
 function ptfShowDetection(symbol,delta,newBalance){
   var isBuy=delta>0;var absDelta=Math.abs(delta);
   var label=isBuy?"New "+symbol+" detected":symbol+" sent";
-  var sign=isBuy?"+":"-";var color=isBuy?"var(--g)":"var(--r)";
-  var bClr=isBuy?"rgba(52,211,153,.3)":"rgba(248,113,113,.3)";
+  var sign=isBuy?"+":"-";
+  var headerClr=isBuy?"var(--g)":"var(--r)";
+  var headerBg=isBuy?"rgba(52,211,153,.15)":"rgba(248,113,113,.15)";
+  var headerBgFade=isBuy?"rgba(52,211,153,.05)":"rgba(248,113,113,.05)";
+  var headerBd=isBuy?"rgba(52,211,153,.4)":"rgba(248,113,113,.4)";
+  var headerShadow=isBuy?"rgba(52,211,153,.2)":"rgba(248,113,113,.2)";
+  var btnClr=isBuy?"var(--g)":"var(--o)";
+  var btnBg=isBuy?"rgba(52,211,153,.18)":"rgba(251,146,60,.18)";
+  var btnBd=isBuy?"rgba(52,211,153,.5)":"rgba(251,146,60,.5)";
   ptfPendingDetection={symbol:symbol.toLowerCase(),delta:absDelta,isBuy:isBuy,newBalance:newBalance};
   $("ptfDetectDiv").innerHTML=
-    '<div style="background:rgba(14,20,35,.95);border:1px solid '+bClr+';border-radius:10px;padding:14px;margin-bottom:10px">'+
-      '<div style="font-size:11px;font-weight:600;color:'+color+'">'+label+'</div>'+
-      '<div style="font-size:16px;font-weight:700;color:'+color+';margin:6px 0">'+sign+absDelta.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</div>'+
-      '<div style="display:flex;gap:6px;align-items:flex-end;margin-top:8px">'+
-        '<div><div style="font-size:8px;color:var(--dm)">'+(isBuy?'PURCHASE':'SELL')+' PRICE $</div>'+
-          '<input class="inp" id="ptfDetectPrice" type="number" step="any" style="width:100px;font-size:11px" placeholder="'+(symbol==="BTC"?'68000':'2300')+'"></div>'+
-        '<button class="btn" onclick="ptfConfirmDetection()" style="font-size:10px">'+(isBuy?'Confirm Purchase':'Confirm Sell')+'</button>'+
-        '<button class="btn" onclick="ptfDismissDetection()" style="font-size:10px;opacity:.5">Dismiss</button>'+
+    '<div style="margin-bottom:10px;padding:12px 14px;border-radius:12px;'+
+      'background:linear-gradient(180deg,'+headerBg+','+headerBgFade+');'+
+      'border:1px solid '+headerBd+';'+
+      'box-shadow:0 0 24px '+headerShadow+',0 0 0 1px '+headerShadow+' inset">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'+
+        '<div style="font-weight:700;color:'+headerClr+';text-transform:uppercase;letter-spacing:1.2px;font-size:9px;font-family:Inter,sans-serif">'+(isBuy?"⚡ ":"⚠ ")+label+'</div>'+
+        '<div style="flex:1"></div>'+
+        '<div style="font-size:18px;font-weight:700;color:'+headerClr+';font-family:Geist Mono,monospace">'+sign+absDelta.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</div>'+
+      '</div>'+
+      '<div style="font-size:9px;color:var(--mt);margin-bottom:10px;letter-spacing:.5px">New balance: <span style="color:var(--br);font-weight:600">'+newBalance.toFixed(symbol==="BTC"?8:6)+' '+symbol+'</span></div>'+
+      '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">'+
+        '<div style="flex:1;min-width:130px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">'+(isBuy?"Purchase":"Sell")+' price (USD)</div>'+
+          '<input class="inp" id="ptfDetectPrice" type="number" step="any" style="width:100%;font-size:13px;padding:8px;background:rgba(8,12,22,.6);border:1px solid rgba(60,80,110,.4);border-radius:6px;color:var(--br)" placeholder="'+(symbol==="BTC"?"68000":"2300")+'"></div>'+
+        '<button onclick="ptfConfirmDetection()" style="background:linear-gradient(180deg,'+btnBg+',rgba(0,0,0,.05));border:1px solid '+btnBd+';color:'+btnClr+';padding:9px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:38px;white-space:nowrap">✓ Save</button>'+
+        '<button onclick="ptfDismissDetection()" style="background:rgba(12,18,32,.6);border:1px solid rgba(60,80,110,.3);color:var(--dm);padding:9px 12px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:38px">Dismiss</button>'+
       '</div>'+
     '</div>';
 }
@@ -2847,9 +2889,16 @@ function ptfRenderTable(){
       var pnlH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnl>=0?"+$":"-$")+F(Math.abs(pnl),2)+'</span>':"—";
       var pctH=a.totalCost>0?'<span style="color:'+pnlClr+'">'+(pnlPct>=0?"+":"")+pnlPct.toFixed(1)+'%</span>':"—";
       var srcClr=a.source==="ledger"?"var(--cy)":"var(--dm)";
+      // Failure indicator for ETH/BTC if recent fetch failed
+      var failBadge="";
+      if(a.id==="eth"&&ptfFetchFails.ethLastErr>0&&Date.now()-ptfFetchFails.ethLastErr<900000){
+        failBadge=' <span style="color:var(--r);font-weight:700;font-size:11px" title="ETH balance fetch failed — using cached value">⚠</span>';
+      }else if(a.id==="btc"&&ptfFetchFails.btcLastErr>0&&Date.now()-ptfFetchFails.btcLastErr<900000){
+        failBadge=' <span style="color:var(--r);font-weight:700;font-size:11px" title="BTC balance fetch failed — using cached value">⚠</span>';
+      }
       var actH=a.source==="ledger"?'<span class="tg" style="background:rgba(34,211,238,.1);color:var(--cy)">ledger</span>':'<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
       var costH=a.totalCost>0?'$'+F(a.totalCost,2):"—";
-      rows.push('<tr><td class="bld">'+a.symbol+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--dm)">'+costH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
+      rows.push('<tr><td class="bld">'+a.symbol+failBadge+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--dm)">'+costH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
     }
     $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="9" style="color:var(--dm);text-align:center">No assets</td></tr>';
     ptfTotalDisplay=totVal;
@@ -3401,7 +3450,7 @@ function startRefresh(){
   _refreshId=setInterval(function(){if(document.hidden)return;_refreshCount++;
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
     if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}}
-    if(_refreshCount%10===0){try{ptfDetectLedgerBalances();}catch(e){}}
+    if(_refreshCount%5===0){try{ptfDetectLedgerBalances();}catch(e){}}
     // Auto LP Map scan every 5 min (count 5 = 5*60s = 300s)
     if(_refreshCount%5===0){try{lmapCache=null;lmapTs=0;scanLiqMap();}catch(e){}}
     // Sync portfolio to Hetzner for push alerts
