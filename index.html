@@ -377,13 +377,10 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 
 
 <!-- ═══ 1. HERO: LIVE PRICING ═══ -->
-<div class="hero-card" id="heroCardCapture">
+<div class="hero-card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:9px;color:var(--o);text-transform:uppercase;letter-spacing:1.5px;font-weight:600;font-family:Inter,sans-serif"><span style="color:var(--o);margin-right:4px">◆</span> LIVE PRICING</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <button onclick="shareHeroCard()" data-noshare="1" style="background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.4);color:var(--o);padding:5px 9px;border-radius:7px;font-family:Inter,sans-serif;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;cursor:pointer;display:flex;align-items:center;gap:4px" title="Share / Save image">📤 Share</button>
-      <div id="astat" style="font-size:9px;color:var(--g);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--g)"></span>Connecting...</div>
-    </div>
+    <div id="astat" style="font-size:9px;color:var(--g);display:flex;align-items:center;gap:4px"><span class="live-dot" style="background:var(--g)"></span>Connecting...</div>
   </div>
   <div class="rings">
     <div class="orb" style="border-color:var(--p)">
@@ -519,6 +516,9 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   <div class="col" onclick="tog(this,'sec-ptf')">🌐 Altcoin Portfolio</div>
   <div id="sec-ptf" class="col-b">
     <div id="ptfDetectDiv"></div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button onclick="btcAddBuyBanner()" style="background:linear-gradient(180deg,rgba(247,147,26,.18),rgba(247,147,26,.05));border:1px solid rgba(247,147,26,.5);color:#f7931a;padding:7px 12px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;display:flex;align-items:center;gap:5px" title="Manueller BTC-Kauf hinzufügen">+ BTC Kauf</button>
+    </div>
     <div id="ptfPerformers" style="text-align:center;font-size:11px;margin-bottom:8px"></div>
     <div id="ptfSummary" class="mg" style="margin-bottom:10px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
     <div class="col" onclick="tog(this,'sec-ptf-charts')" style="font-size:10px">📊 Portfolio Charts</div>
@@ -790,8 +790,6 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dom-to-image-more@3.5.0/dist/dom-to-image-more.min.js"></script>
 <script src="app.js"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';

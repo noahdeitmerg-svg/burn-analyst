@@ -409,99 +409,6 @@ function renderWal(){
 }
 
 // Confirm wallet balance change — invoked by inline onclick
-// ═══ SHARE: Hero Card als PNG (Web Share API + Long-press Fallback) ═══
-async function shareHeroCard(){
-  var el=document.getElementById("heroCardCapture");
-  if(!el){alert("Card not found");return;}
-  var hideEls=el.querySelectorAll('[data-noshare="1"], #astat');
-  for(var i=0;i<hideEls.length;i++)hideEls[i].style.visibility="hidden";
-  var existingWm=document.getElementById("shareWatermark");
-  if(existingWm)existingWm.remove();
-  var ts=new Date().toLocaleString("de-DE",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-  var wm=document.createElement("div");
-  wm.id="shareWatermark";
-  wm.style.cssText="position:absolute;bottom:8px;right:14px;font-size:9px;font-family:Inter,sans-serif;font-weight:500;color:rgba(148,163,184,0.6);letter-spacing:.3px;z-index:5;pointer-events:none";
-  wm.textContent=ts+" · @noah.eth";
-  el.appendChild(wm);
-
-  try{
-    var dataUrl=null;
-    var rect=el.getBoundingClientRect();
-    var w=Math.round(rect.width),h=Math.round(rect.height);
-    if(typeof domtoimage!=="undefined"){
-      try{
-        dataUrl=await domtoimage.toPng(el,{
-          width:w*3,height:h*3,quality:1,bgcolor:"#05080f",
-          style:{transform:"scale(3)",transformOrigin:"top left",width:w+"px",height:h+"px"}
-        });
-      }catch(domErr){console.log("dom-to-image failed:",domErr);}
-    }
-    if(!dataUrl&&typeof html2canvas!=="undefined"){
-      var canvas=await html2canvas(el,{scale:3,backgroundColor:"#05080f",logging:false,useCORS:true});
-      dataUrl=canvas.toDataURL("image/png",1.0);
-    }
-    if(!dataUrl){alert("Capture failed");return;}
-
-    var tsFile=new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
-    var filename="burn-live-"+tsFile+".png";
-
-    // Convert dataUrl to Blob/File
-    var resp=await fetch(dataUrl);
-    var blob=await resp.blob();
-    var file=new File([blob],filename,{type:"image/png"});
-
-    // PRIMARY: Web Share API with file (best Android UX)
-    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
-      try{
-        await navigator.share({files:[file],title:"BURN Live Pricing"});
-        // Success — Android share-sheet opened, user picks "Save to Gallery"/"Telegram"/etc.
-        flashSavedFeedback(el);
-        return;
-      }catch(shareErr){
-        if(shareErr.name==="AbortError")return; // user cancelled, no fallback
-        console.log("Web Share failed, opening fallback modal:",shareErr);
-      }
-    }
-
-    // FALLBACK: Show image fullscreen, user long-presses to save
-    showImageFallback(dataUrl,filename);
-
-  }catch(e){
-    console.log("share err:",e);
-    alert("Capture failed: "+(e&&e.message?e.message:e));
-  }finally{
-    var wmFinal=document.getElementById("shareWatermark");
-    if(wmFinal)wmFinal.remove();
-    for(var j=0;j<hideEls.length;j++)hideEls[j].style.visibility="";
-  }
-}
-
-function flashSavedFeedback(el){
-  var btn=el.querySelector('[data-noshare="1"]');
-  if(!btn)return;
-  var orig=btn.innerHTML;
-  btn.innerHTML="✓ Shared";
-  btn.style.color="var(--g)";
-  btn.style.borderColor="rgba(52,211,153,.5)";
-  btn.style.background="rgba(52,211,153,.12)";
-  setTimeout(function(){
-    btn.innerHTML=orig;
-    btn.style.color="";btn.style.borderColor="";btn.style.background="";
-  },1800);
-}
-
-function showImageFallback(dataUrl,filename){
-  var existing=document.getElementById("imgFallback");
-  if(existing)existing.remove();
-  var modal=document.createElement("div");
-  modal.id="imgFallback";
-  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px";
-  modal.innerHTML=
-    '<div style="margin-bottom:14px;text-align:center"><div style="font-size:11px;color:#fb923c;font-family:Inter,sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:4px">📥 Bild speichern</div><div style="font-size:10px;color:#cbd5e1;font-family:Inter,sans-serif">Long-press auf das Bild → <b style="color:#fff">Bild speichern</b></div></div>'+
-    '<div style="max-width:100%;max-height:65vh;overflow:auto;border-radius:12px;box-shadow:0 0 60px rgba(251,146,60,.3);margin-bottom:18px"><img src="'+dataUrl+'" style="width:100%;max-width:480px;display:block;border-radius:12px" alt="Live Pricing"></div>'+
-    '<button onclick="document.getElementById(\'imgFallback\').remove()" style="background:rgba(20,30,55,.6);border:1px solid rgba(60,80,110,.4);color:#94a3b8;padding:10px 20px;border-radius:8px;font-family:Inter,sans-serif;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer">✕ Close</button>';
-  document.body.appendChild(modal);
-}
 
 function walConfirmChange(){
   var totalNow=MY_BURN+MY_STBURN;
@@ -3015,6 +2922,112 @@ function ptfConfirmDetection(){
 
 function ptfDismissDetection(){
   ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
+}
+
+// ═══ BTC manueller Kauf-Banner (für Ledger-Adress-Rotation Workaround) ═══
+function btcAddBuyBanner(){
+  // Find current BTC asset
+  var btcAsset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="btc"){btcAsset=ptfAssets[i];break;}}
+  if(!btcAsset){alert("BTC asset not found");return;}
+  var currentAmount=btcAsset.amount||0;
+  $("ptfDetectDiv").innerHTML=
+    '<div style="margin-bottom:10px;padding:14px 14px 12px 14px;border-radius:12px;'+
+      'background:linear-gradient(180deg,rgba(247,147,26,.12),rgba(247,147,26,.03));'+
+      'border:1px solid rgba(247,147,26,.4);'+
+      'box-shadow:0 0 24px rgba(247,147,26,.15),0 0 0 1px rgba(247,147,26,.15) inset">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">'+
+        '<div style="font-weight:700;color:#f7931a;text-transform:uppercase;letter-spacing:1.2px;font-size:9px;font-family:Inter,sans-serif">+ BTC Kauf hinzufügen</div>'+
+        '<div style="flex:1"></div>'+
+        '<div style="font-size:9px;color:var(--mt)">aktuell: <span style="color:#f7931a;font-weight:600;font-family:Geist Mono,monospace">'+currentAmount.toFixed(8)+' BTC</span></div>'+
+      '</div>'+
+      '<div style="display:flex;flex-direction:column;gap:8px">'+
+        '<div>'+
+          '<div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Neue Total-Menge BTC (laut Ledger Live)</div>'+
+          '<input class="inp" id="btcNewAmount" type="number" step="any" oninput="btcUpdatePreview()" style="width:100%;font-size:13px;padding:9px;background:rgba(8,12,22,.6);border:1px solid rgba(60,80,110,.4);border-radius:6px;color:var(--br);font-family:Geist Mono,monospace" placeholder="z.B. '+(currentAmount+0.001).toFixed(8)+'">'+
+        '</div>'+
+        '<div>'+
+          '<div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Bezahlt für diese Tranche (USD)</div>'+
+          '<input class="inp" id="btcPaidUsd" type="number" step="any" oninput="btcUpdatePreview()" style="width:100%;font-size:13px;padding:9px;background:rgba(8,12,22,.6);border:1px solid rgba(60,80,110,.4);border-radius:6px;color:var(--br);font-family:Geist Mono,monospace" placeholder="z.B. 100.50">'+
+        '</div>'+
+      '</div>'+
+      '<div id="btcBuyPreview" style="margin-top:10px;padding:8px 10px;border-radius:6px;background:rgba(8,12,22,.4);font-size:9px;color:var(--dm);min-height:14px;font-family:Inter,sans-serif"></div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button onclick="btcConfirmBuy()" style="flex:1;background:linear-gradient(180deg,rgba(52,211,153,.18),rgba(0,0,0,.05));border:1px solid rgba(52,211,153,.5);color:var(--g);padding:10px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:40px">✓ Kauf speichern</button>'+
+        '<button onclick="ptfDismissDetection()" style="background:rgba(12,18,32,.6);border:1px solid rgba(60,80,110,.3);color:var(--dm);padding:10px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:40px">Abbrechen</button>'+
+      '</div>'+
+    '</div>';
+  setTimeout(function(){var inp=document.getElementById("btcNewAmount");if(inp)inp.focus();},100);
+}
+
+function btcUpdatePreview(){
+  var btcAsset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="btc"){btcAsset=ptfAssets[i];break;}}
+  if(!btcAsset)return;
+  var pv=document.getElementById("btcBuyPreview");
+  var newAmtInp=document.getElementById("btcNewAmount"),paidInp=document.getElementById("btcPaidUsd");
+  if(!pv||!newAmtInp||!paidInp)return;
+  var newAmt=parseFloat(newAmtInp.value),paid=parseFloat(paidInp.value);
+  var current=btcAsset.amount||0;
+  if(!newAmt||newAmt<=0){pv.innerHTML='<span style="color:var(--mt)">Neue Total-Menge eingeben...</span>';return;}
+  if(newAmt<=current){pv.innerHTML='<span style="color:var(--r)">⚠ Neue Menge ('+newAmt.toFixed(8)+') muss größer sein als aktuell ('+current.toFixed(8)+')</span>';return;}
+  var delta=newAmt-current;
+  if(!paid||paid<=0){
+    pv.innerHTML='Δ <span style="color:#f7931a;font-weight:600">+'+delta.toFixed(8)+' BTC</span> · Bezahlten Betrag eingeben...';
+    return;
+  }
+  var pricePerBtc=paid/delta;
+  var oldCost=btcAsset.totalCost||0;
+  var newTotalCost=oldCost+paid;
+  var newAvgEntry=newAmt>0?newTotalCost/newAmt:0;
+  pv.innerHTML=
+    'Δ <span style="color:#f7931a;font-weight:600">+'+delta.toFixed(8)+' BTC</span> · '+
+    'Buy-Preis: <span style="color:var(--cy);font-weight:600">$'+F(pricePerBtc,2)+'/BTC</span><br>'+
+    'Neuer Avg: <span style="color:var(--g);font-weight:600">$'+F(newAvgEntry,2)+'</span> · '+
+    'Total Cost: <span style="color:var(--g);font-weight:600">$'+F(newTotalCost,2)+'</span>';
+}
+
+function btcConfirmBuy(){
+  var btcAsset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="btc"){btcAsset=ptfAssets[i];break;}}
+  if(!btcAsset){alert("BTC asset not found");return;}
+  var newAmtInp=document.getElementById("btcNewAmount"),paidInp=document.getElementById("btcPaidUsd");
+  var newAmt=parseFloat(newAmtInp.value),paid=parseFloat(paidInp.value);
+  var current=btcAsset.amount||0;
+  if(!newAmt||newAmt<=current){newAmtInp.style.borderColor="var(--r)";return;}
+  if(!paid||paid<=0){paidInp.style.borderColor="var(--r)";return;}
+  var delta=newAmt-current;
+  var pricePerBtc=paid/delta;
+  // Add to ledger
+  ptfLedger.push({
+    id:"ptx_"+Date.now(),
+    asset:"btc",
+    amount:delta,
+    price:pricePerBtc,
+    total:paid,
+    date:new Date().toISOString().split("T")[0],
+    wallet:"Ledger",
+    note:"Manual BTC buy"
+  });
+  // Update asset: recalc avgEntry from full ledger
+  var entries=ptfLedger.filter(function(e){return e.asset==="btc";});
+  var sumCost=0,sumAmt=0;
+  for(var j=0;j<entries.length;j++){sumCost+=entries[j].total;sumAmt+=entries[j].amount;}
+  if(sumAmt>0){
+    btcAsset.avgEntry=sumCost/sumAmt;
+    btcAsset.totalCost=sumCost;
+  }else{
+    // First entry — no prior ledger
+    btcAsset.avgEntry=pricePerBtc;
+    btcAsset.totalCost=paid;
+  }
+  btcAsset.amount=newAmt;
+  ptfSave();
+  try{ptfRenderTable();}catch(e){}
+  try{ptfRenderLedger();}catch(e){}
+  console.log("BTC buy added: +"+delta+" BTC for $"+paid+" (price $"+pricePerBtc.toFixed(2)+"/BTC)");
+  // Close banner
+  $("ptfDetectDiv").innerHTML="";
 }
 
 function ptfFP(p){if(p>=1000)return F(p,2);if(p>=1)return F(p,2);if(p>=0.01)return p.toFixed(4);return p.toFixed(6);}
