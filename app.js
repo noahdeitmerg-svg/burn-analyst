@@ -1433,6 +1433,8 @@ async function scanLiqMap(){
       }
     }catch(e){}
     renderLmap(buckets);
+    // Re-render Market Analysis + Sell Impact with fresh V3 data
+    try{if(P>0)render();}catch(e){console.log("post-lmap render err:",e.message);}
   }catch(e){console.log("LMAP err:",e);
     // Keep previous owners if scan fails
     if(!window._lpOwners||window._lpOwners.length===0){
