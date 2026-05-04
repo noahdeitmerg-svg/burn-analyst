@@ -348,7 +348,18 @@ function renderWal(){
   var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   var totalTokens=MY_BURN+MY_STBURN;
-  var totalBurnEq=MY_BURN+(MY_STBURN*stR);
+  // Calculate LP BURN-Left (BURN tokens still in active LPs, not yet sold to USDC)
+  var lpBurnLeft=0;
+  try{
+    if(typeof LP!=="undefined"&&typeof v3==="function"&&typeof P!=="undefined"&&P>0){
+      for(var lpi=0;lpi<LP.length;lpi++){
+        if(LP[lpi].fr)continue; // skip DAO full range
+        var lpv=v3(LP[lpi].b,LP[lpi].lo,LP[lpi].hi,P);
+        lpBurnLeft+=lpv.left;
+      }
+    }
+  }catch(e){}
+  var totalBurnEq=MY_BURN+(MY_STBURN*stR)+lpBurnLeft;
 
   // ─── Wallet Change Detection ───
   // Persist last confirmed total. If current total deviates >1 BURN → ALARM
@@ -405,6 +416,7 @@ function renderWal(){
       '<span style="font-size:9px;color:#ffffff;text-transform:uppercase;letter-spacing:1.2px;font-weight:600">BURN-Equivalent ≈</span> '+
       '<span style="color:var(--cy);font-weight:700;font-size:17px;margin-left:2px">'+F(totalBurnEq,0)+'</span>'+
       '<span style="font-size:11px;color:var(--cy);margin-left:4px;font-weight:500;opacity:.8">BURN</span>'+
+      (lpBurnLeft>0?'<div style="font-size:9px;color:var(--mt);margin-top:3px;letter-spacing:.3px">incl. <span style="color:var(--b);font-weight:600">'+F(lpBurnLeft,0)+'</span> BURN in LPs</div>':'')+
     '</div>';
 }
 
