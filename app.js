@@ -1088,7 +1088,8 @@ function encI256(v){if(v>=0)return BigInt(v).toString(16).padStart(64,"0");retur
 function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
 
 async function scanLiqMap(){
-  if(lmapCache&&lmapTs>Date.now()-600000){renderLmap(lmapCache);return;}
+  // Cache lifetime: 4 min (shorter than 5-min auto-scan interval)
+  if(lmapCache&&lmapTs>Date.now()-240000){renderLmap(lmapCache);return;}
   var hasCached=window._lpOwners&&window._lpOwners.length>0;
   if(!hasCached){
     $("lmapB").innerHTML='<tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
@@ -3667,8 +3668,8 @@ function startRefresh(){
     if(TAB==="auto")go();fetchSt();fetchSup();fetchTrades();fetchWal();
     if(_refreshCount%5===0){fetchLPs();try{ptfFetchPrices();ptfDetectBalances();}catch(e){}}
     if(_refreshCount%5===0){try{ptfDetectLedgerBalances();}catch(e){}}
-    // Auto LP Map scan every 5 min (count 5 = 5*60s = 300s)
-    if(_refreshCount%5===0){try{lmapCache=null;lmapTs=0;scanLiqMap();}catch(e){}}
+    // Auto LP Map scan every 5 min (5 × 60s)
+    if(_refreshCount%5===0){try{scanLiqMap();}catch(e){}}
     // Sync portfolio to Hetzner for push alerts
     if(_refreshCount%5===0){try{syncPortfolioToServer();}catch(e){}}
     if(_refreshCount%60===0){try{fetchBurn30d();}catch(e){}}
@@ -3808,8 +3809,8 @@ try{
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
-// Auto-scan LP Map after 10s (let other data load first)
-setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
+// Auto-scan LP Map immediately at startup
+try{scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
 startRefresh();
