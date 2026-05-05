@@ -659,7 +659,8 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report (BR)</div>
   <div id="sec-tax" class="col-b">
     <!-- BR Tax Compliance Module -->
-    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🇧🇷 Brasil — Lei 14.754/2023 (Auslandsregime, 15% jährlich)</div>
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🇧🇷 Brasil — Lei 14.754/2023 (Auslandsregime, 15% jährlich)</div>
+    <div style="text-align:center;font-size:8px;color:var(--cy);margin-bottom:8px">BR Steuerresidenz seit 12.09.2025 · davor DE (unter Freigrenze)</div>
     
     <!-- PTAX + Compliance Status -->
     <div id="brTaxStatus" class="mg" style="margin-bottom:10px">
@@ -690,6 +691,8 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
       </tr></thead><tbody id="permutaTableB"><tr><td colspan="7" style="color:var(--dm);text-align:center">Keine Events</td></tr></tbody></table></div>
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn" onclick="prmAddManual()" style="font-size:10px;border-color:var(--o)">+ Manuelles Permuta-Event</button>
+        <button class="btn" onclick="if(confirm('Alle Events neu aus PTF/CL/MS aufbauen?')){brInitCustoMedio();brRenderTaxUI();}" style="font-size:10px;border-color:var(--cy)">🔄 Re-Init</button>
+        <button class="btn" onclick="if(confirm('Alle BR Tax Events LÖSCHEN? Custo Médio bleibt!')){BR_PERMUTAS=[];brSavePermutas();brRenderTaxUI();}" style="font-size:10px;border-color:var(--r)">🗑️ Clear</button>
       </div>
     </div>
     
