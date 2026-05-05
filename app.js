@@ -749,23 +749,59 @@ function render(){
   // BUYFLOW — V3 concentrated liquidity calculation using real LP scan data
   function v3BuyflowCalc(curP,tgtP){
     if(!lmapCache||!curP||!tgtP||tgtP<=curP)return{usdc:0,burn:0};
-    var totalUsdc=0,totalBurn=0;
+    // Build sorted list of bucket coverage (only buckets WITH liquidity count as "V3 covered")
+    var coveredRanges=[];
     for(var bi=0;bi<lmapCache.length;bi++){
       var bk=lmapCache[bi];
-      if(bk.hi<=curP||bk.lo>=tgtP||bk.burn<=0)continue;
-      var pStart=Math.max(curP,bk.lo),pEnd=Math.min(tgtP,bk.hi);
-      // Fraction of bucket's BURN sold in overlap
-      var sqLo=1/Math.sqrt(bk.lo),sqHi=1/Math.sqrt(bk.hi);
-      var fullRange=sqLo-sqHi;
-      if(fullRange<=0)continue;
-      var overlapRange=1/Math.sqrt(pStart)-1/Math.sqrt(pEnd);
-      var frac=overlapRange/fullRange;
-      var burnSold=bk.burn*frac;
-      // USDC needed: derive L from burn, then L*(sqrt(pEnd)-sqrt(pStart))
-      var L=bk.burn/fullRange;
-      var usdcNeeded=L*(Math.sqrt(pEnd)-Math.sqrt(pStart));
-      totalBurn+=burnSold;
-      totalUsdc+=usdcNeeded;
+      if(bk.burn<=0)continue;
+      coveredRanges.push({lo:bk.lo,hi:bk.hi,bucket:bk});
+    }
+    coveredRanges.sort(function(a,b2){return a.lo-b2.lo;});
+    // Walk from curP to tgtP: use V3 in covered ranges, V2 in gaps
+    var totalUsdc=0,totalBurn=0;
+    var p=curP;
+    while(p<tgtP){
+      // Find next covered range that overlaps current position
+      var nextCovered=null;
+      for(var ci=0;ci<coveredRanges.length;ci++){
+        var cr=coveredRanges[ci];
+        if(cr.hi<=p)continue;
+        if(cr.lo<=p){nextCovered={lo:p,hi:Math.min(cr.hi,tgtP),bucket:cr.bucket};break;}
+        // Gap before this covered range — fill with V2
+        if(cr.lo>p){
+          var gapEnd=Math.min(cr.lo,tgtP);
+          if(K>0&&Y>0&&X>0){
+            var Lv2g=Math.sqrt(K);
+            totalUsdc+=Math.max(0,Lv2g*(Math.sqrt(gapEnd)-Math.sqrt(p)));
+            totalBurn+=Math.max(0,Lv2g*(1/Math.sqrt(p)-1/Math.sqrt(gapEnd)));
+          }
+          p=gapEnd;
+          if(p>=tgtP)break;
+          if(cr.lo<=p){nextCovered={lo:p,hi:Math.min(cr.hi,tgtP),bucket:cr.bucket};break;}
+        }
+      }
+      if(nextCovered){
+        // V3 calculation in this covered range
+        var bk2=nextCovered.bucket;
+        var sqLo2=1/Math.sqrt(bk2.lo),sqHi2=1/Math.sqrt(bk2.hi);
+        var fullRange2=sqLo2-sqHi2;
+        if(fullRange2>0){
+          var overlapRange2=1/Math.sqrt(nextCovered.lo)-1/Math.sqrt(nextCovered.hi);
+          var frac2=overlapRange2/fullRange2;
+          var L2=bk2.burn/fullRange2;
+          totalBurn+=bk2.burn*frac2;
+          totalUsdc+=L2*(Math.sqrt(nextCovered.hi)-Math.sqrt(nextCovered.lo));
+        }
+        p=nextCovered.hi;
+      }else{
+        // No more covered ranges — fill rest with V2
+        if(K>0&&Y>0&&X>0){
+          var Lv2e=Math.sqrt(K);
+          totalUsdc+=Math.max(0,Lv2e*(Math.sqrt(tgtP)-Math.sqrt(p)));
+          totalBurn+=Math.max(0,Lv2e*(1/Math.sqrt(p)-1/Math.sqrt(tgtP)));
+        }
+        p=tgtP;
+      }
     }
     return{usdc:totalUsdc,burn:totalBurn};
   }
@@ -1085,7 +1121,7 @@ function tog(el,id){
     }
   }
 }
-var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10];
+var LMAP_BUCKETS=[.05,.10,.12,.14,.16,.18,.20,.25,.30,.50,.75,1,1.5,2,3,5,10,20,50,100];
 
 
 async function batchRpc(calls){
