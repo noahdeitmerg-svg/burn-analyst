@@ -1414,8 +1414,10 @@ async function scanLiqMap(){
       for(var cli=0;cli<lpOwners.length;cli++){if(lpOwners[cli].closed)closedLPs.push(lpOwners[cli]);}
       if(closedLPs.length>0)localStorage.setItem("lmap_closed",JSON.stringify(closedLPs));
       localStorage.setItem("lmap_owners",JSON.stringify(lpOwners));
+      // Cache buckets so V3 buyflow works immediately on next app start
+      try{localStorage.setItem("lmap_buckets",JSON.stringify({buckets:buckets,ts:Date.now()}));}catch(e3){}
       window._lpOwners=lpOwners;
-      console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs");
+      console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs + "+buckets.length+" buckets");
     }catch(e){}
     // Update DAO Full Range LP with real on-chain data
     try{
@@ -1434,7 +1436,8 @@ async function scanLiqMap(){
     }catch(e){}
     renderLmap(buckets);
     // Re-render Market Analysis + Sell Impact with fresh V3 data
-    try{if(P>0)render();}catch(e){console.log("post-lmap render err:",e.message);}
+    console.log("LMAP DONE: cache="+(lmapCache?lmapCache.length:0)+" buckets, P="+P+", calling render()");
+    try{if(P>0){render();console.log("LMAP: post-render done, hasV3="+(lmapCache&&lmapCache.length>0));}}catch(e){console.log("post-lmap render err:",e.message);}
   }catch(e){console.log("LMAP err:",e);
     // Keep previous owners if scan fails
     if(!window._lpOwners||window._lpOwners.length===0){
@@ -3792,6 +3795,18 @@ try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 fetchBurn30d().then(function(){if(P>0)try{render();}catch(e){}});
 try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtra"))$("lmapExtra").value=savedExtra;}catch(e){}
+// Load cached buckets so V3 buyflow works immediately at app start (before scan completes)
+try{
+  var bcacheRaw=localStorage.getItem("lmap_buckets");
+  if(bcacheRaw){
+    var bcache=JSON.parse(bcacheRaw);
+    if(bcache&&bcache.buckets&&bcache.buckets.length>0){
+      lmapCache=bcache.buckets;
+      lmapTs=bcache.ts||0;
+      console.log("LMAP: loaded "+bcache.buckets.length+" cached buckets from "+(bcache.ts?new Date(bcache.ts).toISOString().slice(0,16):"unknown"));
+    }
+  }
+}catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 // Auto-scan LP Map after 10s (let other data load first)
 setTimeout(function(){try{scanLiqMap();}catch(e){}},10000);
