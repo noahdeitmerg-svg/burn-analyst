@@ -187,18 +187,8 @@ function h2n(h){if(!h||h==="0x"||h==="0x0")return 0;try{var v=Number(BigInt(h)*1
 function h2n6(h){if(!h||h==="0x"||h==="0x0")return 0;var v=parseInt(h,16)/1e6;return isFinite(v)?v:0;}
 
 // ═══ NOTIFICATIONS + SOUND ═══
-var prevPrice=0, notifOn=false, soundOn=false, audioCtx=null;
-function reqNotif(){if(!("Notification" in window)){alert("Browser does not support notifications");return;}
-  Notification.requestPermission().then(function(p){if(p==="granted"){notifOn=true;alert("🔔 Alerts enabled!");
-    // Subscribe to Web Push
-    if('serviceWorker' in navigator){navigator.serviceWorker.ready.then(function(reg){
-      reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)}).then(function(sub){
-        window._pushSub=sub;localStorage.setItem('push_sub',JSON.stringify(sub.toJSON()));
-        console.log('Push subscribed! Copy this to server:');console.log(JSON.stringify(sub.toJSON()));
-      }).catch(function(e){console.log('Push subscribe err:',e);});
-    });}
-  }});}
-function notify(title,body){if(notifOn&&Notification.permission==="granted"){try{new Notification(title,{body:body});}catch(e){}}if(soundOn)beep();}
+var prevPrice=0, soundOn=false, audioCtx=null;
+function notify(title,body){if(Notification&&Notification.permission==="granted"){try{new Notification(title,{body:body});}catch(e){}}if(soundOn)beep();}
 function toggleMute(){soundOn=!soundOn;$("mutBtn").textContent=soundOn?"🔊":"🔇";if(soundOn)beep();}
 function beep(){
   try{
@@ -682,13 +672,6 @@ function render(){
       [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
   }
 
-  // SUPPLY
-  if(sup.total>0){var bP=sup.total>0?(sup.burned/sup.total*100):0;
-    $("supplyGrid").innerHTML=[MB("Total Supply",F(sup.total,0),"var(--br)"),MB("Burned",F(sup.burned,0)+" ("+bP.toFixed(1)+"%"+")","var(--r)"),
-      MB("Locked",F(sup.locked,0),"var(--dm)"),MB("Circulating",F(sup.circ,0),"var(--o)"),
-      MB("stBURN Supply",F(sup.stSup,0),"var(--p)"),MB("Circ MCap","$"+F(sup.circ*P,0),"var(--g)")].join("");
-  }else{$("supplyGrid").innerHTML='<div class="ld">Loading on-chain supply data</div>';}
-
   // P&L ACTIVE (display)
   var maxHi=0;for(var mh=0;mh<LP.length;mh++){if(!LP[mh].fr&&LP[mh].hi>maxHi)maxHi=LP[mh].hi;}
   var lpExposure=portUsd>0?(lpV/portUsd*100):0;
@@ -754,7 +737,6 @@ function render(){
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
   try{renderLpPnl();}catch(e){}
   try{renderPushStatus();}catch(e){}
-  try{renderLpPnl();}catch(e){}
 
   // BUYFLOW — V3 concentrated liquidity calculation using real LP scan data
   function v3BuyflowCalc(curP,tgtP){
@@ -1003,10 +985,7 @@ function renderTrades(){
   $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
-  // (removed: renderWhales)
-
   try{renderCapitalFlow();}catch(e){}
-  try{renderPoolHealth();}catch(e){}
 }
 
 function tradePg(d){tradePg_+=d;renderTrades();}
@@ -1805,128 +1784,6 @@ function wtRender(d){
   else if(d.burn<=0&&d.stBurn<=0){h+='<div style="margin-top:8px;color:var(--dm);font-size:10px">No BURN holdings found</div>';}
   $("wtResult").innerHTML=h;
   var sec=$("sec-wt");if(sec&&!sec.classList.contains("open")){sec.classList.add("open");$("wtCol").classList.add("open");}
-}
-
-// ═══ PRICE SCENARIO SIMULATION ═══
-var simCache={};
-
-function runSim(focus){
-  if(P<=0||K<=0){$("simStatus").textContent="Need price data first";return;}
-  // Highlight active button
-  [30,90,180,365].forEach(function(d){$("sim"+d).style.borderColor=d===focus?"var(--b)":"";});
-
-  // Calculate daily metrics from trade data
-  var buyVol=0,sellVol=0,tradeDays=0;
-  if(allTrades.length>1){
-    var oldest=allTrades[allTrades.length-1].minAgo;
-    tradeDays=Math.max(1,oldest/1440);
-    for(var i=0;i<allTrades.length;i++){if(allTrades[i].isBuy)buyVol+=allTrades[i].usdc;else sellVol+=allTrades[i].usdc;}
-  }else{tradeDays=15;buyVol=500;sellVol=200;}
-  var dailyNetInflow=tradeDays>0?(buyVol-sellVol)/tradeDays:0;
-  var dailyBuyVol=tradeDays>0?buyVol/tradeDays:0;
-
-  // Price change from trades (momentum)
-  var dailyReturn=0;
-  if(allTrades.length>=2){
-    var pOld=allTrades[allTrades.length-1].price,pNew=allTrades[0].price;
-    if(pOld>0&&tradeDays>0)dailyReturn=(Math.pow(pNew/pOld,1/tradeDays)-1);
-  }
-
-  // Generate projections for each day
-  var horizons=[30,90,180,365];
-  var maxDays=focus;
-  var momentum=[],inflow=[],liquidity=[];
-
-  for(var d=0;d<=maxDays;d++){
-    // Model 1: Momentum (compound daily return)
-    var mP=P*Math.pow(1+dailyReturn,d);
-    momentum.push(mP);
-
-    // Model 2: Capital Inflow (buy pressure vs x*y=k)
-    var simY2=Y+dailyNetInflow*d;
-    var iP=simY2>0?simY2*simY2/K:P;
-    if(iP<P*0.1)iP=P*0.1; // floor
-    inflow.push(iP);
-
-    // Model 3: Liquidity-constrained (step through LP ranges)
-    var totalBuy=dailyBuyVol*d;
-    var simX3=X,simY3=Y;
-    // Simulate buys: USDC in, BURN out
-    if(totalBuy>0&&simX3>0){simY3=Y+totalBuy;simX3=K/simY3;}
-    var lP=simY3/simX3;
-    // Cap at realistic max (can't go infinite)
-    if(lP>P*100)lP=P*100;
-    liquidity.push(lP);
-  }
-
-  // Summary table for all horizons
-  var rows="";
-  var models=[
-    {name:"Momentum",clr:"var(--cy)",pts:function(dd){return P*Math.pow(1+dailyReturn,dd);}},
-    {name:"Capital Inflow",clr:"var(--g)",pts:function(dd){var sy=Y+dailyNetInflow*dd;return sy>0?sy*sy/K:P;}},
-    {name:"Liquidity",clr:"var(--o)",pts:function(dd){var sy=Y+dailyBuyVol*dd;var sx=K/sy;return sy/sx;}}
-  ];
-  for(var mi=0;mi<models.length;mi++){
-    var m=models[mi];
-    rows+='<tr><td style="color:'+m.clr+';font-weight:600">'+m.name+'</td>';
-    for(var hi=0;hi<horizons.length;hi++){
-      var fp=m.pts(horizons[hi]);
-      var mult=fp/P;
-      rows+='<td style="color:'+(fp>=P?"var(--g)":"var(--r)")+'">'+FP(fp)+'<br><span style="font-size:8px;color:var(--dm)">'+mult.toFixed(1)+'x</span></td>';}
-    rows+='</tr>';}
-  $("simB").innerHTML=rows;
-
-  // Summary grid
-  $("simGrid").innerHTML=
-    MB("Daily Return",(dailyReturn*100).toFixed(2)+"%",dailyReturn>=0?"var(--g)":"var(--r)")+
-    MB("Daily Buy Vol","$"+F(dailyBuyVol,0),"var(--cy)")+
-    MB("Net Inflow/Day","$"+F(dailyNetInflow,0),dailyNetInflow>=0?"var(--g)":"var(--r)")+
-    MB("Trade Days",Math.round(tradeDays)+"d","var(--br)");
-
-  // Draw chart
-  drawSimChart(focus,momentum,inflow,liquidity);
-  $("simStatus").textContent="Based on "+allTrades.length+" trades over "+Math.round(tradeDays)+"d · "+new Date().toLocaleTimeString();
-}
-
-function drawSimChart(days,mom,inf,liq){
-  // Find min/max across all series
-  var allPts=mom.concat(inf).concat(liq);
-  var mn=Math.min.apply(null,allPts),mx=Math.max.apply(null,allPts);
-  if(mx<=mn)mx=mn*1.1||1;
-  var w=700,h=180,pad=40,pw=w-pad*2,ph=h-30;
-
-  function toX(i){return pad+i/(days)*pw;}
-  function toY(v){return 10+ph-(v-mn)/(mx-mn)*ph;}
-  function line(pts,clr){
-    var d="";for(var i=0;i<pts.length;i++){d+=(i===0?"M":"L")+toX(i).toFixed(1)+","+toY(pts[i]).toFixed(1);}
-    return'<path d="'+d+'" fill="none" stroke="'+clr+'" stroke-width="1.5" opacity=".8"/>';}
-
-  // Price line at current
-  var curY=toY(P);
-  var svg='<svg viewBox="0 0 '+w+' '+h+'" style="width:100%;height:100%" xmlns="http://www.w3.org/2000/svg">';
-  // Grid lines
-  var steps=5;
-  for(var gi=0;gi<=steps;gi++){
-    var gv=mn+(mx-mn)*gi/steps;var gy=toY(gv);
-    svg+='<line x1="'+pad+'" y1="'+gy.toFixed(1)+'" x2="'+(w-10)+'" y2="'+gy.toFixed(1)+'" stroke="rgba(30,41,59,.3)" stroke-width="0.5"/>';
-    svg+='<text x="2" y="'+(gy+3).toFixed(1)+'" fill="#94a3b8" font-size="8" font-family="JetBrains Mono">'+FP(gv)+'</text>';}
-  // Current price line
-  svg+='<line x1="'+pad+'" y1="'+curY.toFixed(1)+'" x2="'+(w-10)+'" y2="'+curY.toFixed(1)+'" stroke="rgba(226,232,240,.15)" stroke-width="1" stroke-dasharray="4,4"/>';
-  // Day labels
-  var dayMarks=[0,Math.round(days/4),Math.round(days/2),Math.round(days*3/4),days];
-  for(var di2=0;di2<dayMarks.length;di2++){
-    var dx=toX(dayMarks[di2]);
-    svg+='<text x="'+dx.toFixed(1)+'" y="'+(h-2)+'" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="JetBrains Mono">'+dayMarks[di2]+'d</text>';}
-  // Lines
-  svg+=line(mom,"#22d3ee");
-  svg+=line(inf,"#34d399");
-  svg+=line(liq,"#fb923c");
-  // Legend
-  svg+='<circle cx="'+(w-140)+'" cy="12" r="3" fill="#22d3ee"/><text x="'+(w-133)+'" y="15" fill="#94a3b8" font-size="8" font-family="Inter">Momentum</text>';
-  svg+='<circle cx="'+(w-140)+'" cy="24" r="3" fill="#34d399"/><text x="'+(w-133)+'" y="27" fill="#94a3b8" font-size="8" font-family="Inter">Inflow</text>';
-  svg+='<circle cx="'+(w-140)+'" cy="36" r="3" fill="#fb923c"/><text x="'+(w-133)+'" y="39" fill="#94a3b8" font-size="8" font-family="Inter">Liquidity</text>';
-  svg+='</svg>';
-  $("simChart").innerHTML=svg;
 }
 
 // ═══ LP P&L DETAIL ═══
@@ -3264,43 +3121,6 @@ function renderCapitalFlow(){
     svg+='</svg>';
     $("cflowChart").innerHTML=svg;
   }catch(e){console.log("cflow err:",e);}
-}
-
-// ═══ POOL HEALTH DASHBOARD ═══
-function renderPoolHealth(){
-  try{
-    if(!$("phealthGrid")||!allTrades||allTrades.length<2)return;
-    var now=Date.now();
-    var h24={buy:0,sell:0,buyC:0,sellC:0,wallets:{}};
-    var d7={buy:0,sell:0,buyC:0,sellC:0,wallets:{}};
-    for(var i=0;i<allTrades.length;i++){
-      var t=allTrades[i];
-      var ageMs=t.minAgo*60000;
-      if(ageMs<=86400000){
-        if(t.isBuy){h24.buy+=t.usdc;h24.buyC++;}else{h24.sell+=t.usdc;h24.sellC++;}
-        if(t.wallet)h24.wallets[t.wallet]=1;
-      }
-      if(ageMs<=604800000){
-        if(t.isBuy){d7.buy+=t.usdc;d7.buyC++;}else{d7.sell+=t.usdc;d7.sellC++;}
-        if(t.wallet)d7.wallets[t.wallet]=1;
-      }
-    }
-    var ratio24=h24.sell>0?(h24.buy/h24.sell):h24.buy>0?999:1;
-    var ratio7=d7.sell>0?(d7.buy/d7.sell):d7.buy>0?999:1;
-    // Pool TVL from existing data
-    var poolBurn=typeof POOL_BURN!=="undefined"?POOL_BURN:0;
-    var poolUsdc=typeof POOL_USDC!=="undefined"?POOL_USDC:0;
-    var tvl=poolBurn*P+poolUsdc;
-    $("phealthGrid").innerHTML=
-      MB("TVL","$"+F(tvl,0),"var(--br)")+
-      MB("24h Volume","$"+F(h24.buy+h24.sell,0),"var(--cy)")+
-      MB("24h Buy/Sell",ratio24.toFixed(2)+"x",ratio24>1?"var(--g)":"var(--r)")+
-      MB("7d Buy/Sell",ratio7.toFixed(2)+"x",ratio7>1?"var(--g)":"var(--r)")+
-      MB("24h Traders",Object.keys(h24.wallets).length,"var(--br)")+
-      MB("7d Traders",Object.keys(d7.wallets).length,"var(--br)");
-    var pressure=ratio24>1.5?"🟢 Strong buying":ratio24>1?"🟢 Slight buying":ratio24>0.7?"🟡 Neutral":"🔴 Selling pressure";
-    $("phealthDetail").innerHTML=pressure+" · 24h: "+h24.buyC+" buys / "+h24.sellC+" sells · 7d: "+d7.buyC+" buys / "+d7.sellC+" sells";
-  }catch(e){console.log("phealth err:",e);}
 }
 
 // ═══ PORTFOLIO SYNC TO SERVER ═══
