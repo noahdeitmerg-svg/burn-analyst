@@ -656,9 +656,58 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 
 <!-- ═══ TAX REPORT ═══ -->
 <div class="c" style="border-left:3px solid #fbbf24">
-  <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report</div>
+  <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report (BR)</div>
   <div id="sec-tax" class="col-b">
-    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BURN Token — Veräußerungen (Ganho de Capital)</div>
+    <!-- BR Tax Compliance Module -->
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🇧🇷 Brasil — Lei 14.754/2023 (Auslandsregime, 15% jährlich)</div>
+    
+    <!-- PTAX + Compliance Status -->
+    <div id="brTaxStatus" class="mg" style="margin-bottom:10px">
+      <div class="mb"><small>USD/BRL (PTAX)</small><b style="color:var(--cy)" id="brPtax">—</b></div>
+      <div class="mb"><small>Akt. Monat Volumen</small><b id="brMonthVol">—</b></div>
+      <div class="mb"><small>DeCripto-Schwelle</small><b id="brDecripto">—</b></div>
+      <div class="mb"><small>Jahr-Gewinn 2026</small><b id="brYearProfit">—</b></div>
+    </div>
+    
+    <!-- Custo Médio per Asset -->
+    <div class="col" onclick="tog(this,'sec-tax-cm')" style="font-size:10px">💰 Custo Médio Ponderado pro Asset</div>
+    <div id="sec-tax-cm" class="col-b">
+      <div class="ov"><table class="mkt-tbl"><thead><tr>
+        <th>Asset</th><th>Menge</th><th>Custo Médio</th><th>FMV</th><th>Unreal. P&L</th>
+      </tr></thead><tbody id="cmTableB"><tr><td colspan="5" style="color:var(--dm);text-align:center">Lädt...</td></tr></tbody></table></div>
+    </div>
+    
+    <!-- Permuta Events (LP Mints/Fills + Swaps) -->
+    <div class="col" onclick="tog(this,'sec-tax-permuta')" style="font-size:10px">🔄 Permuta-Events (Steuerauslöser)</div>
+    <div id="sec-tax-permuta" class="col-b">
+      <div id="permutaSummary" class="mg" style="margin-bottom:8px">
+        <div class="mb"><small>Total Events</small><b id="prmCount">—</b></div>
+        <div class="mb"><small>Total Gewinn (BRL)</small><b id="prmProfit">—</b></div>
+        <div class="mb"><small>Steuer 15%</small><b id="prmTax">—</b></div>
+      </div>
+      <div class="ov"><table class="mkt-tbl"><thead><tr>
+        <th>Datum</th><th>Typ</th><th>Asset</th><th>Menge</th><th>USD</th><th>BRL</th><th>Gewinn BRL</th>
+      </tr></thead><tbody id="permutaTableB"><tr><td colspan="7" style="color:var(--dm);text-align:center">Keine Events</td></tr></tbody></table></div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="prmAddManual()" style="font-size:10px;border-color:var(--o)">+ Manuelles Permuta-Event</button>
+      </div>
+    </div>
+    
+    <!-- Monthly Volume Chart for DeCripto -->
+    <div class="col" onclick="tog(this,'sec-tax-monthly')" style="font-size:10px">📊 Monatsvolumen (DeCripto-Pflicht ab R$35k)</div>
+    <div id="sec-tax-monthly" class="col-b">
+      <div class="ov"><table class="mkt-tbl"><thead><tr>
+        <th>Monat</th><th>Volumen BRL</th><th>Events</th><th>Status</th>
+      </tr></thead><tbody id="monthlyVolB"><tr><td colspan="4" style="color:var(--dm);text-align:center">Keine Daten</td></tr></tbody></table></div>
+      <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
+        🟢 unter R$35k = keine Meldepflicht. 🟡 über R$35k = DeCripto-Meldung (ab Juli 2026) im e-CAC bis Letztwerktag Folgemonat.
+      </div>
+    </div>
+    
+    <div class="sep" style="margin:12px 0 8px"></div>
+    
+    <!-- Legacy USD Tax Report (BURN-only) -->
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">USD-View: BURN Token — Veräußerungen (Ganho de Capital)</div>
     <div id="taxSummary" class="mg" style="margin-bottom:10px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
     <div class="col" onclick="tog(this,'sec-tax-year')" style="font-size:10px">📅 Aufschlüsselung nach Jahr</div>
     <div id="sec-tax-year" class="col-b">
@@ -669,11 +718,15 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
       <th>Verkauf</th><th>Typ</th><th>BURN</th><th>Sell Ø</th><th>Erlös</th><th>Buy Ø</th><th>Kosten</th><th>Gewinn</th><th>Gewinn %</th>
     </tr></thead><tbody id="taxTableB"></tbody></table></div>
     <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">
-      Kaufpreis: Durchschnittsmethode (AVG_ENTRY). Brasilien: Verkäufe unter R$35.000/Monat (~$7.000) sind von Kapitalertragssteuer befreit.<br>
-      Keine Steuerberatung — konsultiere einen Steuerberater für verbindliche Auskünfte.
+      🇧🇷 <b>Lei 14.754/2023:</b> Self-Custody auf Arbitrum/DEX = Auslandsregime, <b>15% fest</b> auf Jahresgewinn (DAA jährlich), <b>KEINE</b> R$35k-Freigrenze.<br>
+      R$35k-Freigrenze gilt NUR für BR-Exchanges (Mercado Bitcoin etc.). DeCripto-Reportingpflicht ab 01.07.2026 bei monatl. Volumen > R$35k.<br>
+      Custo Médio Ponderado (NICHT FIFO). LP-Fill (BURN→USDC) = Permuta = Steuerauslöser.<br>
+      Empf. Steuerberater: Daniel de Paiva Gomes (Declarando Bitcoin), Blue Consult.<br>
+      <b>Keine Steuerberatung</b> — konsultiere einen Steuerberater für verbindliche Auskünfte.
     </div>
     <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="taxExportCSV()" style="font-size:10px">Export CSV</button>
+      <button class="btn" onclick="taxExportCSV()" style="font-size:10px">Export CSV (USD)</button>
+      <button class="btn" onclick="brExportDecriptoCSV()" style="font-size:10px;border-color:var(--cy)">📋 DeCripto CSV (BRL)</button>
       <button class="btn" onclick="taxExportExcel(2025)" style="font-size:10px">Excel 2025</button>
       <button class="btn" onclick="taxExportExcel(2026)" style="font-size:10px">Excel 2026</button>
       <button class="btn" onclick="taxSaveYearEnd()" style="font-size:10px;border-color:var(--o)">📸 Stichtag 31.12 speichern</button>

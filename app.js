@@ -2034,6 +2034,334 @@ function renderWhales(){
   }catch(e){console.log("renderWhales err:",e);}
 }
 
+// ═══ BR TAX COMPLIANCE MODULE (Lei 14.754/2023) ═══
+
+// PTAX Wechselkurs Cache (USD/BRL)
+var BR_PTAX_CACHE={};  // {YYYY-MM-DD: rate}
+var BR_PTAX_CURRENT=5.50;  // Fallback if API fails
+var BR_PTAX_LAST_FETCH=0;
+
+// Permuta Events (steuerauslösende Krypto-zu-Krypto Tausche, LP-Mints, Fills)
+// Each: {ts, date, type, asset, qty, usd, brl, costBasisBrl, profitBrl, ptax, note}
+var BR_PERMUTAS=[];
+
+// Custo Médio Ponderado pro Asset {asset: {qty, totalCostBrl, avgCostBrl}}
+var BR_CUSTO_MEDIO={};
+
+function brLoadPermutas(){
+  try{var raw=localStorage.getItem("br_permutas");if(raw){BR_PERMUTAS=JSON.parse(raw);console.log("BR: loaded "+BR_PERMUTAS.length+" permuta events");}}catch(e){BR_PERMUTAS=[];}
+  try{var raw2=localStorage.getItem("br_ptax_cache");if(raw2)BR_PTAX_CACHE=JSON.parse(raw2);}catch(e){BR_PTAX_CACHE={};}
+  try{var raw3=localStorage.getItem("br_custo_medio");if(raw3)BR_CUSTO_MEDIO=JSON.parse(raw3);}catch(e){BR_CUSTO_MEDIO={};}
+}
+
+function brSavePermutas(){
+  try{localStorage.setItem("br_permutas",JSON.stringify(BR_PERMUTAS));}catch(e){}
+  try{localStorage.setItem("br_custo_medio",JSON.stringify(BR_CUSTO_MEDIO));}catch(e){}
+}
+
+// Fetch USD/BRL PTAX rate from Banco Central
+async function brFetchPtax(){
+  // Cache for 1h
+  if(Date.now()-BR_PTAX_LAST_FETCH<3600000&&BR_PTAX_CURRENT>0)return BR_PTAX_CURRENT;
+  try{
+    // Try multiple sources
+    var sources=[
+      "https://economia.awesomeapi.com.br/json/last/USD-BRL",
+      "https://api.exchangerate-api.com/v4/latest/USD"
+    ];
+    for(var si=0;si<sources.length;si++){
+      try{
+        var r=await fetch(sources[si]);
+        if(!r.ok)continue;
+        var j=await r.json();
+        var rate=0;
+        if(j.USDBRL&&j.USDBRL.bid)rate=parseFloat(j.USDBRL.bid);
+        else if(j.rates&&j.rates.BRL)rate=parseFloat(j.rates.BRL);
+        if(rate>0&&rate<20){
+          BR_PTAX_CURRENT=rate;
+          BR_PTAX_LAST_FETCH=Date.now();
+          var dk=new Date().toISOString().split("T")[0];
+          BR_PTAX_CACHE[dk]=rate;
+          try{localStorage.setItem("br_ptax_cache",JSON.stringify(BR_PTAX_CACHE));}catch(e){}
+          return rate;
+        }
+      }catch(e){continue;}
+    }
+  }catch(e){console.log("BR PTAX fetch err:",e.message);}
+  return BR_PTAX_CURRENT;
+}
+
+// Get PTAX rate for specific date (use cache, current rate if no historical)
+function brPtaxFor(dateStr){
+  if(BR_PTAX_CACHE[dateStr])return BR_PTAX_CACHE[dateStr];
+  return BR_PTAX_CURRENT;
+}
+
+// Add Permuta Event (manual or auto-triggered)
+// type: "lp_mint", "lp_fill", "swap", "buy", "sell"
+function brAddPermuta(type,asset,qty,usdValue,note,dateStr){
+  var date=dateStr||new Date().toISOString().split("T")[0];
+  var ptax=brPtaxFor(date);
+  var brl=usdValue*ptax;
+  
+  // Calculate cost basis from custo médio
+  var cm=BR_CUSTO_MEDIO[asset]||{qty:0,totalCostBrl:0,avgCostBrl:0};
+  var costBasisBrl=qty*cm.avgCostBrl;
+  var profitBrl=brl-costBasisBrl;
+  
+  var event={
+    ts:Date.now(),
+    date:date,
+    type:type,
+    asset:asset,
+    qty:qty,
+    usd:usdValue,
+    brl:brl,
+    costBasisBrl:costBasisBrl,
+    profitBrl:profitBrl,
+    ptax:ptax,
+    note:note||""
+  };
+  
+  BR_PERMUTAS.push(event);
+  
+  // Update Custo Médio
+  if(type==="buy"||type==="lp_close_back"){
+    // Acquisition: weighted average update
+    var newQty=cm.qty+qty;
+    var newTotal=cm.totalCostBrl+brl;
+    BR_CUSTO_MEDIO[asset]={
+      qty:newQty,
+      totalCostBrl:newTotal,
+      avgCostBrl:newQty>0?newTotal/newQty:0
+    };
+  }else if(type==="sell"||type==="lp_fill"||type==="swap_out"||type==="lp_mint"){
+    // Disposal: reduce qty, keep avg
+    var redQty=Math.max(0,cm.qty-qty);
+    var redTotal=Math.max(0,cm.totalCostBrl-costBasisBrl);
+    BR_CUSTO_MEDIO[asset]={
+      qty:redQty,
+      totalCostBrl:redTotal,
+      avgCostBrl:redQty>0?redTotal/redQty:0
+    };
+  }
+  
+  brSavePermutas();
+  return event;
+}
+
+// Initialize Custo Médio from existing trades (one-time backfill)
+function brInitCustoMedio(){
+  // Reset
+  BR_CUSTO_MEDIO={};
+  
+  // BURN: avg entry from existing buys
+  if(typeof AVG_ENTRY!=="undefined"&&AVG_ENTRY>0&&typeof MY_BURN!=="undefined"&&MY_BURN>0){
+    var burnQty=MY_BURN+(typeof MY_STBURN!=="undefined"?MY_STBURN:0);
+    var burnUsdCost=burnQty*AVG_ENTRY;
+    var burnBrlCost=burnUsdCost*BR_PTAX_CURRENT;
+    BR_CUSTO_MEDIO["BURN"]={qty:burnQty,totalCostBrl:burnBrlCost,avgCostBrl:burnUsdCost*BR_PTAX_CURRENT/burnQty};
+  }
+  
+  // ETH/BTC/Altcoins from PTF if available
+  try{
+    if(typeof PTF!=="undefined"&&PTF){
+      for(var sym in PTF){
+        var a=PTF[sym];
+        if(a&&a.amount>0&&a.totalCost>0){
+          BR_CUSTO_MEDIO[sym.toUpperCase()]={
+            qty:a.amount,
+            totalCostBrl:a.totalCost*BR_PTAX_CURRENT,
+            avgCostBrl:(a.totalCost/a.amount)*BR_PTAX_CURRENT
+          };
+        }
+      }
+    }
+  }catch(e){}
+  
+  brSavePermutas();
+}
+
+// Get current month BRL volume from permuta events
+function brMonthVolume(yearMonth){
+  if(!yearMonth){
+    var d=new Date();
+    yearMonth=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+  }
+  var totalBrl=0,count=0;
+  for(var i=0;i<BR_PERMUTAS.length;i++){
+    var p=BR_PERMUTAS[i];
+    if(p.date&&p.date.startsWith(yearMonth)){
+      totalBrl+=Math.abs(p.brl);
+      count++;
+    }
+  }
+  return{brl:totalBrl,count:count};
+}
+
+// Year profit summary (for DAA / Lei 14.754)
+function brYearProfit(year){
+  if(!year)year=new Date().getFullYear();
+  var totalProfit=0,totalVolume=0,events=0;
+  for(var i=0;i<BR_PERMUTAS.length;i++){
+    var p=BR_PERMUTAS[i];
+    if(p.date&&p.date.startsWith(year+"-")){
+      totalProfit+=p.profitBrl;
+      totalVolume+=Math.abs(p.brl);
+      events++;
+    }
+  }
+  var tax=Math.max(0,totalProfit)*0.15;
+  return{profit:totalProfit,tax:tax,volume:totalVolume,events:events};
+}
+
+// Render BR Tax UI
+function brRenderTaxUI(){
+  try{
+    if(!$("brPtax"))return;
+    
+    // PTAX
+    $("brPtax").innerHTML=BR_PTAX_CURRENT?"R$"+BR_PTAX_CURRENT.toFixed(4):"—";
+    
+    // Current Month Volume
+    var mv=brMonthVolume();
+    var volClr=mv.brl>=35000?"var(--r)":mv.brl>=25000?"var(--o)":"var(--g)";
+    $("brMonthVol").innerHTML='<span style="color:'+volClr+'">R$'+F(mv.brl,0)+'</span><br><small style="font-size:8px;color:var(--dm)">'+mv.count+" Events</small>";
+    
+    // DeCripto status
+    var dStatus=mv.brl>=35000?'<span style="color:var(--r)">⚠️ MELDEPFLICHT</span>':'<span style="color:var(--g)">✓ unter R$35k</span>';
+    $("brDecripto").innerHTML=dStatus+'<br><small style="font-size:8px;color:var(--dm)">ab Juli 2026</small>';
+    
+    // Year Profit 2026
+    var yp=brYearProfit(2026);
+    var ypClr=yp.profit>=0?"var(--g)":"var(--r)";
+    $("brYearProfit").innerHTML='<span style="color:'+ypClr+'">'+(yp.profit>=0?"+":"")+"R$"+F(Math.abs(yp.profit),0)+'</span><br><small style="font-size:8px;color:var(--dm)">Steuer 15%: R$'+F(yp.tax,0)+'</small>';
+    
+    // Custo Médio Table
+    var cmRows="";
+    var assets=Object.keys(BR_CUSTO_MEDIO);
+    if(assets.length===0){
+      cmRows='<tr><td colspan="5" style="color:var(--dm);text-align:center;padding:8px">Noch keine Daten — <button class="btn" style="font-size:9px" onclick="brInitCustoMedio();brRenderTaxUI()">Init aus Wallet</button></td></tr>';
+    }else{
+      assets.sort();
+      for(var ai=0;ai<assets.length;ai++){
+        var ass=assets[ai],cm=BR_CUSTO_MEDIO[ass];
+        if(!cm||cm.qty<=0)continue;
+        // FMV: try to get current price for this asset
+        var fmvUsd=0;
+        if(ass==="BURN")fmvUsd=typeof P!=="undefined"?P:0;
+        else if(typeof PTF!=="undefined"&&PTF[ass.toLowerCase()])fmvUsd=PTF[ass.toLowerCase()].currentPrice||0;
+        var fmvBrl=fmvUsd*BR_PTAX_CURRENT*cm.qty;
+        var unrealPL=fmvBrl-cm.totalCostBrl;
+        var plClr=unrealPL>=0?"var(--g)":"var(--r)";
+        cmRows+='<tr>';
+        cmRows+='<td style="color:var(--cy);font-weight:600">'+ass+'</td>';
+        cmRows+='<td style="color:var(--o)">'+F(cm.qty,4)+'</td>';
+        cmRows+='<td>R$'+F(cm.avgCostBrl,4)+'</td>';
+        cmRows+='<td style="color:var(--br)">R$'+F(fmvBrl/cm.qty||0,4)+'</td>';
+        cmRows+='<td style="color:'+plClr+'">'+(unrealPL>=0?"+":"")+'R$'+F(Math.abs(unrealPL),0)+'</td>';
+        cmRows+='</tr>';
+      }
+    }
+    if($("cmTableB"))$("cmTableB").innerHTML=cmRows||'<tr><td colspan="5" style="color:var(--dm);text-align:center">Keine Assets</td></tr>';
+    
+    // Permuta Events Table
+    var prmRows="";
+    var sortedPrm=BR_PERMUTAS.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,50);
+    var totalPrmProfit=0;
+    for(var pi=0;pi<BR_PERMUTAS.length;pi++)totalPrmProfit+=BR_PERMUTAS[pi].profitBrl;
+    
+    if(sortedPrm.length===0){
+      prmRows='<tr><td colspan="7" style="color:var(--dm);text-align:center;padding:8px">Keine Events erfasst</td></tr>';
+    }else{
+      for(var pri=0;pri<sortedPrm.length;pri++){
+        var pe=sortedPrm[pri];
+        var typeClr=pe.type==="buy"?"var(--g)":pe.type==="lp_mint"?"var(--cy)":pe.type==="lp_fill"?"var(--o)":"var(--br)";
+        var profClr=pe.profitBrl>=0?"var(--g)":"var(--r)";
+        prmRows+='<tr>';
+        prmRows+='<td style="white-space:nowrap;font-size:10px">'+pe.date+'</td>';
+        prmRows+='<td style="color:'+typeClr+';font-size:10px">'+pe.type+'</td>';
+        prmRows+='<td style="color:var(--cy)">'+pe.asset+'</td>';
+        prmRows+='<td style="color:var(--o)">'+F(pe.qty,2)+'</td>';
+        prmRows+='<td>$'+F(pe.usd,2)+'</td>';
+        prmRows+='<td>R$'+F(pe.brl,0)+'</td>';
+        prmRows+='<td style="color:'+profClr+'">'+(pe.profitBrl>=0?"+":"")+'R$'+F(Math.abs(pe.profitBrl),0)+'</td>';
+        prmRows+='</tr>';
+      }
+    }
+    if($("permutaTableB"))$("permutaTableB").innerHTML=prmRows;
+    
+    if($("prmCount"))$("prmCount").textContent=BR_PERMUTAS.length;
+    if($("prmProfit"))$("prmProfit").innerHTML='<span style="color:'+(totalPrmProfit>=0?"var(--g)":"var(--r)")+'">'+(totalPrmProfit>=0?"+":"")+'R$'+F(Math.abs(totalPrmProfit),0)+'</span>';
+    if($("prmTax"))$("prmTax").innerHTML='<span style="color:var(--o)">R$'+F(Math.max(0,totalPrmProfit)*0.15,0)+'</span>';
+    
+    // Monthly Volume Table
+    var monthlyAgg={};
+    for(var mi=0;mi<BR_PERMUTAS.length;mi++){
+      var pm=BR_PERMUTAS[mi];
+      var ym=pm.date?pm.date.slice(0,7):"unbekannt";
+      if(!monthlyAgg[ym])monthlyAgg[ym]={brl:0,count:0};
+      monthlyAgg[ym].brl+=Math.abs(pm.brl);
+      monthlyAgg[ym].count++;
+    }
+    var months=Object.keys(monthlyAgg).sort().reverse();
+    var mvRows="";
+    if(months.length===0){
+      mvRows='<tr><td colspan="4" style="color:var(--dm);text-align:center">Keine Daten</td></tr>';
+    }else{
+      for(var mmi=0;mmi<months.length;mmi++){
+        var mma=monthlyAgg[months[mmi]];
+        var mmClr=mma.brl>=35000?"var(--r)":mma.brl>=25000?"var(--o)":"var(--g)";
+        var mmStat=mma.brl>=35000?'🟡 Meldepflicht':'🟢 unter Schwelle';
+        mvRows+='<tr>';
+        mvRows+='<td>'+months[mmi]+'</td>';
+        mvRows+='<td style="color:'+mmClr+';font-weight:600">R$'+F(mma.brl,0)+'</td>';
+        mvRows+='<td style="color:var(--dm)">'+mma.count+'</td>';
+        mvRows+='<td style="font-size:10px">'+mmStat+'</td>';
+        mvRows+='</tr>';
+      }
+    }
+    if($("monthlyVolB"))$("monthlyVolB").innerHTML=mvRows;
+  }catch(e){console.log("brRenderTaxUI err:",e.message);}
+}
+
+// Manual Permuta Event entry (modal-style prompt)
+function prmAddManual(){
+  var date=prompt("Datum (YYYY-MM-DD):",new Date().toISOString().split("T")[0]);
+  if(!date)return;
+  var type=prompt("Typ (buy / sell / lp_mint / lp_fill / swap_out):","lp_fill");
+  if(!type)return;
+  var asset=prompt("Asset (BURN / ETH / USDC etc):","BURN");
+  if(!asset)return;
+  var qty=parseFloat(prompt("Menge:","1000"));
+  if(!isFinite(qty)||qty<=0)return;
+  var usd=parseFloat(prompt("USD-Wert:",(qty*0.174).toFixed(2)));
+  if(!isFinite(usd))return;
+  var note=prompt("Notiz (optional):","")||"";
+  
+  var ev=brAddPermuta(type,asset.toUpperCase(),qty,usd,note,date);
+  alert("Event erfasst:\n"+date+" "+type+" "+asset+"\n"+qty+" @ $"+usd+" = R$"+ev.brl.toFixed(0)+"\nGewinn: R$"+ev.profitBrl.toFixed(0));
+  brRenderTaxUI();
+}
+
+// DeCripto CSV Export (Receita Federal compatible-ish format)
+function brExportDecriptoCSV(){
+  try{
+    var csv="Data;Tipo;Ativo;Quantidade;Valor_USD;Valor_BRL;PTAX;Custo_Base_BRL;Lucro_BRL;Observacao\n";
+    var sorted=BR_PERMUTAS.slice().sort(function(a,b){return a.ts-b.ts;});
+    for(var i=0;i<sorted.length;i++){
+      var e=sorted[i];
+      csv+=e.date+";"+e.type+";"+e.asset+";"+e.qty.toFixed(6)+";"+e.usd.toFixed(2)+";"+e.brl.toFixed(2)+";"+e.ptax.toFixed(4)+";"+e.costBasisBrl.toFixed(2)+";"+e.profitBrl.toFixed(2)+";\""+(e.note||"").replace(/"/g,"")+"\"\n";
+    }
+    var blob=new Blob([csv],{type:"text/csv;charset=utf-8;"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="decripto-"+new Date().toISOString().split("T")[0]+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("decripto export err:",e);alert("Export-Fehler: "+e.message);}
+}
+
 // ═══ TAX REPORT ═══
 
 function parseDateDE(d){
@@ -2044,6 +2372,7 @@ function parseDateDE(d){
 }
 
 function renderTaxReport(){
+  try{brRenderTaxUI();}catch(e){console.log("brRenderTaxUI in renderTaxReport err:",e.message);}
   try{
     if(!$("taxTableB"))return;
     var allSales=[];
@@ -3866,6 +4195,14 @@ try{
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
+// BR Tax Compliance Module init
+try{brLoadPermutas();}catch(e){console.log("brLoadPermutas err:",e.message);}
+brFetchPtax().then(function(rate){
+  console.log("BR PTAX:",rate);
+  // If no Custo Médio yet, init from current wallet
+  if(Object.keys(BR_CUSTO_MEDIO).length===0)try{brInitCustoMedio();}catch(e){}
+  try{brRenderTaxUI();}catch(e){console.log("brRenderTaxUI err:",e.message);}
+}).catch(function(e){console.log("brFetchPtax err:",e.message);});
 // Auto-scan LP Map immediately at startup (force fresh, ignore cache age)
 try{lmapTs=0;scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
