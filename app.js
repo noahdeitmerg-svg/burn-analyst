@@ -627,18 +627,26 @@ function render(){
   var TOTAL_BURN_EQ=MY_BURN+bEq+pL;
   var portUsd=TOTAL_BURN_EQ*P+pU;
   var mult=P>0&&AVG_ENTRY>0?P/AVG_ENTRY:0;
-  // Group 1 — Investment (Entry + Invested merged)
-  $("portG1").innerHTML=[
-    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b class="neon-w" style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">$'+F(INVESTED,0)+' invested</span></div>',
-    '<div class="mb" style="padding:14px"><small style="color:#fff">CURRENT PRICE</small><b class="key-val" style="color:'+(P>=AVG_ENTRY?"var(--g)":"var(--r)")+'">'+FP(P)+'</b></div>',
-    '<div class="mb" style="padding:14px"><small style="color:#fff">MULTIPLE</small><b class="key-val" style="color:'+(mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")+'">'+(mult>0?mult.toFixed(1)+"x":"…")+'</b></div>'
-  ].join("");
-  // Group 2 — Holdings (guarded)
+  // Group 1 — BURN + stBURN (top, key holdings)
   if(wal.ok||MY_BURN>0){
+    $("portG1").innerHTML=[
+      MB("BURN",F(MY_BURN,0),"var(--o)"),
+      MB("stBURN",F(MY_STBURN,0),"var(--p)")
+    ].join("");
+  }
+  // Group 2 — Entry / Current Price
   $("portG2").innerHTML=[
-    MB("BURN",F(MY_BURN,0),"var(--o)"),MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("LP Left",F(pL,0),"var(--b)")
-  ].join("");}
-  // Portfolio Real — V3 sell impact via lmapCache (more accurate for V3 pool than V2 K=X*Y)
+    '<div class="mb" style="padding:14px"><small style="color:#fff">AVG ENTRY</small><b class="neon-w" style="color:#fff;font-size:18px;font-weight:700;display:block">$'+AVG_ENTRY.toFixed(4)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">$'+F(INVESTED,0)+' invested</span></div>',
+    '<div class="mb" style="padding:14px"><small style="color:#fff">CURRENT PRICE</small><b class="key-val" style="color:'+(P>=AVG_ENTRY?"var(--g)":"var(--r)")+'">'+FP(P)+'</b></div>'
+  ].join("");
+  // Group 3 — Multiple + LP Left
+  if(wal.ok||MY_BURN>0){
+    $("portG3").innerHTML=[
+      '<div class="mb" style="padding:14px"><small style="color:#fff">MULTIPLE</small><b class="key-val" style="color:'+(mult>=10?"var(--g)":mult>=2?"var(--o)":"var(--tx)")+'">'+(mult>0?mult.toFixed(1)+"x":"…")+'</b></div>',
+      MB("LP Left",F(pL,0),"var(--b)")
+    ].join("");
+  }
+  // Portfolio Real — V3 sell impact via lmapCache (always uses live data when available)
   var realSellUsdc=0,realImpact=0,realSrc="V2";
   if(TOTAL_BURN_EQ>0){
     if(lmapCache&&lmapCache.length>0){
@@ -655,20 +663,20 @@ function render(){
     realImpact=portUsd>0?((realSellUsdc+pU-portUsd)/portUsd*100):0;
   }
   var portReal=realSellUsdc+pU;
-  // Group 3 — Value (guarded)
+  // Group 4 — Portfolio (paper) + Portfolio Real (with realized as subtitle)
   if(wal.ok||MY_BURN>0){
-  var realizedProfit=TR-(TS*AVG_ENTRY);
-  $("portG3").innerHTML=[
-    '<div class="mb"><small>PORTFOLIO</small><b class="key-val neon-w" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
-    '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val neon-cy" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realImpact.toFixed(0)+'% slippage <span style="color:var(--dm);font-size:8px">'+realSrc+'</span></span></div>',
-    MB("Realized","$"+realizedProfit.toLocaleString("en",{minimumFractionDigits:0,maximumFractionDigits:0}),"var(--g)"),
-    '<div class="mb"><small>PROFIT REAL</small><b class="key-val neon-cy" style="color:'+(portReal+TR-INVESTED>=0?"var(--cy)":"var(--r)")+'">'+(portReal+TR-INVESTED>=0?"+":"-")+"$"+F(Math.abs(portReal+TR-INVESTED),0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">if sold now</span></div>'
-  ].join("");}
+    var realizedProfit=TR-(TS*AVG_ENTRY);
+    var realizedSubtitle=realizedProfit>0?'+$'+F(realizedProfit,0)+' realized · ':'';
+    $("portG4").innerHTML=[
+      '<div class="mb"><small>PORTFOLIO</small><b class="key-val neon-w" style="color:var(--br)">$'+F(portUsd,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">on paper</span></div>',
+      '<div class="mb"><small>PORTFOLIO REAL</small><b class="key-val neon-cy" style="color:var(--cy)">$'+F(portReal,0)+'</b><span style="font-size:9px;color:var(--mt);display:block;margin-top:2px">'+realizedSubtitle+realImpact.toFixed(0)+'% slippage <span style="color:var(--dm);font-size:8px">'+realSrc+'</span></span></div>'
+    ].join("");
+  }
 
-  // stBURN Yield (yield value emphasized)
+  // stBURN Yield (yield value emphasized — stBURN count removed (already shown in Group 1))
   if(stOK){
     var stV=bEq*P,stY=bEq-MY_STBURN,stYP=MY_STBURN>0?(stY/MY_STBURN*100):0;
-    $("stGrid").innerHTML=[MB("stBURN",F(MY_STBURN,0),"var(--p)"),MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stR.toFixed(6),"var(--cy)"),
+    $("stGrid").innerHTML=[MB("Ratio "+(stSrc==="chain"?"⛓":"◇"),stR.toFixed(6),"var(--cy)"),
       MB("BURN Equiv",F(bEq,0),"var(--o)")].join("")+
       '<div class="mb"><small>YIELD</small><b class="yield-big neon-g" style="color:'+(stY>=0?"var(--g)":"var(--r)")+'">+'+(stY>=0?F(stY,0):0)+' BURN</b></div>'+
       [MB("Yield $","$"+F(stY*P,0),stY>=0?"var(--g)":"var(--r)"),MB("Yield %",stYP.toFixed(2)+"%",stYP>=0?"var(--g)":"var(--r)")].join("");
@@ -745,8 +753,8 @@ function render(){
   }
   $("lpProg").style.width=fillPct.toFixed(1)+"%";
   try{renderLpPnl();}catch(e){}
-  try{checkAlerts();}catch(e){}
-  try{renderStakingApy();}catch(e){}
+  try{renderPushStatus();}catch(e){}
+  try{renderLpPnl();}catch(e){}
 
   // BUYFLOW — V3 concentrated liquidity calculation using real LP scan data
   function v3BuyflowCalc(curP,tgtP){
@@ -995,7 +1003,8 @@ function renderTrades(){
   $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
-  try{renderWhales();}catch(e){}
+  // (removed: renderWhales)
+
   try{renderCapitalFlow();}catch(e){}
   try{renderPoolHealth();}catch(e){}
 }
@@ -1993,48 +2002,9 @@ function renderLpPnl(){
   }catch(e){console.log("lpPnl err:",e);}
 }
 
-// ═══ WHALE TRADE DETECTOR ═══
+// ═══ WHALE TRADE MARKER (only used for visual badges in trade list) ═══
 var WHALE_MIN=501;
 var whaleFirstLoad=true;
-
-function detectWhales(){
-  if(!allTrades||allTrades.length===0)return[];
-  return allTrades.filter(function(t){return t.usdc>=WHALE_MIN;});
-}
-
-function renderWhales(){
-  try{
-    if(!$("whaleTableB"))return;
-    var whales=detectWhales();
-    if(whales.length===0){
-      $("whaleTableB").innerHTML='<tr><td colspan="6" style="color:var(--dm);text-align:center">No whale activity detected</td></tr>';
-      $("whaleSummary").innerHTML="";
-      return;
-    }
-    var buyVol=0,sellVol=0,biggest=whales[0];
-    for(var i=0;i<whales.length;i++){
-      if(whales[i].isBuy)buyVol+=whales[i].usdc;else sellVol+=whales[i].usdc;
-      if(whales[i].usdc>biggest.usdc)biggest=whales[i];
-    }
-    $("whaleSummary").innerHTML=MB("Whale Trades",whales.length,"var(--br)")+
-      MB("Buy Volume","$"+F(buyVol,0),"var(--g)")+MB("Sell Volume","$"+F(sellVol,0),"var(--r)")+
-      MB("Biggest","$"+F(biggest.usdc,0)+" "+(biggest.isBuy?"BUY":"SELL"),biggest.isBuy?"var(--g)":"var(--r)");
-    var rows="";
-    for(var j=0;j<Math.min(20,whales.length);j++){
-      var w=whales[j];
-      var agoT=w.minAgo<1?"now":w.minAgo<60?w.minAgo+"m":w.minAgo<1440?Math.round(w.minAgo/60)+"h":Math.round(w.minAgo/1440)+"d";
-      var wS=w.wallet&&w.wallet.length>10?w.wallet.slice(0,6)+"…"+w.wallet.slice(-4):"—";
-      var wLink=w.wallet?'<a href="https://arbiscan.io/address/'+w.wallet+'" target="_blank" style="font-size:9px;color:var(--b)">'+wS+'</a>':wS;
-      var rowBg=w.usdc>1000?"background:rgba(251,191,36,.06);":w.usdc>500?"background:rgba(251,191,36,.03);":"";
-      rows+='<tr style="'+rowBg+'"><td style="color:var(--mt)">'+agoT+'</td>';
-      rows+='<td style="color:'+(w.isBuy?"var(--g)":"var(--r)")+';font-weight:600">'+(w.isBuy?"BUY":"SELL")+'</td>';
-      rows+='<td style="color:var(--o)">'+F(w.burn,0)+'</td>';
-      rows+='<td style="color:var(--g)">🐋 $'+F(w.usdc,0)+'</td>';
-      rows+='<td>'+FP(w.price)+'</td><td>'+wLink+'</td></tr>';
-    }
-    $("whaleTableB").innerHTML=rows;
-  }catch(e){console.log("renderWhales err:",e);}
-}
 
 // ═══ BR TAX COMPLIANCE MODULE (Lei 14.754/2023) ═══
 
@@ -2648,68 +2618,46 @@ function brRenderTaxUI(){
     taxDisplay+='</small>';
     $("brYearProfit").innerHTML=taxDisplay;
     
-    // Custo Médio Table
-    var cmRows="";
+    // ─── Custo Médio Summary (no detailed table) ───
     var assets=Object.keys(BR_CUSTO_MEDIO);
-    if(assets.length===0){
-      cmRows='<tr><td colspan="5" style="color:var(--dm);text-align:center;padding:8px">Noch keine Daten — <button class="btn" style="font-size:9px" onclick="brInitCustoMedio();brRenderTaxUI()">Init aus Wallet</button></td></tr>';
-    }else{
-      assets.sort();
-      for(var ai=0;ai<assets.length;ai++){
-        var ass=assets[ai],cm=BR_CUSTO_MEDIO[ass];
-        if(!cm||cm.qty<=0)continue;
-        // FMV: try to get current price for this asset
-        var fmvUsd=0;
-        if(ass==="BURN")fmvUsd=typeof P!=="undefined"?P:0;
-        else if(typeof PTF!=="undefined"&&PTF[ass.toLowerCase()])fmvUsd=PTF[ass.toLowerCase()].currentPrice||0;
-        var fmvBrl=fmvUsd*BR_PTAX_CURRENT*cm.qty;
-        var unrealPL=fmvBrl-cm.totalCostBrl;
-        var plClr=unrealPL>=0?"var(--g)":"var(--r)";
-        cmRows+='<tr>';
-        cmRows+='<td style="color:var(--cy);font-weight:600">'+ass+'</td>';
-        cmRows+='<td style="color:var(--o)">'+F(cm.qty,4)+'</td>';
-        cmRows+='<td>R$'+F(cm.avgCostBrl,4)+'</td>';
-        cmRows+='<td style="color:var(--br)">R$'+F(fmvBrl/cm.qty||0,4)+'</td>';
-        cmRows+='<td style="color:'+plClr+'">'+(unrealPL>=0?"+":"")+'R$'+F(Math.abs(unrealPL),0)+'</td>';
-        cmRows+='</tr>';
-      }
+    var cmAssetCount=0,cmTotalCost=0,cmTotalFmv=0;
+    for(var ai=0;ai<assets.length;ai++){
+      var ass=assets[ai],cm=BR_CUSTO_MEDIO[ass];
+      if(!cm||cm.qty<=0)continue;
+      cmAssetCount++;
+      cmTotalCost+=cm.totalCostBrl;
+      var fmvUsd=0;
+      if(ass==="BURN")fmvUsd=typeof P!=="undefined"?P:0;
+      else if(typeof PTF!=="undefined"&&PTF[ass.toLowerCase()])fmvUsd=PTF[ass.toLowerCase()].currentPrice||0;
+      cmTotalFmv+=fmvUsd*BR_PTAX_CURRENT*cm.qty;
     }
-    if($("cmTableB"))$("cmTableB").innerHTML=cmRows||'<tr><td colspan="5" style="color:var(--dm);text-align:center">Keine Assets</td></tr>';
+    var cmPL=cmTotalFmv-cmTotalCost;
+    if($("cmAssetCount"))$("cmAssetCount").innerHTML=cmAssetCount===0?'<button class="btn" style="font-size:9px" onclick="brInitCustoMedio();brRenderTaxUI()">Init aus Wallet</button>':'<span style="color:var(--cy)">'+cmAssetCount+'</span>';
+    if($("cmTotalCost"))$("cmTotalCost").innerHTML='<span style="color:var(--mt)">R$'+F(cmTotalCost,0)+'</span>';
+    if($("cmTotalFmv"))$("cmTotalFmv").innerHTML='<span style="color:var(--br)">R$'+F(cmTotalFmv,0)+'</span>';
+    if($("cmTotalPL"))$("cmTotalPL").innerHTML='<span style="color:'+(cmPL>=0?"var(--g)":"var(--r)")+'">'+(cmPL>=0?"+":"")+'R$'+F(Math.abs(cmPL),0)+'</span>';
     
-    // Permuta Events Table
-    var prmRows="";
-    var sortedPrm=BR_PERMUTAS.slice().sort(function(a,b){return b.ts-a.ts;}).slice(0,50);
-    var totalPrmProfit=0;
-    for(var pi=0;pi<BR_PERMUTAS.length;pi++)totalPrmProfit+=BR_PERMUTAS[pi].profitBrl;
-    
-    if(sortedPrm.length===0){
-      prmRows='<tr><td colspan="7" style="color:var(--dm);text-align:center;padding:8px">Keine Events erfasst</td></tr>';
-    }else{
-      for(var pri=0;pri<sortedPrm.length;pri++){
-        var pe=sortedPrm[pri];
-        var typeClr=pe.type==="buy"?"var(--g)":pe.type==="lp_mint"?"var(--cy)":pe.type==="lp_fill"?"var(--o)":"var(--br)";
-        var profClr=pe.profitBrl>=0?"var(--g)":"var(--r)";
-        prmRows+='<tr>';
-        prmRows+='<td style="white-space:nowrap;font-size:10px">'+pe.date+'</td>';
-        prmRows+='<td style="color:'+typeClr+';font-size:10px">'+pe.type+'</td>';
-        prmRows+='<td style="color:var(--cy)">'+pe.asset+'</td>';
-        prmRows+='<td style="color:var(--o)">'+F(pe.qty,2)+'</td>';
-        prmRows+='<td>$'+F(pe.usd,2)+'</td>';
-        prmRows+='<td>R$'+F(pe.brl,0)+'</td>';
-        prmRows+='<td style="color:'+profClr+'">'+(pe.profitBrl>=0?"+":"")+'R$'+F(Math.abs(pe.profitBrl),0)+'</td>';
-        prmRows+='</tr>';
-      }
+    // ─── Permuta Events Summary (no detailed table) ───
+    var totalPrmProfit=0,vol2025=0,vol2026=0,lastEvent=null;
+    for(var pi=0;pi<BR_PERMUTAS.length;pi++){
+      var pe=BR_PERMUTAS[pi];
+      totalPrmProfit+=pe.profitBrl;
+      if(pe.date&&pe.date.startsWith("2025"))vol2025+=Math.abs(pe.brl);
+      if(pe.date&&pe.date.startsWith("2026"))vol2026+=Math.abs(pe.brl);
+      if(!lastEvent||pe.ts>lastEvent.ts)lastEvent=pe;
     }
-    if($("permutaTableB"))$("permutaTableB").innerHTML=prmRows;
-    
-    if($("prmCount"))$("prmCount").textContent=BR_PERMUTAS.length;
+    if($("prmCount"))$("prmCount").innerHTML='<span style="color:var(--cy)">'+BR_PERMUTAS.length+'</span>';
+    if($("prmVol2025"))$("prmVol2025").innerHTML='<span style="color:var(--mt)">R$'+F(vol2025,0)+'</span>';
+    if($("prmVol2026"))$("prmVol2026").innerHTML='<span style="color:var(--mt)">R$'+F(vol2026,0)+'</span>';
     if($("prmProfit"))$("prmProfit").innerHTML='<span style="color:'+(totalPrmProfit>=0?"var(--g)":"var(--r)")+'">'+(totalPrmProfit>=0?"+":"")+'R$'+F(Math.abs(totalPrmProfit),0)+'</span>';
     if($("prmTax")){
       var yp2026=brYearProfit(2026);
-      $("prmTax").innerHTML='<span style="color:var(--o)">R$'+F(yp2026.taxLei14754,0)+'</span><br><small style="font-size:8px;color:var(--dm)">35k: R$'+F(yp2026.tax35kRule,0)+'</small>';
+      var taxAmount=BR_TAX_MODE==="35k"?yp2026.tax35kRule:yp2026.taxLei14754;
+      $("prmTax").innerHTML='<span style="color:var(--o)">R$'+F(taxAmount,0)+'</span><br><small style="font-size:8px;color:var(--dm)">'+(BR_TAX_MODE==="35k"?"35k-Regel":"Lei 14.754")+'</small>';
     }
+    if($("prmLast"))$("prmLast").innerHTML=lastEvent?'<span style="font-size:11px">'+lastEvent.date+'</span><br><small style="font-size:8px;color:var(--dm)">'+lastEvent.type+'</small>':'<span style="color:var(--dm)">—</span>';
     
-    // Monthly Volume Table
+    // ─── Monthly Volume Summary (no detailed table) ───
     var monthlyAgg={};
     for(var mi=0;mi<BR_PERMUTAS.length;mi++){
       var pm=BR_PERMUTAS[mi];
@@ -2718,86 +2666,49 @@ function brRenderTaxUI(){
       monthlyAgg[ym].brl+=Math.abs(pm.brl);
       monthlyAgg[ym].count++;
     }
-    var months=Object.keys(monthlyAgg).sort().reverse();
-    var mvRows="";
-    if(months.length===0){
-      mvRows='<tr><td colspan="4" style="color:var(--dm);text-align:center">Keine Daten</td></tr>';
-    }else{
-      for(var mmi=0;mmi<months.length;mmi++){
-        var mma=monthlyAgg[months[mmi]];
-        var mmClr=mma.brl>=35000?"var(--r)":mma.brl>=25000?"var(--o)":"var(--g)";
-        var mmStat=mma.brl>=35000?'🟡 Meldepflicht':'🟢 unter Schwelle';
-        mvRows+='<tr>';
-        mvRows+='<td>'+months[mmi]+'</td>';
-        mvRows+='<td style="color:'+mmClr+';font-weight:600">R$'+F(mma.brl,0)+'</td>';
-        mvRows+='<td style="color:var(--dm)">'+mma.count+'</td>';
-        mvRows+='<td style="font-size:10px">'+mmStat+'</td>';
-        mvRows+='</tr>';
-      }
+    var max2025=0,max2025M="—",max2026=0,max2026M="—",above30k=0,above35k=0;
+    for(var ym2 in monthlyAgg){
+      var m=monthlyAgg[ym2];
+      if(ym2.startsWith("2025")&&m.brl>max2025){max2025=m.brl;max2025M=ym2;}
+      if(ym2.startsWith("2026")&&m.brl>max2026){max2026=m.brl;max2026M=ym2;}
+      if(m.brl>30000)above30k++;
+      if(m.brl>35000)above35k++;
     }
-    if($("monthlyVolB"))$("monthlyVolB").innerHTML=mvRows;
+    if($("mvMax2025"))$("mvMax2025").innerHTML='<span style="color:var(--mt)">R$'+F(max2025,0)+'</span><br><small style="font-size:8px;color:var(--dm)">'+max2025M+'</small>';
+    if($("mvMax2026"))$("mvMax2026").innerHTML='<span style="color:var(--mt)">R$'+F(max2026,0)+'</span><br><small style="font-size:8px;color:var(--dm)">'+max2026M+'</small>';
+    if($("mvAbove30k"))$("mvAbove30k").innerHTML='<span style="color:'+(above30k>0?"var(--o)":"var(--g)")+'">'+above30k+'</span>';
+    if($("mvAbove35k"))$("mvAbove35k").innerHTML='<span style="color:'+(above35k>0?"var(--r)":"var(--g)")+'">'+above35k+'</span>';
     
-    // ─── DARF Monthly Tax Schedule ───
+    // ─── DARF Summary (no detailed table) ───
     try{
-      var darfData=brMonthlyDARF(2026);
-      var darfRows="",totalOpen=0,nextDue=null;
-      var darfMonths=Object.keys(darfData).sort();
+      var darfData2025=brMonthlyDARF(2025);
+      var darfData2026=brMonthlyDARF(2026);
+      var open2025=0,open2026=0,nextDue=null;
       var todayStr=new Date().toISOString().split("T")[0];
-      
-      if(darfMonths.length===0){
-        darfRows='<tr><td colspan="6" style="color:var(--dm);text-align:center">Keine Events</td></tr>';
-      }else{
-        for(var dmi=0;dmi<darfMonths.length;dmi++){
-          var dym=darfMonths[dmi];
-          var dm=darfData[dym];
-          var dStatusClr=dm.status==="due"?"var(--r)":dm.status==="loss"?"var(--dm)":"var(--g)";
-          var dStatusTxt=dm.status==="due"?"⚠️ FÄLLIG":dm.status==="loss"?"📉 Verlust":"✓ Frei";
-          var isOverdue=dm.status==="due"&&dm.dueDate<todayStr;
-          if(dm.status==="due"){
-            totalOpen+=dm.taxDue;
-            if(!nextDue||dm.dueDate<nextDue)nextDue=dm.dueDate;
-          }
-          darfRows+='<tr>';
-          darfRows+='<td style="font-weight:600">'+dym+'</td>';
-          darfRows+='<td>R$'+F(dm.vol,0)+'</td>';
-          darfRows+='<td style="color:'+(dm.profit>=0?"var(--g)":"var(--r)")+'">'+(dm.profit>=0?"+":"")+'R$'+F(Math.abs(dm.profit),0)+'</td>';
-          darfRows+='<td style="color:'+dStatusClr+';font-weight:600">R$'+F(dm.taxDue,0)+'</td>';
-          darfRows+='<td style="font-size:9px;color:'+(isOverdue?"var(--r)":"var(--dm)")+'">'+dm.dueDate+'</td>';
-          darfRows+='<td style="font-size:9px">'+dStatusTxt+'</td>';
-          darfRows+='</tr>';
+      for(var ym3 in darfData2025){
+        if(darfData2025[ym3].status==="due")open2025+=darfData2025[ym3].taxDue;
+      }
+      for(var ym4 in darfData2026){
+        var dm=darfData2026[ym4];
+        if(dm.status==="due"){
+          open2026+=dm.taxDue;
+          if(!nextDue||dm.dueDate<nextDue)nextDue=dm.dueDate;
         }
       }
-      if($("darfTableB"))$("darfTableB").innerHTML=darfRows;
-      if($("darfOpenTotal"))$("darfOpenTotal").innerHTML='<span style="color:'+(totalOpen>0?"var(--r)":"var(--g)")+'">R$'+F(totalOpen,0)+'</span>';
+      if($("darfOpen2025"))$("darfOpen2025").innerHTML='<span style="color:'+(open2025>0?"var(--r)":"var(--g)")+'">R$'+F(open2025,0)+'</span>';
+      if($("darfOpenTotal"))$("darfOpenTotal").innerHTML='<span style="color:'+(open2026>0?"var(--r)":"var(--g)")+'">R$'+F(open2026,0)+'</span>';
       if($("darfNextDue"))$("darfNextDue").innerHTML=nextDue?'<span style="color:var(--o)">'+nextDue+'</span>':'<span style="color:var(--g)">—</span>';
       if($("darfMode"))$("darfMode").innerHTML='<span style="color:var(--cy)">'+(BR_TAX_MODE==="35k"?"R$35k":"Lei 14.754")+'</span>';
     }catch(e){console.log("DARF render err:",e.message);}
     
-    // ─── IRPF Bens e Direitos ───
+    // ─── IRPF Summary (no detailed table) ───
     try{
+      var snap2025=BR_YEAR_SNAPSHOTS["2025"];
       var snap2026=BR_YEAR_SNAPSHOTS["2026"];
-      if(snap2026&&snap2026.holdings){
-        var irpfRows="",totalIrpfBrl=0;
-        for(var asset3 in snap2026.holdings){
-          var h=snap2026.holdings[asset3];
-          totalIrpfBrl+=h.fmvBrl;
-          var irpfCode=asset3==="BTC"?"81":"82";
-          irpfRows+='<tr>';
-          irpfRows+='<td style="color:var(--cy);font-weight:600">'+asset3+'</td>';
-          irpfRows+='<td style="color:var(--o)">'+F(h.qty,4)+'</td>';
-          irpfRows+='<td>R$'+F(h.totalCostBrl,0)+'</td>';
-          irpfRows+='<td style="color:var(--g)">R$'+F(h.fmvBrl,0)+'</td>';
-          irpfRows+='<td style="font-size:9px;color:var(--dm)">'+irpfCode+'</td>';
-          irpfRows+='</tr>';
-        }
-        if($("irpfTableB"))$("irpfTableB").innerHTML=irpfRows||'<tr><td colspan="5" style="color:var(--dm);text-align:center">Snapshot leer</td></tr>';
-        if($("irpfSnapStatus"))$("irpfSnapStatus").innerHTML='<span style="color:var(--g)">✓ '+snap2026.date+'</span>';
-        if($("irpfTotalBrl"))$("irpfTotalBrl").innerHTML='<span style="color:var(--cy)">R$'+F(totalIrpfBrl,0)+'</span>';
-      }else{
-        if($("irpfTableB"))$("irpfTableB").innerHTML='<tr><td colspan="5" style="color:var(--dm);text-align:center">Kein Snapshot — klick "📸 Snapshot speichern"</td></tr>';
-        if($("irpfSnapStatus"))$("irpfSnapStatus").innerHTML='<span style="color:var(--dm)">— ausstehend</span>';
-        if($("irpfTotalBrl"))$("irpfTotalBrl").innerHTML='<span style="color:var(--dm)">—</span>';
-      }
+      if($("irpfStatus2025"))$("irpfStatus2025").innerHTML=snap2025?'<span style="color:var(--g)">✓ gespeichert</span>':'<span style="color:var(--dm)">— ausstehend</span>';
+      if($("irpfStatus2026"))$("irpfStatus2026").innerHTML=snap2026?'<span style="color:var(--g)">✓ gespeichert</span>':'<span style="color:var(--dm)">— ausstehend</span>';
+      // Total holdings BRL = current Custo Médio * FMV
+      if($("irpfTotalBrl"))$("irpfTotalBrl").innerHTML='<span style="color:var(--cy)">R$'+F(cmTotalFmv,0)+'</span>';
     }catch(e){console.log("IRPF render err:",e.message);}
   }catch(e){console.log("brRenderTaxUI err:",e.message);}
 }
@@ -3228,102 +3139,85 @@ function detectNewLPMints(currentLPs){
   }
 }
 
-// ═══ PRICE & LP ALERTS ═══
-var alertCfg={hi:0,lo:0,fill1:50,fill2:90};
-var alertTriggered={};
-try{var ac=localStorage.getItem("burn_alerts");if(ac)alertCfg=JSON.parse(ac);}catch(e){}
-try{var at2=localStorage.getItem("burn_alert_triggered");if(at2)alertTriggered=JSON.parse(at2);}catch(e){}
+// ═══ PUSH STATUS / FCM TOKEN SYNC ═══
+var FCM_REGISTER_URL="http://95.216.152.31:8082/fcm/register";
 
-function saveAlerts(){
-  alertCfg.hi=parseFloat($("alertHi").value)||0;
-  alertCfg.lo=parseFloat($("alertLo").value)||0;
-  alertCfg.fill1=parseInt($("alertFill1").value)||50;
-  alertCfg.fill2=parseInt($("alertFill2").value)||90;
-  alertCfg.ptfHi=parseFloat($("alertPtfHi").value)||0;
-  alertCfg.ptfLo=parseFloat($("alertPtfLo").value)||0;
-  alertTriggered={};
-  try{localStorage.setItem("burn_alerts",JSON.stringify(alertCfg));localStorage.removeItem("burn_alert_triggered");}catch(e){}
-  $("alertStatus").innerHTML='<span style="color:var(--g)">Alerts saved</span>';
-  checkAlerts();
-}
-function clearAlerts(){
-  alertCfg={hi:0,lo:0,fill1:50,fill2:90,ptfHi:0,ptfLo:0};alertTriggered={};
-  try{localStorage.removeItem("burn_alerts");localStorage.removeItem("burn_alert_triggered");}catch(e){}
-  $("alertHi").value="";$("alertLo").value="";$("alertFill1").value="";$("alertFill2").value="";
-  try{$("alertPtfHi").value="";$("alertPtfLo").value="";}catch(e){}
-  $("alertStatus").innerHTML='<span style="color:var(--dm)">Alerts cleared</span>';
-  $("alertBar").style.display="none";
-}
 function showPushSub(){
   var sub=localStorage.getItem("push_sub");
   var fcm=localStorage.getItem("fcm_token");
   var info="";
-  if(fcm)info+='<div style="margin-bottom:4px"><b>FCM Token (für Hetzner):</b><br><span style="color:var(--g);word-break:break-all">'+fcm+'</span></div>';
+  if(fcm)info+='<div style="margin-bottom:4px"><b>FCM Token:</b><br><span style="color:var(--g);word-break:break-all">'+fcm+'</span></div>';
   if(sub)info+='<div><b>Web Push Sub:</b><br>'+sub+'</div>';
-  if(!fcm&&!sub)info='<span style="color:var(--r)">Nicht subscribed. Klick erst 🔔 oben rechts.</span>';
+  if(!fcm&&!sub)info='<span style="color:var(--r)">Kein Token gefunden. APK öffnen oder Browser-Push aktivieren.</span>';
   $("pushSubInfo").innerHTML=info;
 }
-function checkAlerts(){
+
+function copyFcmToken(){
+  var fcm=localStorage.getItem("fcm_token");
+  if(!fcm){alert("Kein FCM Token gefunden.");return;}
   try{
-    if(P<=0)return;
-    var msgs=[];
-    // Price alerts
-    if(alertCfg.hi>0&&P>=alertCfg.hi&&!alertTriggered.hi){
-      msgs.push("🚀 BURN above $"+alertCfg.hi.toFixed(4)+" (now $"+FP(P)+")");
-      alertTriggered.hi=Date.now();
-      if(typeof notify==="function")notify("🚀 Price Alert","BURN above $"+alertCfg.hi.toFixed(4)+" → $"+FP(P));
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(fcm).then(function(){
+        $("pushStatus").innerHTML='<span style="color:var(--g)">✓ Token in Zwischenablage kopiert</span>';
+      }).catch(function(){
+        // Fallback
+        var ta=document.createElement("textarea");ta.value=fcm;document.body.appendChild(ta);ta.select();
+        try{document.execCommand("copy");$("pushStatus").innerHTML='<span style="color:var(--g)">✓ Token kopiert</span>';}catch(e){alert("FCM Token:\n\n"+fcm);}
+        document.body.removeChild(ta);
+      });
+    }else{
+      alert("FCM Token:\n\n"+fcm);
     }
-    if(alertCfg.lo>0&&P<=alertCfg.lo&&!alertTriggered.lo){
-      msgs.push("⚠️ BURN below $"+alertCfg.lo.toFixed(4)+" (now $"+FP(P)+")");
-      alertTriggered.lo=Date.now();
-      if(typeof notify==="function")notify("⚠️ Price Alert","BURN below $"+alertCfg.lo.toFixed(4)+" → $"+FP(P));
+  }catch(e){alert("FCM Token:\n\n"+fcm);}
+}
+
+function syncFcmToServer(){
+  var fcm=localStorage.getItem("fcm_token");
+  if(!fcm){
+    $("pushStatus").innerHTML='<span style="color:var(--r)">⚠ Kein FCM Token im localStorage. APK öffnen damit Token gesetzt wird.</span>';
+    return;
+  }
+  $("pushStatus").innerHTML='<span style="color:var(--cy)">Sende Token an Hetzner…</span>';
+  fetch(FCM_REGISTER_URL,{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({token:fcm,ts:Date.now()})
+  }).then(function(r){
+    if(r.ok){
+      $("pushStatus").innerHTML='<span style="color:var(--g)">✓ Token an Hetzner gesendet</span>';
+      try{localStorage.setItem("fcm_synced_ts",Date.now().toString());}catch(e){}
+    }else{
+      $("pushStatus").innerHTML='<span style="color:var(--o)">⚠ Server antwortet '+r.status+'. Endpoint POST /fcm/register evtl. noch nicht aktiv. Token alternativ kopieren und manuell auf Hetzner ablegen.</span>';
     }
-    // Reset triggers when price moves back
-    if(alertCfg.hi>0&&P<alertCfg.hi*0.98)delete alertTriggered.hi;
-    if(alertCfg.lo>0&&P>alertCfg.lo*1.02)delete alertTriggered.lo;
-    // LP Fill alerts
-    for(var li=0;li<LP.length;li++){
-      if(LP[li].fr)continue;
-      var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);
-      var fillKey="lp_"+li+"_"+alertCfg.fill1;
-      var fillKey2="lp_"+li+"_"+alertCfg.fill2;
-      if(alertCfg.fill1>0&&cv.pct>=alertCfg.fill1&&!alertTriggered[fillKey]){
-        msgs.push("📊 LP $"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" reached "+cv.pct.toFixed(0)+"% filled");
-        alertTriggered[fillKey]=Date.now();
-        if(typeof notify==="function")notify("📊 LP Fill Alert","$"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" at "+cv.pct.toFixed(0)+"%");
-      }
-      if(alertCfg.fill2>0&&cv.pct>=alertCfg.fill2&&!alertTriggered[fillKey2]){
-        msgs.push("🔥 LP $"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" reached "+cv.pct.toFixed(0)+"% filled!");
-        alertTriggered[fillKey2]=Date.now();
-        if(typeof notify==="function")notify("🔥 LP Fill Alert!","$"+LP[li].lo.toFixed(3)+"→$"+LP[li].hi.toFixed(2)+" at "+cv.pct.toFixed(0)+"%!");
-      }
+  }).catch(function(e){
+    $("pushStatus").innerHTML='<span style="color:var(--o)">⚠ Sync fehlgeschlagen: '+e.message+'. Endpoint evtl. noch nicht live — Token kopieren und manuell auf Hetzner.</span>';
+  });
+}
+
+function renderPushStatus(){
+  try{
+    if(!$("pushStatus"))return;
+    var fcm=localStorage.getItem("fcm_token");
+    var sub=localStorage.getItem("push_sub");
+    var syncedTs=localStorage.getItem("fcm_synced_ts");
+    var html="";
+    if(fcm){
+      var shortFcm=fcm.slice(0,12)+"…"+fcm.slice(-8);
+      html+='<span style="color:var(--g)">✓ FCM Token aktiv</span> <span style="color:var(--dm);font-size:9px">('+shortFcm+')</span>';
+    }else if(sub){
+      html+='<span style="color:var(--cy)">Web Push aktiv</span> <span style="color:var(--dm);font-size:9px">(kein FCM)</span>';
+    }else{
+      html+='<span style="color:var(--r)">Kein Token gefunden</span>';
     }
-    // Show alert bar
-    if(msgs.length>0){
-      $("alertBar").style.display="block";
-      $("alertMsg").innerHTML=msgs.join(" · ");
+    if(syncedTs){
+      var ageMs=Date.now()-parseInt(syncedTs);
+      var ageStr=ageMs<60000?"gerade":ageMs<3600000?Math.round(ageMs/60000)+"m":ageMs<86400000?Math.round(ageMs/3600000)+"h":Math.round(ageMs/86400000)+"d";
+      html+=' · <span style="color:var(--dm);font-size:9px">letzter Sync: '+ageStr+' her</span>';
     }
-    // Update status
-    var statusParts=[];
-    if(alertCfg.hi>0)statusParts.push("Price >$"+alertCfg.hi.toFixed(4));
-    if(alertCfg.lo>0)statusParts.push("Price <$"+alertCfg.lo.toFixed(4));
-    if(alertCfg.fill1>0)statusParts.push("LP Fill "+alertCfg.fill1+"%");
-    if(alertCfg.fill2>0)statusParts.push("LP Fill "+alertCfg.fill2+"%");
-    if(alertCfg.ptfHi>0)statusParts.push("Portfolio >$"+F(alertCfg.ptfHi,0));
-    if(alertCfg.ptfLo>0)statusParts.push("Portfolio <$"+F(alertCfg.ptfLo,0));
-    if($("alertStatus"))$("alertStatus").innerHTML=statusParts.length>0?'Active: '+statusParts.join(", "):'No alerts set';
-    try{localStorage.setItem("burn_alert_triggered",JSON.stringify(alertTriggered));}catch(e){}
+    $("pushStatus").innerHTML=html;
   }catch(e){}
 }
-// Restore alert inputs on load
-try{
-  if(alertCfg.hi>0&&$("alertHi"))$("alertHi").value=alertCfg.hi;
-  if(alertCfg.lo>0&&$("alertLo"))$("alertLo").value=alertCfg.lo;
-  if(alertCfg.fill1&&$("alertFill1"))$("alertFill1").value=alertCfg.fill1;
-  if(alertCfg.fill2&&$("alertFill2"))$("alertFill2").value=alertCfg.fill2;
-  if(alertCfg.ptfHi>0&&$("alertPtfHi"))$("alertPtfHi").value=alertCfg.ptfHi;
-  if(alertCfg.ptfLo>0&&$("alertPtfLo"))$("alertPtfLo").value=alertCfg.ptfLo;
-}catch(e){}
+
 
 // ═══ CAPITAL FLOW CHART ═══
 function renderCapitalFlow(){
@@ -3407,72 +3301,6 @@ function renderPoolHealth(){
     var pressure=ratio24>1.5?"🟢 Strong buying":ratio24>1?"🟢 Slight buying":ratio24>0.7?"🟡 Neutral":"🔴 Selling pressure";
     $("phealthDetail").innerHTML=pressure+" · 24h: "+h24.buyC+" buys / "+h24.sellC+" sells · 7d: "+d7.buyC+" buys / "+d7.sellC+" sells";
   }catch(e){console.log("phealth err:",e);}
-}
-
-// ═══ STAKING APY TRACKER ═══
-var stapyHistory=[];
-try{var sh=localStorage.getItem("stapy_history");if(sh)stapyHistory=JSON.parse(sh);}catch(e){}
-
-function renderStakingApy(){
-  try{
-    if(!$("stapySummary")||typeof stR==="undefined"||stR<=0)return;
-    // Save snapshot every hour
-    var lastSnap=stapyHistory.length>0?stapyHistory[stapyHistory.length-1]:null;
-    if(!lastSnap||Date.now()-lastSnap[0]>3600000){
-      stapyHistory.push([Date.now(),stR]);
-      if(stapyHistory.length>8760)stapyHistory.shift();
-      try{localStorage.setItem("stapy_history",JSON.stringify(stapyHistory));}catch(e){}
-    }
-    // Calculate APY from ratio change
-    var currentRatio=stR;
-    var dailyYield=0,weeklyYield=0,monthlyYield=0,apy=0;
-    if(stapyHistory.length>=2){
-      var oldest=stapyHistory[0];
-      var dayMs=Date.now()-oldest[0];
-      var days=dayMs/86400000;
-      if(days>0){
-        var totalGrowth=(currentRatio-oldest[1])/oldest[1];
-        var dailyRate=totalGrowth/days;
-        dailyYield=dailyRate*100;
-        weeklyYield=dailyRate*7*100;
-        monthlyYield=dailyRate*30*100;
-        apy=((Math.pow(1+dailyRate,365))-1)*100;
-      }
-    }
-    // Summary
-    var burnValue=typeof MY_STBURN!=="undefined"?MY_STBURN*stR*P:0;
-    var stBurnYield=typeof MY_STBURN!=="undefined"?MY_STBURN*(stR-1):0;
-    $("stapySummary").innerHTML=
-      MB("stBURN/BURN Ratio",currentRatio.toFixed(6),"var(--cy)")+
-      MB("Est. APY",apy>0?apy.toFixed(2)+"%":"collecting...","var(--g)")+
-      MB("Daily Yield",dailyYield>0?"+"+dailyYield.toFixed(4)+"%":"—","var(--g)")+
-      MB("stBURN Value","$"+F(burnValue,0),"var(--br)")+
-      MB("Yield Earned",F(stBurnYield,0)+" BURN","var(--o)")+
-      MB("Data Points",stapyHistory.length,"var(--dm)");
-    // Mini chart of ratio history
-    if(stapyHistory.length>=3){
-      var svgW=700,svgH=80;
-      var pts=stapyHistory;
-      var minR=pts[0][1],maxR=pts[0][1];
-      for(var i=0;i<pts.length;i++){if(pts[i][1]<minR)minR=pts[i][1];if(pts[i][1]>maxR)maxR=pts[i][1];}
-      var pad=(maxR-minR)*0.1||0.0001;minR-=pad;maxR+=pad;
-      var path="M";
-      var step=pts.length>300?Math.ceil(pts.length/300):1;
-      for(var j=0;j<pts.length;j+=step){
-        var x=(j/(pts.length-1))*svgW;
-        var y=svgH-(pts[j][1]-minR)/(maxR-minR)*svgH;
-        path+=(j===0?"":"L")+x.toFixed(1)+","+y.toFixed(1);
-      }
-      var svg='<svg viewBox="0 0 '+svgW+' '+(svgH+4)+'" style="width:100%;height:auto">';
-      svg+='<path d="'+path+'" fill="none" stroke="#c084fc" stroke-width="2"/>';
-      svg+='<text x="4" y="10" fill="#94a3b8" font-size="8">'+maxR.toFixed(6)+'</text>';
-      svg+='<text x="4" y="'+svgH+'" fill="#94a3b8" font-size="8">'+minR.toFixed(6)+'</text>';
-      svg+='</svg>';
-      $("stapyChart").innerHTML=svg;
-    }else{
-      $("stapyChart").innerHTML='<span style="color:var(--dm);font-size:10px">Collecting ratio data... chart after 3+ snapshots</span>';
-    }
-  }catch(e){console.log("stapy err:",e);}
 }
 
 // ═══ PORTFOLIO SYNC TO SERVER ═══
@@ -4596,44 +4424,9 @@ function startRefresh(){
     if(_refreshCount%5===0){try{syncPortfolioToServer();}catch(e){}}
     if(_refreshCount%60===0){try{fetchBurn30d();}catch(e){}}
     // Check portfolio value alerts
-    try{checkPortfolioAlerts();}catch(e){}
     saveOffline();updateSysStatus();},60000);
 }
 
-// ═══ PORTFOLIO VALUE ALERTS ═══
-function checkPortfolioAlerts(){
-  try{
-    if(!alertCfg||!P||P<=0)return;
-    // Calculate total portfolio value
-    var burnVal=(MY_BURN||0)*P + (MY_STBURN||0)*stR*P + (ALP||0)*P;
-    var altVal=0;
-    if(typeof ptfAssets!=="undefined"&&typeof ptfPrices!=="undefined"){
-      for(var i=0;i<ptfAssets.length;i++){
-        var pa=ptfAssets[i];
-        var pp=ptfPrices[pa.geckoId]?ptfPrices[pa.geckoId].usd:0;
-        altVal+=pa.amount*pp;
-      }
-    }
-    var totalVal=burnVal+altVal;
-    if(totalVal<=0)return;
-    // Portfolio above threshold
-    if(alertCfg.ptfHi&&alertCfg.ptfHi>0&&totalVal>=alertCfg.ptfHi&&!alertTriggered.ptfHi){
-      var msg="Portfolio $"+F(totalVal,0)+" (above $"+F(alertCfg.ptfHi,0)+")";
-      if(typeof notify==="function")notify("Portfolio Alert",msg);
-      alertTriggered.ptfHi=Date.now();
-    }
-    // Portfolio below threshold
-    if(alertCfg.ptfLo&&alertCfg.ptfLo>0&&totalVal<=alertCfg.ptfLo&&!alertTriggered.ptfLo){
-      var msg2="Portfolio $"+F(totalVal,0)+" (below $"+F(alertCfg.ptfLo,0)+")";
-      if(typeof notify==="function")notify("Portfolio Alert",msg2);
-      alertTriggered.ptfLo=Date.now();
-    }
-    // Reset with 2% hysteresis
-    if(alertCfg.ptfHi&&alertCfg.ptfHi>0&&totalVal<alertCfg.ptfHi*0.98)delete alertTriggered.ptfHi;
-    if(alertCfg.ptfLo&&alertCfg.ptfLo>0&&totalVal>alertCfg.ptfLo*1.02)delete alertTriggered.ptfLo;
-    try{localStorage.setItem("burn_alert_triggered",JSON.stringify(alertTriggered));}catch(e){}
-  }catch(e){}
-}
 function updateSysStatus(){
   var rpcOk=rpcFails[rpcIdx]<3,apiOk=P>0&&SRC!=="",walOk=wal.ok||MY_BURN>0;
   var parts=["RPC:"+(rpcOk?"<span style='color:var(--g)'>OK</span>":"<span style='color:var(--r)'>FAIL</span>"),
