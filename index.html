@@ -106,6 +106,10 @@ tr:hover td{background:rgba(96,165,250,.02)}
 .bld{font-weight:600;color:var(--br)}
 .g{color:var(--g)}.r{color:var(--r)}
 .ov{overflow-x:auto}
+/* Scrollable tax tables — prevent long tables from blocking page scroll on mobile */
+.ov-tax{max-height:400px;overflow-y:auto;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border-radius:6px}
+.ov-tax::-webkit-scrollbar{width:4px;height:4px}
+.ov-tax::-webkit-scrollbar-thumb{background:rgba(96,165,250,.3);border-radius:2px}
 
 /* ═══ TABS ═══ */
 .tabs{display:flex;border-bottom:1px solid var(--line-1)}
@@ -683,7 +687,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <!-- Custo Médio per Asset -->
     <div class="col" onclick="tog(this,'sec-tax-cm')" style="font-size:10px">💰 Custo Médio Ponderado pro Asset</div>
     <div id="sec-tax-cm" class="col-b">
-      <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <div class="ov-tax"><table class="mkt-tbl"><thead><tr>
         <th>Asset</th><th>Menge</th><th>Custo Médio</th><th>FMV</th><th>Unreal. P&L</th>
       </tr></thead><tbody id="cmTableB"><tr><td colspan="5" style="color:var(--dm);text-align:center">Lädt...</td></tr></tbody></table></div>
     </div>
@@ -696,7 +700,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
         <div class="mb"><small>Total Gewinn (BRL)</small><b id="prmProfit">—</b></div>
         <div class="mb"><small>Steuer 15%</small><b id="prmTax">—</b></div>
       </div>
-      <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <div class="ov-tax"><table class="mkt-tbl"><thead><tr>
         <th>Datum</th><th>Typ</th><th>Asset</th><th>Menge</th><th>USD</th><th>BRL</th><th>Gewinn BRL</th>
       </tr></thead><tbody id="permutaTableB"><tr><td colspan="7" style="color:var(--dm);text-align:center">Keine Events</td></tr></tbody></table></div>
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
@@ -709,7 +713,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <!-- Monthly Volume Chart for DeCripto -->
     <div class="col" onclick="tog(this,'sec-tax-monthly')" style="font-size:10px">📊 Monatsvolumen (DeCripto-Pflicht ab R$35k)</div>
     <div id="sec-tax-monthly" class="col-b">
-      <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <div class="ov-tax"><table class="mkt-tbl"><thead><tr>
         <th>Monat</th><th>Volumen BRL</th><th>Events</th><th>Status</th>
       </tr></thead><tbody id="monthlyVolB"><tr><td colspan="4" style="color:var(--dm);text-align:center">Keine Daten</td></tr></tbody></table></div>
       <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
@@ -725,7 +729,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
         <div class="mb"><small>Nächste Fälligkeit</small><b id="darfNextDue">—</b></div>
         <div class="mb"><small>Aktiver Modus</small><b id="darfMode">—</b></div>
       </div>
-      <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <div class="ov-tax"><table class="mkt-tbl"><thead><tr>
         <th>Monat</th><th>Vol BRL</th><th>Gewinn</th><th>Steuer</th><th>Fällig</th><th>Status</th>
       </tr></thead><tbody id="darfTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Keine Daten</td></tr></tbody></table></div>
       <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
@@ -746,7 +750,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
         <div class="mb"><small>Snapshot Status</small><b id="irpfSnapStatus">—</b></div>
         <div class="mb"><small>Total Holdings BRL</small><b id="irpfTotalBrl">—</b></div>
       </div>
-      <div class="ov"><table class="mkt-tbl"><thead><tr>
+      <div class="ov-tax"><table class="mkt-tbl"><thead><tr>
         <th>Asset</th><th>Menge</th><th>Custo BRL</th><th>FMV BRL</th><th>Code</th>
       </tr></thead><tbody id="irpfTableB"><tr><td colspan="5" style="color:var(--dm);text-align:center">Kein Snapshot</td></tr></tbody></table></div>
       <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
