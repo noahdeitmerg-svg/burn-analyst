@@ -659,8 +659,18 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report (BR)</div>
   <div id="sec-tax" class="col-b">
     <!-- BR Tax Compliance Module -->
-    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🇧🇷 Brasil — Lei 14.754/2023 (Auslandsregime, 15% jährlich)</div>
+    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">🇧🇷 Brasil — Receita Federal Compliance</div>
     <div style="text-align:center;font-size:8px;color:var(--cy);margin-bottom:8px">BR Steuerresidenz seit 12.09.2025 · davor DE (unter Freigrenze)</div>
+    
+    <!-- Tax Mode Toggle -->
+    <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:8px;margin-bottom:10px">
+      <div style="font-size:9px;color:var(--cy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Steuermodell wählen</div>
+      <div style="display:flex;gap:6px">
+        <button id="brMode35k" class="btn" onclick="brSetTaxMode('35k')" style="font-size:10px;flex:1">R$35k-Regel</button>
+        <button id="brModeLei" class="btn" onclick="brSetTaxMode('lei14754')" style="font-size:10px;flex:1">Lei 14.754 (15%)</button>
+      </div>
+      <div id="brModeDesc" style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4"></div>
+    </div>
     
     <!-- PTAX + Compliance Status -->
     <div id="brTaxStatus" class="mg" style="margin-bottom:10px">
@@ -704,6 +714,51 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
       </tr></thead><tbody id="monthlyVolB"><tr><td colspan="4" style="color:var(--dm);text-align:center">Keine Daten</td></tr></tbody></table></div>
       <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
         🟢 unter R$35k = keine Meldepflicht. 🟡 über R$35k = DeCripto-Meldung (ab Juli 2026) im e-CAC bis Letztwerktag Folgemonat.
+      </div>
+    </div>
+    
+    <!-- DARF Monthly Tax Schedule -->
+    <div class="col" onclick="tog(this,'sec-tax-darf')" style="font-size:10px">💸 DARF Monatlich (Steuer-Berechnung)</div>
+    <div id="sec-tax-darf" class="col-b">
+      <div id="darfSummary" class="mg" style="margin-bottom:8px">
+        <div class="mb"><small>Steuer offen 2026</small><b id="darfOpenTotal">—</b></div>
+        <div class="mb"><small>Nächste Fälligkeit</small><b id="darfNextDue">—</b></div>
+        <div class="mb"><small>Aktiver Modus</small><b id="darfMode">—</b></div>
+      </div>
+      <div class="ov"><table class="mkt-tbl"><thead><tr>
+        <th>Monat</th><th>Vol BRL</th><th>Gewinn</th><th>Steuer</th><th>Fällig</th><th>Status</th>
+      </tr></thead><tbody id="darfTableB"><tr><td colspan="6" style="color:var(--dm);text-align:center">Keine Daten</td></tr></tbody></table></div>
+      <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
+        Steuer entsteht <b>monatlich</b>, Zahlung via DARF bis <b>letzter Werktag des Folgemonats</b>.<br>
+        DARF-Code: 4600 (Capital Gain) oder 6015 (Auslandserträge) — bestätige mit Steuerberater.
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="brExportDARF(null,2025)" style="font-size:10px;border-color:var(--g)">📋 DARF 2025 (für DAA)</button>
+        <button class="btn" onclick="brExportDARF()" style="font-size:10px;border-color:var(--g)">📋 DARF 2026</button>
+        <button class="btn" onclick="var ym=prompt('Monat (YYYY-MM):',new Date().toISOString().slice(0,7));if(ym)brExportDARF(ym)" style="font-size:10px">📋 Einzelner Monat</button>
+      </div>
+    </div>
+    
+    <!-- IRPF Bens e Direitos (Year-End Snapshot) -->
+    <div class="col" onclick="tog(this,'sec-tax-irpf')" style="font-size:10px">📜 IRPF Bens e Direitos (Stichtag 31.12)</div>
+    <div id="sec-tax-irpf" class="col-b">
+      <div id="irpfSummary" class="mg" style="margin-bottom:8px">
+        <div class="mb"><small>Snapshot Status</small><b id="irpfSnapStatus">—</b></div>
+        <div class="mb"><small>Total Holdings BRL</small><b id="irpfTotalBrl">—</b></div>
+      </div>
+      <div class="ov"><table class="mkt-tbl"><thead><tr>
+        <th>Asset</th><th>Menge</th><th>Custo BRL</th><th>FMV BRL</th><th>Code</th>
+      </tr></thead><tbody id="irpfTableB"><tr><td colspan="5" style="color:var(--dm);text-align:center">Kein Snapshot</td></tr></tbody></table></div>
+      <div style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4">
+        Bens e Direitos = Bestände am <b>31.12.</b> mit Anschaffungskosten (NICHT FMV).<br>
+        IRPF-Codes: 81 (BTC), 82 (Outros Criptoativos), 99 (Outros bens) — bestätige mit Steuerberater.<br>
+        <b>2025</b>: Stichtag für DAA 2026 (Abgabe März/April 2026). <b>2026</b>: Stichtag für DAA 2027.
+      </div>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn" onclick="brSaveYearEndSnapshot(2025);brRenderTaxUI();alert('Snapshot 31.12.2025 gespeichert')" style="font-size:10px;border-color:var(--o)">📸 Snapshot 2025</button>
+        <button class="btn" onclick="brExportIRPF(2025)" style="font-size:10px;border-color:var(--g)">📋 IRPF Export 2025</button>
+        <button class="btn" onclick="brSaveYearEndSnapshot(2026);brRenderTaxUI();alert('Snapshot 31.12.2026 gespeichert')" style="font-size:10px;border-color:var(--o)">📸 Snapshot 2026</button>
+        <button class="btn" onclick="brExportIRPF(2026)" style="font-size:10px;border-color:var(--g)">📋 IRPF Export 2026</button>
       </div>
     </div>
     

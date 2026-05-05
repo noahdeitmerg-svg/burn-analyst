@@ -504,6 +504,8 @@ async function fetchLPs(){
     if(newLP.length>0){
       // Detect closed LPs before overwriting LP[]
       try{detectClosedLPs(newLP);}catch(e){console.log("detectClose err:",e);}
+      // Detect NEW LP mints (in newLP but not in lpPrevious)
+      try{detectNewLPMints(newLP);}catch(e){console.log("detectMint err:",e);}
       // Keep DAO Full Range, replace user LPs
       var dao=null;for(var di=0;di<LP.length;di++){if(LP[di].fr)dao=LP[di];}
       newLP.sort(function(a,b){return a.lo-b.lo;});
@@ -2041,6 +2043,20 @@ var BR_PTAX_CACHE={};  // {YYYY-MM-DD: rate}
 var BR_PTAX_CURRENT=5.50;  // Fallback if API fails
 var BR_PTAX_LAST_FETCH=0;
 
+// BR Tax Residency Start Date — alle Trades davor zählen NICHT als Gewinn/Verlust
+// (waren in Deutschland unter Freigrenze)
+var BR_TAX_RESIDENCY_START="2025-09-12";
+
+// Tax Mode (user-switchable):
+//   "35k" = klassische Capital Gain mit R$35k/Monat Freigrenze (Steuerberater Default-Position)
+//   "lei14754" = pauschal 15% auf alle Gewinne (Auslandsregime, konservativ)
+var BR_TAX_MODE="35k";
+try{var tm=localStorage.getItem("br_tax_mode");if(tm)BR_TAX_MODE=tm;}catch(e){}
+
+// Yearly snapshots (31.12 Bestand) for IRPF Bens e Direitos
+var BR_YEAR_SNAPSHOTS={};  // {YYYY: {date, holdings:{ASSET:{qty,avgCostBrl,fmvBrl,fmvUsd}}}}
+try{var yss=localStorage.getItem("br_year_snapshots");if(yss)BR_YEAR_SNAPSHOTS=JSON.parse(yss);}catch(e){}
+
 // Permuta Events (steuerauslösende Krypto-zu-Krypto Tausche, LP-Mints, Fills)
 // Each: {ts, date, type, asset, qty, usd, brl, costBasisBrl, profitBrl, ptax, note}
 var BR_PERMUTAS=[];
@@ -2092,8 +2108,22 @@ async function brFetchPtax(){
 }
 
 // Get PTAX rate for specific date (use cache, current rate if no historical)
+// Hardcoded historical USD/BRL averages by year-month for backfill
+var BR_PTAX_HISTORICAL={
+  "2024-01":4.95,"2024-02":4.94,"2024-03":4.99,"2024-04":5.05,
+  "2024-05":5.13,"2024-06":5.34,"2024-07":5.55,"2024-08":5.55,
+  "2024-09":5.51,"2024-10":5.65,"2024-11":5.78,"2024-12":6.05,
+  "2025-01":6.05,"2025-02":5.86,"2025-03":5.78,"2025-04":5.74,
+  "2025-05":5.66,"2025-06":5.55,"2025-07":5.50,"2025-08":5.45,
+  "2025-09":5.40,"2025-10":5.45,"2025-11":5.50,"2025-12":5.55,
+  "2026-01":5.55,"2026-02":5.55,"2026-03":5.55,"2026-04":5.55,"2026-05":5.50
+};
 function brPtaxFor(dateStr){
+  if(!dateStr)return BR_PTAX_CURRENT;
   if(BR_PTAX_CACHE[dateStr])return BR_PTAX_CACHE[dateStr];
+  // Try year-month historical fallback
+  var ym=dateStr.slice(0,7);
+  if(BR_PTAX_HISTORICAL[ym])return BR_PTAX_HISTORICAL[ym];
   return BR_PTAX_CURRENT;
 }
 
@@ -2150,36 +2180,191 @@ function brAddPermuta(type,asset,qty,usdValue,note,dateStr){
   return event;
 }
 
-// Initialize Custo Médio from existing trades (one-time backfill)
+// Initialize Custo Médio + Permuta-Events from ALL existing data sources
+// Backfills: PTF ledger (buys), CL (LP closes/fills), MS (market sells), historical PTAX
+// Trades vor BR_TAX_RESIDENCY_START werden als Cost Basis aggregiert (keine Steuerpflicht in DE),
+// Trades danach werden als Permuta-Events erfasst (BR-Steuerpflicht).
 function brInitCustoMedio(){
   // Reset
   BR_CUSTO_MEDIO={};
+  BR_PERMUTAS=[];
   
-  // BURN: avg entry from existing buys
-  if(typeof AVG_ENTRY!=="undefined"&&AVG_ENTRY>0&&typeof MY_BURN!=="undefined"&&MY_BURN>0){
-    var burnQty=MY_BURN+(typeof MY_STBURN!=="undefined"?MY_STBURN:0);
-    var burnUsdCost=burnQty*AVG_ENTRY;
-    var burnBrlCost=burnUsdCost*BR_PTAX_CURRENT;
-    BR_CUSTO_MEDIO["BURN"]={qty:burnQty,totalCostBrl:burnBrlCost,avgCostBrl:burnUsdCost*BR_PTAX_CURRENT/burnQty};
+  var ptaxNow=BR_PTAX_CURRENT||5.50;
+  var cutoff=BR_TAX_RESIDENCY_START;
+  console.log("BR: Init with residency cutoff "+cutoff+" — alles davor = Cost Basis, alles danach = Permuta-Events");
+  
+  // Helper: build Cost Basis (no Permuta event) from pre-residency trade
+  function buildCostBasis(asset,qty,brl){
+    var cm=BR_CUSTO_MEDIO[asset]||{qty:0,totalCostBrl:0,avgCostBrl:0};
+    cm.qty+=qty;
+    cm.totalCostBrl+=brl;
+    cm.avgCostBrl=cm.qty>0?cm.totalCostBrl/cm.qty:0;
+    BR_CUSTO_MEDIO[asset]=cm;
   }
   
-  // ETH/BTC/Altcoins from PTF if available
+  // Helper: reduce holdings (no Permuta event) for pre-residency sells
+  function reduceCostBasis(asset,qty){
+    var cm=BR_CUSTO_MEDIO[asset];
+    if(!cm)return;
+    var costGone=qty*cm.avgCostBrl;
+    cm.qty=Math.max(0,cm.qty-qty);
+    cm.totalCostBrl=Math.max(0,cm.totalCostBrl-costGone);
+    BR_CUSTO_MEDIO[asset]=cm;
+  }
+  
+  // ─── 1. PTF Ledger (buys/sells) ───
   try{
-    if(typeof PTF!=="undefined"&&PTF){
-      for(var sym in PTF){
-        var a=PTF[sym];
-        if(a&&a.amount>0&&a.totalCost>0){
-          BR_CUSTO_MEDIO[sym.toUpperCase()]={
-            qty:a.amount,
-            totalCostBrl:a.totalCost*BR_PTAX_CURRENT,
-            avgCostBrl:(a.totalCost/a.amount)*BR_PTAX_CURRENT
-          };
+    if(typeof ptfLedger!=="undefined"&&ptfLedger&&ptfLedger.length>0){
+      var sorted=ptfLedger.slice().sort(function(a,b){return(a.date||"")>(b.date||"")?1:-1;});
+      for(var i=0;i<sorted.length;i++){
+        var e=sorted[i];
+        if(!e.asset||!e.amount)continue;
+        var assetU=e.asset.toUpperCase();
+        var qty=Math.abs(e.amount);
+        var usd=Math.abs(e.total||(qty*(e.price||0)));
+        var date=e.date||new Date().toISOString().split("T")[0];
+        var ptax=brPtaxFor(date);
+        var brl=usd*ptax;
+        var isPreResidency=date<cutoff;
+        
+        if(e.amount>0){
+          // BUY
+          if(isPreResidency){
+            // Pre-Residency: nur Cost Basis aufbauen, kein Event
+            buildCostBasis(assetU,qty,brl);
+          }else{
+            // Post-Residency: Cost Basis + Permuta-Event (Buy = nur Acquisition, kein Steuer-Event)
+            buildCostBasis(assetU,qty,brl);
+            BR_PERMUTAS.push({
+              ts:new Date(date).getTime()||Date.now(),
+              date:date,type:"buy",asset:assetU,
+              qty:qty,usd:usd,brl:brl,ptax:ptax,
+              costBasisBrl:0,profitBrl:0,
+              note:e.note||"PTF Ledger"
+            });
+          }
+        }else{
+          // SELL
+          var cm=BR_CUSTO_MEDIO[assetU]||{qty:0,totalCostBrl:0,avgCostBrl:0};
+          if(isPreResidency){
+            // Pre-Residency: nur reduzieren, kein Event
+            reduceCostBasis(assetU,qty);
+          }else{
+            // Post-Residency: Permuta-Event mit Gewinn-Berechnung
+            var costBasisBrl=qty*cm.avgCostBrl;
+            var profitBrl=brl-costBasisBrl;
+            reduceCostBasis(assetU,qty);
+            BR_PERMUTAS.push({
+              ts:new Date(date).getTime()||Date.now(),
+              date:date,type:"sell",asset:assetU,
+              qty:qty,usd:usd,brl:brl,ptax:ptax,
+              costBasisBrl:costBasisBrl,profitBrl:profitBrl,
+              note:e.note||"PTF Ledger"
+            });
+          }
         }
       }
     }
-  }catch(e){}
+  }catch(err){console.log("BR backfill PTF err:",err.message);}
   
+  // ─── 2. BURN Cost Basis Init (vor allen LP-Verkäufen) ───
+  // BURN wurde vor BR-Residency aufgebaut → komplett als Cost Basis (kein Permuta-Event)
+  try{
+    if(typeof AVG_ENTRY!=="undefined"&&AVG_ENTRY>0){
+      var totalBurnEverBought=(typeof MY_BURN!=="undefined"?MY_BURN:0)+
+                              (typeof MY_STBURN!=="undefined"?MY_STBURN:0)+
+                              (typeof TS!=="undefined"?TS:0);
+      if(totalBurnEverBought>0){
+        var burnCostUsd=totalBurnEverBought*AVG_ENTRY;
+        // BURN-Käufe waren überwiegend vor Residency → use PTAX Sept 2025 als Annäherung
+        var burnPtax=brPtaxFor("2025-08-15");
+        var burnCostBrl=burnCostUsd*burnPtax;
+        BR_CUSTO_MEDIO["BURN"]={
+          qty:totalBurnEverBought,
+          totalCostBrl:burnCostBrl,
+          avgCostBrl:burnCostBrl/totalBurnEverBought
+        };
+        console.log("BR: BURN Cost Basis seeded - "+totalBurnEverBought+" BURN @ R$"+(burnCostBrl/totalBurnEverBought).toFixed(4)+" avg");
+      }
+    }
+  }catch(err){console.log("BR BURN init err:",err.message);}
+  
+  // ─── 3. CL (LP Closes/Fills) ───
+  try{
+    if(typeof CL!=="undefined"&&CL.length>0){
+      var sortedCL=CL.slice().sort(function(a,b){
+        var da=parseDateDE(a.d),db=parseDateDE(b.d);
+        return da&&db?da-db:0;
+      });
+      for(var ci=0;ci<sortedCL.length;ci++){
+        var lp=sortedCL[ci];
+        if(!lp.b||lp.b<=0)continue;
+        var date2=parseDateDE(lp.d);
+        var dateStr=date2?date2.toISOString().split("T")[0]:lp.d;
+        var ptax2=brPtaxFor(dateStr);
+        var usd2=lp.u||0;
+        var brl2=usd2*ptax2;
+        var isPreResidency2=dateStr<cutoff;
+        var cmB=BR_CUSTO_MEDIO["BURN"]||{qty:0,totalCostBrl:0,avgCostBrl:0};
+        var costB=lp.b*cmB.avgCostBrl;
+        
+        if(isPreResidency2){
+          // Pre-Residency LP-Close: nur Cost Basis reduzieren
+          reduceCostBasis("BURN",lp.b);
+        }else{
+          // Post-Residency LP-Fill: Permuta-Event
+          var profB=brl2-costB;
+          reduceCostBasis("BURN",lp.b);
+          BR_PERMUTAS.push({
+            ts:date2?date2.getTime():Date.now(),
+            date:dateStr,type:"lp_fill",asset:"BURN",
+            qty:lp.b,usd:usd2,brl:brl2,ptax:ptax2,
+            costBasisBrl:costB,profitBrl:profB,
+            note:"LP "+(lp.n||"")+" $"+(lp.lo||0)+"-$"+(lp.hi||0)
+          });
+        }
+      }
+    }
+  }catch(err){console.log("BR CL backfill err:",err.message);}
+  
+  // ─── 4. MS (Market Sells) ───
+  try{
+    if(typeof MS!=="undefined"&&MS.length>0){
+      for(var mi=0;mi<MS.length;mi++){
+        var ms=MS[mi];
+        if(!ms.b||ms.b<=0)continue;
+        var date3=parseDateDE(ms.d);
+        var dateStr3=date3?date3.toISOString().split("T")[0]:ms.d;
+        var ptax3=brPtaxFor(dateStr3);
+        var usd3=ms.u||0;
+        var brl3=usd3*ptax3;
+        var isPreResidency3=dateStr3<cutoff;
+        var cmB2=BR_CUSTO_MEDIO["BURN"]||{qty:0,totalCostBrl:0,avgCostBrl:0};
+        var costB2=ms.b*cmB2.avgCostBrl;
+        
+        if(isPreResidency3){
+          reduceCostBasis("BURN",ms.b);
+        }else{
+          var profB2=brl3-costB2;
+          reduceCostBasis("BURN",ms.b);
+          BR_PERMUTAS.push({
+            ts:date3?date3.getTime():Date.now(),
+            date:dateStr3,type:"sell",asset:"BURN",
+            qty:ms.b,usd:usd3,brl:brl3,ptax:ptax3,
+            costBasisBrl:costB2,profitBrl:profB2,
+            note:ms.n||"Market Sell"
+          });
+        }
+      }
+    }
+  }catch(err){console.log("BR MS backfill err:",err.message);}
+  
+  // Sort all events chronologically
+  BR_PERMUTAS.sort(function(a,b){return a.ts-b.ts;});
+  
+  // Save & log
   brSavePermutas();
+  console.log("BR Init done: "+BR_PERMUTAS.length+" steuerpflichtige Events (ab "+cutoff+"), "+Object.keys(BR_CUSTO_MEDIO).length+" Assets im Custo Médio");
 }
 
 // Get current month BRL volume from permuta events
@@ -2199,26 +2384,247 @@ function brMonthVolume(yearMonth){
   return{brl:totalBrl,count:count};
 }
 
-// Year profit summary (for DAA / Lei 14.754)
+// Year profit summary with both tax scenarios
 function brYearProfit(year){
   if(!year)year=new Date().getFullYear();
   var totalProfit=0,totalVolume=0,events=0;
+  var monthsTaxable=[],monthsExempt=[];
+  var monthly={};
   for(var i=0;i<BR_PERMUTAS.length;i++){
     var p=BR_PERMUTAS[i];
     if(p.date&&p.date.startsWith(year+"-")){
       totalProfit+=p.profitBrl;
       totalVolume+=Math.abs(p.brl);
       events++;
+      var ym=p.date.slice(0,7);
+      if(!monthly[ym])monthly[ym]={vol:0,profit:0,events:0};
+      monthly[ym].vol+=Math.abs(p.brl);
+      monthly[ym].profit+=p.profitBrl;
+      monthly[ym].events++;
     }
   }
-  var tax=Math.max(0,totalProfit)*0.15;
-  return{profit:totalProfit,tax:tax,volume:totalVolume,events:events};
+  // Per-month status
+  var taxableProfit35k=0;
+  for(var ym in monthly){
+    var m=monthly[ym];
+    if(m.vol>35000){
+      monthsTaxable.push(ym);
+      taxableProfit35k+=Math.max(0,m.profit);
+    }else{
+      monthsExempt.push(ym);
+    }
+  }
+  
+  return{
+    profit:totalProfit,
+    volume:totalVolume,
+    events:events,
+    taxLei14754:Math.max(0,totalProfit)*0.15,
+    tax35kRule:taxableProfit35k*0.15,
+    monthsTaxable:monthsTaxable,
+    monthsExempt:monthsExempt,
+    monthly:monthly
+  };
+}
+
+// Compute monthly DARF (steuerpflichtige Zahlung) per month
+// Returns: {ym: {vol, profit, taxDue, dueDate, status, darfCode}}
+function brMonthlyDARF(year){
+  if(!year)year=new Date().getFullYear();
+  var monthly={};
+  for(var i=0;i<BR_PERMUTAS.length;i++){
+    var p=BR_PERMUTAS[i];
+    if(!p.date||!p.date.startsWith(year+"-"))continue;
+    var ym=p.date.slice(0,7);
+    if(!monthly[ym])monthly[ym]={vol:0,profit:0,events:0,permutas:[]};
+    monthly[ym].vol+=Math.abs(p.brl);
+    monthly[ym].profit+=p.profitBrl;
+    monthly[ym].events++;
+    monthly[ym].permutas.push(p);
+  }
+  // Compute tax + DARF info per month
+  for(var ym2 in monthly){
+    var m=monthly[ym2];
+    var taxDue=0,status="exempt",reason="";
+    if(BR_TAX_MODE==="35k"){
+      // 35k-Regel: nur wenn Volumen > R$35k UND Gewinn > 0
+      if(m.vol>35000){
+        taxDue=Math.max(0,m.profit)*0.15;
+        status=m.profit>0?"due":"loss";
+        reason="Volumen R$"+m.vol.toFixed(0)+" > R$35k";
+      }else{
+        reason="Volumen R$"+m.vol.toFixed(0)+" ≤ R$35k (steuerfrei)";
+      }
+    }else{
+      // Lei 14.754: 15% auf alle positiven Monatsgewinne
+      if(m.profit>0){
+        taxDue=m.profit*0.15;
+        status="due";
+        reason="Lei 14.754 — 15% auf Monatsgewinn";
+      }else{
+        reason="Verlust — keine Steuer (kann mit Vormonats-Verlusten kompensiert werden)";
+      }
+    }
+    // Due date: last weekday of next month
+    var parts=ym2.split("-"),yr=parseInt(parts[0]),mo=parseInt(parts[1]);
+    var lastDay=new Date(yr,mo,0); // last day of mo (1-indexed → 0-indexed = mo-1)
+    // Walk back to weekday
+    while(lastDay.getDay()===0||lastDay.getDay()===6)lastDay.setDate(lastDay.getDate()-1);
+    m.dueDate=lastDay.toISOString().split("T")[0];
+    m.taxDue=taxDue;
+    m.status=status;
+    m.reason=reason;
+    // DARF code (provisional - confirm with accountant)
+    m.darfCode=BR_TAX_MODE==="35k"?"4600":"6015";
+  }
+  return monthly;
+}
+
+// Save 31.12 holdings snapshot for IRPF Bens e Direitos
+function brSaveYearEndSnapshot(year){
+  if(!year)year=new Date().getFullYear();
+  var snap={date:year+"-12-31",holdings:{},timestamp:Date.now()};
+  // Iterate over all assets we know
+  for(var asset in BR_CUSTO_MEDIO){
+    var cm=BR_CUSTO_MEDIO[asset];
+    if(!cm||cm.qty<=0)continue;
+    var fmvUsd=0;
+    if(asset==="BURN")fmvUsd=typeof P!=="undefined"?P:0;
+    else{
+      // Try PTF
+      try{
+        if(typeof ptfAssets!=="undefined"){
+          for(var pi=0;pi<ptfAssets.length;pi++){
+            if(ptfAssets[pi].id&&ptfAssets[pi].id.toUpperCase()===asset){
+              var pId=ptfAssets[pi].geckoId;
+              if(pId&&typeof ptfPrices!=="undefined"&&ptfPrices[pId])fmvUsd=ptfPrices[pId].usd||0;
+              break;
+            }
+          }
+        }
+      }catch(e){}
+    }
+    var fmvBrl=fmvUsd*cm.qty*BR_PTAX_CURRENT;
+    snap.holdings[asset]={
+      qty:cm.qty,
+      avgCostBrl:cm.avgCostBrl,
+      totalCostBrl:cm.totalCostBrl,
+      fmvUsd:fmvUsd*cm.qty,
+      fmvBrl:fmvBrl,
+      ptax:BR_PTAX_CURRENT
+    };
+  }
+  BR_YEAR_SNAPSHOTS[year.toString()]=snap;
+  try{localStorage.setItem("br_year_snapshots",JSON.stringify(BR_YEAR_SNAPSHOTS));}catch(e){}
+  return snap;
+}
+
+// Switch tax mode (35k vs lei14754)
+function brSetTaxMode(mode){
+  if(mode!=="35k"&&mode!=="lei14754")return;
+  BR_TAX_MODE=mode;
+  try{localStorage.setItem("br_tax_mode",mode);}catch(e){}
+  brRenderTaxUI();
+}
+
+// Generate DARF-ready export (single month or full year)
+function brExportDARF(yearMonth,yearOverride){
+  try{
+    var year=yearOverride||(yearMonth?parseInt(yearMonth.split("-")[0]):new Date().getFullYear());
+    var monthly=brMonthlyDARF(year);
+    var rows=[];
+    rows.push("# DARF VORBEREITUNG - "+(yearMonth||year));
+    rows.push("# Steuermodell aktiv: "+(BR_TAX_MODE==="35k"?"R$35k-Regel (Capital Gain)":"Lei 14.754/2023 (15% pauschal)"));
+    rows.push("# Generiert: "+new Date().toISOString());
+    rows.push("# WICHTIG: Steuerberater bestätigt DARF-Code + tatsächliche Anwendung");
+    rows.push("");
+    rows.push("Monat;Volumen_BRL;Gewinn_BRL;Steuer_15%;Status;Begründung;Fälligkeit_DARF;DARF_Code");
+    var months=Object.keys(monthly).sort();
+    for(var mi=0;mi<months.length;mi++){
+      var ym=months[mi];
+      if(yearMonth&&ym!==yearMonth)continue;
+      var m=monthly[ym];
+      rows.push(ym+";"+m.vol.toFixed(2)+";"+m.profit.toFixed(2)+";"+m.taxDue.toFixed(2)+";"+m.status+";\""+m.reason+"\";"+m.dueDate+";"+m.darfCode);
+    }
+    rows.push("");
+    rows.push("# Detail Permuta-Events:");
+    rows.push("Datum;Typ;Asset;Menge;USD;BRL;PTAX;Custo_Base_BRL;Gewinn_BRL;Notiz");
+    for(var ymi in monthly){
+      if(yearMonth&&ymi!==yearMonth)continue;
+      var ms=monthly[ymi];
+      for(var pi2=0;pi2<ms.permutas.length;pi2++){
+        var p=ms.permutas[pi2];
+        rows.push(p.date+";"+p.type+";"+p.asset+";"+p.qty.toFixed(6)+";"+p.usd.toFixed(2)+";"+p.brl.toFixed(2)+";"+p.ptax.toFixed(4)+";"+p.costBasisBrl.toFixed(2)+";"+p.profitBrl.toFixed(2)+";\""+(p.note||"").replace(/"/g,"")+"\"");
+      }
+    }
+    var csv=rows.join("\n");
+    var blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="darf-"+(yearMonth||year)+"-"+BR_TAX_MODE+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("DARF export err:",e);alert("Export-Fehler: "+e.message);}
+}
+
+// Generate IRPF Bens e Direitos export (Stichtag 31.12)
+function brExportIRPF(year){
+  if(!year)year=new Date().getFullYear();
+  try{
+    var snap=BR_YEAR_SNAPSHOTS[year.toString()];
+    if(!snap){
+      if(confirm("Kein Snapshot für "+year+" vorhanden. Jetzt erstellen mit aktuellen Werten?"))snap=brSaveYearEndSnapshot(year);
+      else return;
+    }
+    var rows=[];
+    rows.push("# IRPF - DECLARAÇÃO DE BENS E DIREITOS - "+year);
+    rows.push("# Stichtag: "+snap.date);
+    rows.push("# Generiert: "+new Date(snap.timestamp).toISOString());
+    rows.push("# Código bens: 81 (Criptoativos - Bitcoin/BTC) ou 82 (Outros) — bestätige mit Steuerberater");
+    rows.push("");
+    rows.push("Asset;Quantidade;Custo_Aquisicao_BRL;FMV_BRL_31_12;FMV_USD_31_12;PTAX;Codigo_IRPF");
+    for(var asset in snap.holdings){
+      var h=snap.holdings[asset];
+      var code=asset==="BTC"?"81":"82";
+      rows.push(asset+";"+h.qty.toFixed(6)+";"+h.totalCostBrl.toFixed(2)+";"+h.fmvBrl.toFixed(2)+";"+h.fmvUsd.toFixed(2)+";"+h.ptax.toFixed(4)+";"+code);
+    }
+    rows.push("");
+    rows.push("# Hinweise:");
+    rows.push("# - Wert für Bens e Direitos: Anschaffungskosten (Custo de Aquisicao), NICHT FMV");
+    rows.push("# - Pre-Residency Holdings (vor 12.09.2025): mit historischen Anschaffungskosten");
+    rows.push("# - Post-Residency Erwerbe: mit Anschaffungspreis in BRL via PTAX");
+    var csv=rows.join("\n");
+    var blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8;"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");a.href=url;
+    a.download="irpf-bens-direitos-"+year+".csv";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(e){console.log("IRPF export err:",e);alert("Export-Fehler: "+e.message);}
 }
 
 // Render BR Tax UI
 function brRenderTaxUI(){
   try{
     if(!$("brPtax"))return;
+    
+    // Tax Mode Toggle visual state
+    if($("brMode35k")&&$("brModeLei")){
+      var activeStyle="background:var(--cy);color:#000;border-color:var(--cy);font-weight:600";
+      var inactiveStyle="background:transparent;color:var(--dm)";
+      if(BR_TAX_MODE==="35k"){
+        $("brMode35k").setAttribute("style","font-size:10px;flex:1;"+activeStyle);
+        $("brModeLei").setAttribute("style","font-size:10px;flex:1;"+inactiveStyle);
+      }else{
+        $("brMode35k").setAttribute("style","font-size:10px;flex:1;"+inactiveStyle);
+        $("brModeLei").setAttribute("style","font-size:10px;flex:1;"+activeStyle);
+      }
+      if($("brModeDesc")){
+        $("brModeDesc").innerHTML=BR_TAX_MODE==="35k"
+          ?"<b>R$35k-Regel:</b> Steuerfrei wenn Monatsvolumen ≤ R$35k. Wenn überschritten: 15% auf Monatsgewinn. Default-Position deines Steuerberaters."
+          :"<b>Lei 14.754:</b> 15% pauschal auf alle Gewinne, keine Freigrenze. Konservativ/audit-sicher.";
+      }
+    }
     
     // PTAX
     $("brPtax").innerHTML=BR_PTAX_CURRENT?"R$"+BR_PTAX_CURRENT.toFixed(4):"—";
@@ -2232,10 +2638,15 @@ function brRenderTaxUI(){
     var dStatus=mv.brl>=35000?'<span style="color:var(--r)">⚠️ MELDEPFLICHT</span>':'<span style="color:var(--g)">✓ unter R$35k</span>';
     $("brDecripto").innerHTML=dStatus+'<br><small style="font-size:8px;color:var(--dm)">ab Juli 2026</small>';
     
-    // Year Profit 2026
+    // Year Profit 2026 - dual scenario display
     var yp=brYearProfit(2026);
     var ypClr=yp.profit>=0?"var(--g)":"var(--r)";
-    $("brYearProfit").innerHTML='<span style="color:'+ypClr+'">'+(yp.profit>=0?"+":"")+"R$"+F(Math.abs(yp.profit),0)+'</span><br><small style="font-size:8px;color:var(--dm)">Steuer 15%: R$'+F(yp.tax,0)+'</small>';
+    var taxDisplay='<span style="color:'+ypClr+'">'+(yp.profit>=0?"+":"")+"R$"+F(Math.abs(yp.profit),0)+'</span>';
+    taxDisplay+='<br><small style="font-size:8px;color:var(--dm)">';
+    taxDisplay+='Lei 14.754 (15%): R$'+F(yp.taxLei14754,0);
+    taxDisplay+=' · 35k-Regel: R$'+F(yp.tax35kRule,0);
+    taxDisplay+='</small>';
+    $("brYearProfit").innerHTML=taxDisplay;
     
     // Custo Médio Table
     var cmRows="";
@@ -2293,7 +2704,10 @@ function brRenderTaxUI(){
     
     if($("prmCount"))$("prmCount").textContent=BR_PERMUTAS.length;
     if($("prmProfit"))$("prmProfit").innerHTML='<span style="color:'+(totalPrmProfit>=0?"var(--g)":"var(--r)")+'">'+(totalPrmProfit>=0?"+":"")+'R$'+F(Math.abs(totalPrmProfit),0)+'</span>';
-    if($("prmTax"))$("prmTax").innerHTML='<span style="color:var(--o)">R$'+F(Math.max(0,totalPrmProfit)*0.15,0)+'</span>';
+    if($("prmTax")){
+      var yp2026=brYearProfit(2026);
+      $("prmTax").innerHTML='<span style="color:var(--o)">R$'+F(yp2026.taxLei14754,0)+'</span><br><small style="font-size:8px;color:var(--dm)">35k: R$'+F(yp2026.tax35kRule,0)+'</small>';
+    }
     
     // Monthly Volume Table
     var monthlyAgg={};
@@ -2322,6 +2736,69 @@ function brRenderTaxUI(){
       }
     }
     if($("monthlyVolB"))$("monthlyVolB").innerHTML=mvRows;
+    
+    // ─── DARF Monthly Tax Schedule ───
+    try{
+      var darfData=brMonthlyDARF(2026);
+      var darfRows="",totalOpen=0,nextDue=null;
+      var darfMonths=Object.keys(darfData).sort();
+      var todayStr=new Date().toISOString().split("T")[0];
+      
+      if(darfMonths.length===0){
+        darfRows='<tr><td colspan="6" style="color:var(--dm);text-align:center">Keine Events</td></tr>';
+      }else{
+        for(var dmi=0;dmi<darfMonths.length;dmi++){
+          var dym=darfMonths[dmi];
+          var dm=darfData[dym];
+          var dStatusClr=dm.status==="due"?"var(--r)":dm.status==="loss"?"var(--dm)":"var(--g)";
+          var dStatusTxt=dm.status==="due"?"⚠️ FÄLLIG":dm.status==="loss"?"📉 Verlust":"✓ Frei";
+          var isOverdue=dm.status==="due"&&dm.dueDate<todayStr;
+          if(dm.status==="due"){
+            totalOpen+=dm.taxDue;
+            if(!nextDue||dm.dueDate<nextDue)nextDue=dm.dueDate;
+          }
+          darfRows+='<tr>';
+          darfRows+='<td style="font-weight:600">'+dym+'</td>';
+          darfRows+='<td>R$'+F(dm.vol,0)+'</td>';
+          darfRows+='<td style="color:'+(dm.profit>=0?"var(--g)":"var(--r)")+'">'+(dm.profit>=0?"+":"")+'R$'+F(Math.abs(dm.profit),0)+'</td>';
+          darfRows+='<td style="color:'+dStatusClr+';font-weight:600">R$'+F(dm.taxDue,0)+'</td>';
+          darfRows+='<td style="font-size:9px;color:'+(isOverdue?"var(--r)":"var(--dm)")+'">'+dm.dueDate+'</td>';
+          darfRows+='<td style="font-size:9px">'+dStatusTxt+'</td>';
+          darfRows+='</tr>';
+        }
+      }
+      if($("darfTableB"))$("darfTableB").innerHTML=darfRows;
+      if($("darfOpenTotal"))$("darfOpenTotal").innerHTML='<span style="color:'+(totalOpen>0?"var(--r)":"var(--g)")+'">R$'+F(totalOpen,0)+'</span>';
+      if($("darfNextDue"))$("darfNextDue").innerHTML=nextDue?'<span style="color:var(--o)">'+nextDue+'</span>':'<span style="color:var(--g)">—</span>';
+      if($("darfMode"))$("darfMode").innerHTML='<span style="color:var(--cy)">'+(BR_TAX_MODE==="35k"?"R$35k":"Lei 14.754")+'</span>';
+    }catch(e){console.log("DARF render err:",e.message);}
+    
+    // ─── IRPF Bens e Direitos ───
+    try{
+      var snap2026=BR_YEAR_SNAPSHOTS["2026"];
+      if(snap2026&&snap2026.holdings){
+        var irpfRows="",totalIrpfBrl=0;
+        for(var asset3 in snap2026.holdings){
+          var h=snap2026.holdings[asset3];
+          totalIrpfBrl+=h.fmvBrl;
+          var irpfCode=asset3==="BTC"?"81":"82";
+          irpfRows+='<tr>';
+          irpfRows+='<td style="color:var(--cy);font-weight:600">'+asset3+'</td>';
+          irpfRows+='<td style="color:var(--o)">'+F(h.qty,4)+'</td>';
+          irpfRows+='<td>R$'+F(h.totalCostBrl,0)+'</td>';
+          irpfRows+='<td style="color:var(--g)">R$'+F(h.fmvBrl,0)+'</td>';
+          irpfRows+='<td style="font-size:9px;color:var(--dm)">'+irpfCode+'</td>';
+          irpfRows+='</tr>';
+        }
+        if($("irpfTableB"))$("irpfTableB").innerHTML=irpfRows||'<tr><td colspan="5" style="color:var(--dm);text-align:center">Snapshot leer</td></tr>';
+        if($("irpfSnapStatus"))$("irpfSnapStatus").innerHTML='<span style="color:var(--g)">✓ '+snap2026.date+'</span>';
+        if($("irpfTotalBrl"))$("irpfTotalBrl").innerHTML='<span style="color:var(--cy)">R$'+F(totalIrpfBrl,0)+'</span>';
+      }else{
+        if($("irpfTableB"))$("irpfTableB").innerHTML='<tr><td colspan="5" style="color:var(--dm);text-align:center">Kein Snapshot — klick "📸 Snapshot speichern"</td></tr>';
+        if($("irpfSnapStatus"))$("irpfSnapStatus").innerHTML='<span style="color:var(--dm)">— ausstehend</span>';
+        if($("irpfTotalBrl"))$("irpfTotalBrl").innerHTML='<span style="color:var(--dm)">—</span>';
+      }
+    }catch(e){console.log("IRPF render err:",e.message);}
   }catch(e){console.log("brRenderTaxUI err:",e.message);}
 }
 
@@ -2696,12 +3173,58 @@ function detectClosedLPs(newLPs){
       detected.push(entry);
       clSeen[key]=Date.now();
       console.log("LP CLOSED detected: "+entry.n+" USDC earned: $"+entry.u);
+      // Auto-add as BR Permuta Event (lp_fill = BURN→USDC)
+      try{
+        if(typeof brAddPermuta==="function"&&entry.b>0){
+          var dDate=new Date().toISOString().split("T")[0];
+          brAddPermuta("lp_fill","BURN",entry.b,entry.u,
+            "Auto: LP "+entry.lo.toFixed(3)+"-"+entry.hi.toFixed(2)+" closed",dDate);
+          console.log("BR Permuta auto-recorded: lp_fill BURN "+entry.b);
+        }
+      }catch(e){console.log("BR auto-permuta err:",e.message);}
     }
   }
   if(detected.length>0){
     try{localStorage.setItem("cl_history",JSON.stringify(CL.filter(function(c){return c.n&&c.n.indexOf("🔄")===0;})));
       localStorage.setItem("cl_seen",JSON.stringify(clSeen));}catch(e){}
     if(typeof beep==="function"&&typeof soundOn!=="undefined"&&soundOn)beep();
+  }
+}
+
+// Detect NEW LP Mints (in current LPs but not in lpPrevious) → Permuta-Event
+var lpMintSeen={};
+try{var lms=localStorage.getItem("lp_mint_seen");if(lms)lpMintSeen=JSON.parse(lms);}catch(e){}
+
+function detectNewLPMints(currentLPs){
+  if(!lpPrevious)return;  // Skip first run (no previous state)
+  var detected=[];
+  for(var i=0;i<currentLPs.length;i++){
+    var cur=currentLPs[i];
+    var found=false;
+    for(var j=0;j<lpPrevious.length;j++){
+      // Match by lo/hi range (b might differ slightly due to fee accumulation)
+      if(Math.abs(lpPrevious[j].lo-cur.lo)<0.001&&Math.abs(lpPrevious[j].hi-cur.hi)<0.001){found=true;break;}
+    }
+    if(!found){
+      // New LP mint detected
+      var key=cur.b.toFixed(0)+"_"+cur.lo.toFixed(4)+"_"+cur.hi.toFixed(4);
+      if(lpMintSeen[key])continue;
+      lpMintSeen[key]=Date.now();
+      detected.push(cur);
+      console.log("LP MINT detected: $"+cur.lo.toFixed(3)+"-$"+cur.hi.toFixed(2)+" "+cur.b+" BURN");
+      // Auto BR Permuta Event for LP-Mint
+      try{
+        if(typeof brAddPermuta==="function"&&typeof P!=="undefined"&&P>0){
+          var dDate=new Date().toISOString().split("T")[0];
+          var usdValue=cur.b*P;  // FMV at mint time
+          brAddPermuta("lp_mint","BURN",cur.b,usdValue,
+            "Auto: LP $"+cur.lo.toFixed(3)+"-$"+cur.hi.toFixed(2)+" minted",dDate);
+        }
+      }catch(e){console.log("BR LP-mint permuta err:",e.message);}
+    }
+  }
+  if(detected.length>0){
+    try{localStorage.setItem("lp_mint_seen",JSON.stringify(lpMintSeen));}catch(e){}
   }
 }
 
@@ -3302,6 +3825,17 @@ function ptfConfirmDetection(){
   }
   ptfLedger.push({id:"ptx_"+Date.now(),asset:d.symbol,amount:d.delta,price:price,total:d.delta*price,
     date:new Date().toISOString().split("T")[0],wallet:"Ledger",note:d.isBuy?"Auto detected transfer":"Auto detected outflow"});
+  // Auto BR Permuta Event
+  try{
+    if(typeof brAddPermuta==="function"){
+      var assetU=d.symbol.toUpperCase();
+      var qty=Math.abs(d.delta);
+      var usd=Math.abs(d.delta*price);
+      var dateNow=new Date().toISOString().split("T")[0];
+      brAddPermuta(d.isBuy?"buy":"sell",assetU,qty,usd,
+        d.isBuy?"Auto-detected buy":"Auto-detected sell",dateNow);
+    }
+  }catch(e){console.log("BR auto-permuta confirm err:",e.message);}
   // Recalc avgEntry
   var asset=null;
   for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===d.symbol){asset=ptfAssets[i];break;}}
@@ -3424,6 +3958,8 @@ function btcConfirmBuy(){
     wallet:"Ledger",
     note:"Manual BTC buy"
   });
+  // Auto BR Permuta
+  try{if(typeof brAddPermuta==="function")brAddPermuta("buy","BTC",delta,paid,"Manual BTC buy",new Date().toISOString().split("T")[0]);}catch(e){}
   // Recalc avgEntry/totalCost from full ledger
   var entries=ptfLedger.filter(function(e){return e.asset==="btc";});
   var sumCost=0,sumAmt=0;
@@ -3614,6 +4150,8 @@ function ptfAddPurchase(){
     if(price<=0){$("ptfBuyErr").textContent="Price must be > 0";return;}
     if(ptfLedger.length>=500){$("ptfBuyErr").textContent="Max 500 entries";return;}
     ptfLedger.push({id:"ptx_"+Date.now(),asset:assetId,amount:amt,price:price,total:amt*price,date:date,wallet:wallet,note:""});
+    // Auto BR Permuta
+    try{if(typeof brAddPermuta==="function")brAddPermuta("buy",assetId.toUpperCase(),amt,amt*price,"Manual buy "+(wallet||""),date);}catch(e){}
     ptfRecalcAsset(assetId);
     $("ptfBuyAmt").value="";$("ptfBuyPrice").value="";$("ptfBuyWallet").value="";$("ptfBuyErr").textContent="";
     ptfSave();ptfRenderTable();ptfRenderLedger();
@@ -4199,8 +4737,15 @@ try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
 try{brLoadPermutas();}catch(e){console.log("brLoadPermutas err:",e.message);}
 brFetchPtax().then(function(rate){
   console.log("BR PTAX:",rate);
-  // If no Custo Médio yet, init from current wallet
-  if(Object.keys(BR_CUSTO_MEDIO).length===0)try{brInitCustoMedio();}catch(e){}
+  // Auto-Init: If no events yet but data exists in CL/MS/ptfLedger, backfill all
+  var hasEvents=BR_PERMUTAS&&BR_PERMUTAS.length>0;
+  var hasData=(typeof CL!=="undefined"&&CL.length>0)||
+              (typeof MS!=="undefined"&&MS.length>0)||
+              (typeof ptfLedger!=="undefined"&&ptfLedger.length>0);
+  if(!hasEvents&&hasData){
+    console.log("BR: Auto-backfilling from existing data...");
+    try{brInitCustoMedio();}catch(e){console.log("auto brInit err:",e.message);}
+  }
   try{brRenderTaxUI();}catch(e){console.log("brRenderTaxUI err:",e.message);}
 }).catch(function(e){console.log("brFetchPtax err:",e.message);});
 // Auto-scan LP Map immediately at startup (force fresh, ignore cache age)
