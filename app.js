@@ -76,7 +76,19 @@ var LP_FALLBACK=[
   {b:5000,lo:1.5,hi:2,label:"Sell"}
 ];
 var LP_DAO={b:6000000,lo:0,hi:0,label:"DAO Full Range",fr:true};
-var LP=LP_FALLBACK.concat([LP_DAO]);
+// Try to load cached LPs from last fetchLPs() — gives correct BURN-Equivalent instantly at startup
+var LP_INITIAL=LP_FALLBACK;
+try{
+  var lpCacheRaw=localStorage.getItem("lp_cache");
+  if(lpCacheRaw){
+    var lpCacheObj=JSON.parse(lpCacheRaw);
+    if(lpCacheObj&&lpCacheObj.lps&&lpCacheObj.lps.length>0){
+      LP_INITIAL=lpCacheObj.lps;
+      console.log("LP: loaded "+lpCacheObj.lps.length+" cached LPs from "+(lpCacheObj.ts?new Date(lpCacheObj.ts).toISOString().slice(0,16):"unknown"));
+    }
+  }
+}catch(e){console.log("LP cache load err:",e.message);}
+var LP=LP_INITIAL.concat([LP_DAO]);
 LP.sort(function(a,b){if(a.fr)return 1;if(b.fr)return-1;return a.lo-b.lo;});
 var ALP=0;for(var ai=0;ai<LP.length;ai++)if(!LP[ai].fr)ALP+=LP[ai].b;
 var lpLive=false;
@@ -500,6 +512,13 @@ async function fetchLPs(){
       ALP=0;for(var ai2=0;ai2<LP.length;ai2++)if(!LP[ai2].fr)ALP+=LP[ai2].b;
       lpLive=true;
       console.log("LP[] updated from chain:",newLP.length,"positions, ALP="+ALP);
+      // Cache LP[] (excl DAO) so BURN-Equivalent shows correct value instantly on next app start
+      try{
+        var lpCache=LP.filter(function(lp){return!lp.fr;}).map(function(lp){
+          return{b:lp.b,lo:lp.lo,hi:lp.hi,label:lp.label||""};
+        });
+        localStorage.setItem("lp_cache",JSON.stringify({lps:lpCache,ts:Date.now()}));
+      }catch(e){}
       // Save state for next close detection
       lpPrevious=LP.filter(function(lp){return!lp.fr;}).map(function(lp){
         var cv2=v3(lp.b,lp.lo,lp.hi,P);
@@ -3805,12 +3824,14 @@ try{
       lmapCache=bcache.buckets;
       lmapTs=bcache.ts||0;
       console.log("LMAP: loaded "+bcache.buckets.length+" cached buckets from "+(bcache.ts?new Date(bcache.ts).toISOString().slice(0,16):"unknown"));
+      // Render LP Map UI from cache so user sees last-known state instantly
+      try{if(typeof renderLmap==="function")renderLmap(lmapCache);}catch(e){console.log("init renderLmap err:",e.message);}
     }
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
-// Auto-scan LP Map immediately at startup
-try{scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
+// Auto-scan LP Map immediately at startup (force fresh, ignore cache age)
+try{lmapTs=0;scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
 startRefresh();
