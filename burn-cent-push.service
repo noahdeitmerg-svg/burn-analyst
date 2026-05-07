@@ -1,0 +1,16 @@
+[Unit]
+Description=BURN Cent-Push monitor + FCM register endpoint
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStart=/usr/bin/python3 /root/burn-cent-push.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/var/log/burn-cent-push.log
+StandardError=append:/var/log/burn-cent-push.log
+
+[Install]
+WantedBy=multi-user.target
