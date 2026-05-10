@@ -1481,6 +1481,8 @@ async function scanLiqMap(){
       }
     }catch(e){}
     renderLmap(buckets);
+    // Show fresh scan indicator with timestamp
+    if($("lmapStatus"))$("lmapStatus").innerHTML='<span style="color:var(--g)">✓ Live scan · '+new Date().toLocaleTimeString()+'</span>';
     // Re-render Market Analysis + Sell Impact with fresh V3 data
     console.log("LMAP DONE: cache="+(lmapCache?lmapCache.length:0)+" buckets, P="+P+", calling render()");
     try{if(P>0){render();console.log("LMAP: post-render done, hasV3="+(lmapCache&&lmapCache.length>0));}}catch(e){console.log("post-lmap render err:",e.message);}
@@ -2997,7 +2999,7 @@ function detectNewLPMints(currentLPs){
 }
 
 // ═══ PUSH STATUS / FCM TOKEN SYNC ═══
-var FCM_REGISTER_URL="http://95.216.152.31:8082/fcm/register";
+var FCM_REGISTER_URL="http://95.216.152.31:8083/fcm/register";
 
 function showPushSub(){
   var sub=localStorage.getItem("push_sub");
@@ -4339,9 +4341,21 @@ try{
     if(bcache&&bcache.buckets&&bcache.buckets.length>0){
       lmapCache=bcache.buckets;
       lmapTs=bcache.ts||0;
-      console.log("LMAP: loaded "+bcache.buckets.length+" cached buckets from "+(bcache.ts?new Date(bcache.ts).toISOString().slice(0,16):"unknown"));
-      // Render LP Map UI from cache so user sees last-known state instantly
-      try{if(typeof renderLmap==="function")renderLmap(lmapCache);}catch(e){console.log("init renderLmap err:",e.message);}
+      var cacheAgeMin=lmapTs?Math.round((Date.now()-lmapTs)/60000):999;
+      console.log("LMAP: cached "+bcache.buckets.length+" buckets, age "+cacheAgeMin+" min");
+      // Render strategy: <5min instant, 5-30min with "updating" hint, >30min show loading
+      if(cacheAgeMin<5){
+        try{if(typeof renderLmap==="function")renderLmap(lmapCache);}catch(e){console.log("init renderLmap err:",e.message);}
+      }else if(cacheAgeMin<=30){
+        try{
+          if(typeof renderLmap==="function")renderLmap(lmapCache);
+          if($("lmapStatus"))$("lmapStatus").innerHTML='<span style="color:var(--o)">⟳ Updating ('+cacheAgeMin+'min old cache shown)…</span>';
+        }catch(e){console.log("init renderLmap err:",e.message);}
+      }else{
+        // Stale cache — don't render, show loading instead
+        if($("lmapB"))$("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--dm);text-align:center;padding:14px">Loading fresh scan… (cache '+cacheAgeMin+'min old)</td></tr>';
+        if($("lmapStatus"))$("lmapStatus").textContent="Scanning…";
+      }
     }
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
