@@ -1089,6 +1089,108 @@ async function fetchTradesOlder(){
 
 // ═══ POOL LIQUIDITY MAP (bitmap + subgraph) ═══
 var lmapCache=null,lmapTs=0;
+
+// ═══ TRADE SIMULATOR (Market Analysis) ═══
+// Standalone buy/sell price-impact simulator. Uses calibrated V3 buckets (lmapCache)
+// which already aggregate ALL LP positions scaled to real on-chain pool reserves.
+// Falls back to V2 K=X*Y when no scan data is available.
+function simBuyImpact(burnBought){
+  // USDC needed to buy `burnBought` BURN + resulting price (walks UP through buckets above current price)
+  if(!lmapCache||lmapCache.length===0||!burnBought||burnBought<=0||P<=0)return null;
+  var sorted=lmapCache.slice().sort(function(a,b){return a.lo-b.lo;});
+  var remaining=burnBought,usdcIn=0,curP=P;
+  for(var i=0;i<sorted.length;i++){
+    var bk=sorted[i];
+    if(bk.hi<=curP||bk.burn<=0||bk.lo<=0)continue;
+    var pLo=Math.max(curP,bk.lo),pHi=bk.hi;
+    var sqA=1/Math.sqrt(bk.lo),sqB=1/Math.sqrt(bk.hi);
+    var fullRange=sqA-sqB;
+    if(fullRange<=0)continue;
+    var L=bk.burn/fullRange;
+    var burnAvail=L*(1/Math.sqrt(pLo)-1/Math.sqrt(pHi));
+    if(burnAvail<=0)continue;
+    if(remaining<=burnAvail){
+      var endInvSq=1/Math.sqrt(pLo)-remaining/L;
+      if(endInvSq<=0){curP=pHi;remaining=0;break;}
+      var endP=1/(endInvSq*endInvSq);
+      usdcIn+=L*(Math.sqrt(endP)-Math.sqrt(pLo));
+      curP=endP;remaining=0;break;
+    }else{
+      usdcIn+=L*(Math.sqrt(pHi)-Math.sqrt(pLo));
+      remaining-=burnAvail;curP=pHi;
+    }
+  }
+  if(remaining>0)return{usdc:usdcIn,newPrice:curP,partial:true,filled:burnBought-remaining};
+  return{usdc:usdcIn,newPrice:curP};
+}
+function simSellImpact(burnSold){
+  // USDC received for selling `burnSold` BURN + resulting price (walks DOWN through buckets below current price)
+  if(!lmapCache||lmapCache.length===0||!burnSold||burnSold<=0||P<=0)return null;
+  var sorted=lmapCache.slice().sort(function(a,b){return b.hi-a.hi;});
+  var remaining=burnSold,usdcOut=0,curP=P;
+  for(var i=0;i<sorted.length;i++){
+    var bk=sorted[i];
+    if(bk.lo>=curP||bk.burn<=0||bk.lo<=0)continue;
+    var pHi=Math.min(curP,bk.hi),pLo=bk.lo;
+    var sqHi=1/Math.sqrt(bk.lo),sqLo2=1/Math.sqrt(bk.hi);
+    var fullRange=sqHi-sqLo2;
+    if(fullRange<=0)continue;
+    var L=bk.burn/fullRange;
+    var burnAvail=L*(1/Math.sqrt(pLo)-1/Math.sqrt(pHi));
+    if(burnAvail<=0)continue;
+    if(remaining<=burnAvail){
+      var endInvSq=1/Math.sqrt(pHi)+remaining/L;
+      var endP=1/(endInvSq*endInvSq);
+      usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(endP));
+      curP=endP;remaining=0;break;
+    }else{
+      usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(pLo));
+      remaining-=burnAvail;curP=pLo;
+    }
+  }
+  if(remaining>0)return{usdc:usdcOut,newPrice:curP,partial:true,filled:burnSold-remaining};
+  return{usdc:usdcOut,newPrice:curP};
+}
+function runTradeSim(side){
+  var amt=parseFloat(document.getElementById("simAmt").value);
+  var box=document.getElementById("simResult");
+  if(!amt||amt<=0){box.innerHTML='<span style="color:var(--warn)">Bitte eine gültige BURN-Menge eingeben.</span>';return;}
+  if(P<=0){box.innerHTML='<span style="color:var(--warn)">Preis noch nicht geladen — kurz warten.</span>';return;}
+  var hasV3=lmapCache&&lmapCache.length>0;
+  var res,label,color,arrow;
+  if(side==="buy"){
+    res=hasV3?simBuyImpact(amt):null;
+    if(!res&&K>0&&Y>0&&X>0){
+      var xn=X-amt;
+      if(xn<=0){box.innerHTML='<span style="color:var(--r)">Nicht genug Liquidität im Pool für diese Menge.</span>';return;}
+      var yn=K/xn;res={usdc:yn-Y,newPrice:yn/xn,v2:true};
+    }
+    label="Kauf";color="var(--g)";arrow="▲";
+  }else{
+    res=hasV3?simSellImpact(amt):null;
+    if(!res&&K>0&&Y>0){
+      var xn2=X+amt,yn2=K/xn2;res={usdc:Math.max(0,Y-yn2),newPrice:yn2/xn2,v2:true};
+    }
+    label="Verkauf";color="var(--r)";arrow="▼";
+  }
+  if(!res){box.innerHTML='<span style="color:var(--warn)">Keine Liquiditätsdaten — bitte erst die Pool Liquidity Map scannen lassen.</span>';return;}
+  var impact=P>0?((res.newPrice-P)/P)*100:0;
+  var src=res.v2?"V2 Schätzung":"V3 live (alle LPs)";
+  var avgPx=amt>0?res.usdc/amt:0;
+  var effAmt=res.partial?res.filled:amt;
+  var partialNote=res.partial?'<div style="color:var(--warn);font-size:9px;margin-top:6px">⚠ Pool-Liquidität reicht nur für '+F(res.filled,0)+' BURN ('+(side==="buy"?"darüber kein Angebot":"darunter keine Nachfrage")+')</div>':'';
+  box.innerHTML=
+    '<div style="background:rgba(8,12,22,.5);border:1px solid '+(side==="buy"?"rgba(34,197,94,.25)":"rgba(248,113,113,.25)")+';border-radius:10px;padding:13px">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">'+arrow+' '+label+'</span><span style="color:'+color+';font-weight:700">'+F(effAmt,0)+' BURN</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">'+(side==="buy"?"Kostet dich":"Bringt dir")+'</span><span style="color:var(--tx);font-weight:700">$'+F(res.usdc,2)+' USDC</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">Ø Preis</span><span style="color:var(--tx)">'+FP(avgPx)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">Preis vorher → danach</span><span style="color:var(--tx)">'+FP(P)+' → <span style="color:'+color+'">'+FP(res.newPrice)+'</span></span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span style="color:var(--mt)">Preis-Impact</span><span style="color:'+(Math.abs(impact)>20?"var(--r)":Math.abs(impact)>5?"var(--o)":"var(--g)")+';font-weight:700">'+(impact>=0?"+":"")+impact.toFixed(2)+'%</span></div>'+
+      '<div style="font-size:8px;color:var(--dm);text-align:right;margin-top:7px">'+src+'</div>'+
+      partialNote+
+    '</div>';
+}
+
 // Load cached LP owners from localStorage (closed LPs never change)
 try{
   var cachedOwners=localStorage.getItem("lmap_owners");

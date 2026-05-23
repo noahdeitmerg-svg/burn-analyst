@@ -604,6 +604,16 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <div class="sep"></div>
     <div class="lb">Sell Impact</div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Sell</th><th>USDC</th><th>Price</th><th>Impact</th></tr></thead><tbody id="siB"><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="4"><span class="skel" style="width:100%;height:14px"></span></td></tr></tbody></table></div>
+
+    <div class="sep"></div>
+    <div class="lb">🧮 Trade Simulator</div>
+    <div style="font-size:9px;color:var(--dm);margin-bottom:8px">BURN-Menge eingeben → Preis-Impact bei Kauf oder Verkauf (alle LP-Positionen berücksichtigt)</div>
+    <input id="simAmt" type="number" inputmode="decimal" placeholder="BURN Menge (z.B. 50000)" style="width:100%;box-sizing:border-box;background:rgba(8,12,22,.6);border:1px solid rgba(48,54,68,.5);border-radius:8px;padding:11px 12px;color:var(--tx);font-size:13px;font-family:inherit;margin-bottom:8px">
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn" onclick="runTradeSim('buy')" style="flex:1;background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.35);color:var(--g)">▲ Kaufen</button>
+      <button class="btn" onclick="runTradeSim('sell')" style="flex:1;background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.35);color:var(--r)">▼ Verkaufen</button>
+    </div>
+    <div id="simResult" style="font-size:11px"></div>
   </div>
 </div>
 
