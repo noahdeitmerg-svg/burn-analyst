@@ -857,15 +857,16 @@ function render(){
     if(remaining>0)return null; // Not enough liquidity
     return{usdc:usdcOut,newPrice:curP};
   }
-  var siR="",siSrc=lmapCache&&lmapCache.length>0?"V3":"V2";
+  var siR="",siSrc=(window._lmapRanges&&window._lmapRanges.length>0)?"V3":"V2";
   for(var s=0;s<SEL.length;s++){
     var n=SEL[s],uo=0,np=0,imp=0;
-    var v3si=v3SellImpact(n);
+    var v3si=(typeof simSellImpact==="function"&&siSrc==="V3")?simSellImpact(n):null;
     if(v3si){
       uo=v3si.usdc;np=v3si.newPrice;imp=P>0?((np-P)/P)*100:0;
     }else if(K>0&&Y>0){
       // V2 K=X*Y fallback
       var xn=X+n,yn=K/xn;np=yn/xn;imp=P>0?((np-P)/P)*100:0;uo=Math.max(0,Y-yn);
+      siSrc="V2";
     }
     siR+='<tr><td class="bld">'+F(n,0)+'</td><td style="color:var(--g)">$'+F(uo,2)+(siSrc?' <span style="font-size:7px;color:var(--dm)">'+siSrc+'</span>':'')+'</td><td style="color:var(--o)">'+FP(np)+'</td><td>'+TG(imp.toFixed(1)+"%",imp<-50?"#f87171":imp<-20?"#fb923c":"#60a5fa")+'</td></tr>';
   }
@@ -1094,69 +1095,97 @@ var lmapCache=null,lmapTs=0;
 // Standalone buy/sell price-impact simulator. Uses calibrated V3 buckets (lmapCache)
 // which already aggregate ALL LP positions scaled to real on-chain pool reserves.
 // Falls back to V2 K=X*Y when no scan data is available.
-function simBuyImpact(burnBought){
-  // USDC needed to buy `burnBought` BURN + resulting price (walks UP through buckets above current price)
-  if(!lmapCache||lmapCache.length===0||!burnBought||burnBought<=0||P<=0)return null;
-  var sorted=lmapCache.slice().sort(function(a,b){return a.lo-b.lo;});
-  var remaining=burnBought,usdcIn=0,curP=P;
-  for(var i=0;i<sorted.length;i++){
-    var bk=sorted[i];
-    if(bk.hi<=curP||bk.burn<=0||bk.lo<=0)continue;
-    var pLo=Math.max(curP,bk.lo),pHi=bk.hi;
-    var sqA=1/Math.sqrt(bk.lo),sqB=1/Math.sqrt(bk.hi);
-    var fullRange=sqA-sqB;
-    if(fullRange<=0)continue;
-    var L=bk.burn/fullRange;
-    var burnAvail=L*(1/Math.sqrt(pLo)-1/Math.sqrt(pHi));
-    if(burnAvail<=0)continue;
-    if(remaining<=burnAvail){
-      var endInvSq=1/Math.sqrt(pLo)-remaining/L;
-      if(endInvSq<=0){curP=pHi;remaining=0;break;}
-      var endP=1/(endInvSq*endInvSq);
-      usdcIn+=L*(Math.sqrt(endP)-Math.sqrt(pLo));
-      curP=endP;remaining=0;break;
-    }else{
-      usdcIn+=L*(Math.sqrt(pHi)-Math.sqrt(pLo));
-      remaining-=burnAvail;curP=pHi;
-    }
+// which already aggregate ALL LP positions scaled to real on-chain pool reserves.
+// Falls back to V2 K=X*Y when no scan data is available.
+//
+// EXACT V3 MATH: uses window._lmapRanges (raw tick ranges with real liquidity L).
+// At any tick, active liquidity = sum of all LP positions covering that tick — exactly
+// how a real V3 pool routes a swap. Lb (BURN-unit liq) = L_raw / 1e12 (derived from the
+// scan's own burn formula). Price convention: price_human = 1e12 / 1.0001^tick.
+// sqrtInv(tick) = 1/sqrt(price) = 1.0001^(tick/2) / 1e6.
+function _siv(tick){return Math.pow(1.0001,tick/2)/1e6;} // 1/sqrt(price_human) at tick
+// Build a sorted list of "active liquidity per tick segment" by accumulating range liq.
+function _activeLiqSegments(){
+  var ranges=window._lmapRanges;
+  if(!ranges||!ranges.length)return null;
+  // Collect all boundary ticks
+  var bounds={};
+  for(var i=0;i<ranges.length;i++){if(ranges[i].liq>0){bounds[ranges[i].tL]=1;bounds[ranges[i].tH]=1;}}
+  var ticks=Object.keys(bounds).map(Number).sort(function(a,b){return a-b;});
+  var segs=[];
+  for(var j=0;j<ticks.length-1;j++){
+    var tl=ticks[j],th=ticks[j+1],mid=(tl+th)/2,L=0;
+    for(var k=0;k<ranges.length;k++){var r=ranges[k];if(r.liq>0&&r.tL<=mid&&r.tH>=mid)L+=r.liq;}
+    if(L>0)segs.push({tL:tl,tH:th,Lb:L/1e12});
   }
-  if(remaining>0)return{usdc:usdcIn,newPrice:curP,partial:true,filled:burnBought-remaining};
-  return{usdc:usdcIn,newPrice:curP};
+  return segs;
 }
 function simSellImpact(burnSold){
-  // USDC received for selling `burnSold` BURN + resulting price (walks DOWN through buckets below current price)
-  if(!lmapCache||lmapCache.length===0||!burnSold||burnSold<=0||P<=0)return null;
-  var sorted=lmapCache.slice().sort(function(a,b){return b.hi-a.hi;});
-  var remaining=burnSold,usdcOut=0,curP=P;
-  for(var i=0;i<sorted.length;i++){
-    var bk=sorted[i];
-    if(bk.lo>=curP||bk.burn<=0||bk.lo<=0)continue;
-    var pHi=Math.min(curP,bk.hi),pLo=bk.lo;
-    var sqHi=1/Math.sqrt(bk.lo),sqLo2=1/Math.sqrt(bk.hi);
-    var fullRange=sqHi-sqLo2;
-    if(fullRange<=0)continue;
-    var L=bk.burn/fullRange;
-    var burnAvail=L*(1/Math.sqrt(pLo)-1/Math.sqrt(pHi));
-    if(burnAvail<=0)continue;
-    if(remaining<=burnAvail){
-      var endInvSq=1/Math.sqrt(pHi)+remaining/L;
-      var endP=1/(endInvSq*endInvSq);
-      usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(endP));
-      curP=endP;remaining=0;break;
+  // Sell BURN → price DOWN → tick UP (price=1e12/1.0001^tick). Walk segments toward higher ticks.
+  if(!burnSold||burnSold<=0||P<=0)return null;
+  var segs=_activeLiqSegments();if(!segs||!segs.length)return null;
+  var curTick=window._lmapCurTick;
+  var asc=segs.filter(function(s){return s.tH>curTick;}).sort(function(a,b){return a.tL-b.tL;});
+  var remaining=burnSold,usdcOut=0,invCur=_siv(curTick),tickPos=curTick;
+  for(var i=0;i<asc.length;i++){
+    var s=asc[i];if(s.Lb<=0)continue;
+    var tStart=Math.max(tickPos,s.tL),tEnd=s.tH;
+    var invStart=_siv(tStart),invEnd=_siv(tEnd); // invEnd>invStart (higher tick = lower price = higher 1/sqrtP)
+    var burnCap=s.Lb*(invEnd-invStart); // BURN absorbable in this segment
+    if(burnCap<=0)continue;
+    if(remaining<=burnCap){
+      var invFinal=invStart+remaining/s.Lb;
+      var spStart=1/invStart,spFinal=1/invFinal;
+      usdcOut+=s.Lb*(spStart-spFinal);
+      invCur=invFinal;remaining=0;
+      var pEnd=1/(invFinal*invFinal);
+      return {usdc:usdcOut,newPrice:pEnd};
     }else{
-      usdcOut+=L*(Math.sqrt(pHi)-Math.sqrt(pLo));
-      remaining-=burnAvail;curP=pLo;
+      var sp1=1/invStart,sp2=1/invEnd;
+      usdcOut+=s.Lb*(sp1-sp2);
+      remaining-=burnCap;tickPos=tEnd;invCur=invEnd;
     }
   }
-  if(remaining>0)return{usdc:usdcOut,newPrice:curP,partial:true,filled:burnSold-remaining};
-  return{usdc:usdcOut,newPrice:curP};
+  // ran out of liquidity
+  var pEnd2=1/(invCur*invCur);
+  return {usdc:usdcOut,newPrice:pEnd2,partial:true,filled:burnSold-remaining};
+}
+function simBuyImpact(burnBought){
+  // Buy BURN → price UP → tick DOWN. Walk segments toward lower ticks.
+  if(!burnBought||burnBought<=0||P<=0)return null;
+  var segs=_activeLiqSegments();if(!segs||!segs.length)return null;
+  var curTick=window._lmapCurTick;
+  var desc=segs.filter(function(s){return s.tL<curTick;}).sort(function(a,b){return b.tH-a.tH;});
+  var remaining=burnBought,usdcIn=0,invCur=_siv(curTick),tickPos=curTick;
+  for(var i=0;i<desc.length;i++){
+    var s=desc[i];if(s.Lb<=0)continue;
+    var tHi=Math.min(tickPos,s.tH),tLo=s.tL;
+    var invHi=_siv(tHi),invLo=_siv(tLo); // invHi>invLo (tHi higher → larger 1/sqrtP)
+    var burnCap=s.Lb*(invHi-invLo); // BURN available going up in price (down in tick)
+    if(burnCap<=0)continue;
+    if(remaining<=burnCap){
+      var invFinal=invHi-remaining/s.Lb;
+      if(invFinal<=0){return {usdc:usdcIn,newPrice:1e9,partial:true,filled:burnBought-remaining};}
+      var spHi=1/invHi,spFinal=1/invFinal;
+      usdcIn+=s.Lb*(spFinal-spHi);
+      remaining=0;
+      var pEnd=1/(invFinal*invFinal);
+      return {usdc:usdcIn,newPrice:pEnd};
+    }else{
+      var sp1=1/invHi,sp2=1/invLo;
+      usdcIn+=s.Lb*(sp2-sp1);
+      remaining-=burnCap;tickPos=tLo;invCur=invLo;
+    }
+  }
+  var pEnd2=1/(invCur*invCur);
+  return {usdc:usdcIn,newPrice:pEnd2,partial:true,filled:burnBought-remaining};
 }
 function runTradeSim(side){
   var amt=parseFloat(document.getElementById("simAmt").value);
   var box=document.getElementById("simResult");
   if(!amt||amt<=0){box.innerHTML='<span style="color:var(--warn)">Bitte eine gültige BURN-Menge eingeben.</span>';return;}
   if(P<=0){box.innerHTML='<span style="color:var(--warn)">Preis noch nicht geladen — kurz warten.</span>';return;}
-  var hasV3=lmapCache&&lmapCache.length>0;
+  var hasV3=window._lmapRanges&&window._lmapRanges.length>0;
   var res,label,color,arrow;
   if(side==="buy"){
     res=hasV3?simBuyImpact(amt):null;
@@ -1556,6 +1585,10 @@ async function scanLiqMap(){
     var bucketsWithOwners=0;for(var boi=0;boi<buckets.length;boi++){if(buckets[boi].owners&&buckets[boi].owners.length>0)bucketsWithOwners++;}
     console.log("LMAP: "+buckets.length+" buckets, "+bucketsWithOwners+" have LP owners assigned");
     lmapCache=buckets;lmapTs=Date.now();
+    // Store raw tick ranges (with REAL on-chain liquidity L) + current tick globally,
+    // so the trade simulator can use exact V3 concentrated-liquidity math instead of
+    // the coarse bucket approximation. Lb (BURN-unit liquidity) = L_raw / 1e12.
+    window._lmapRanges=ranges;window._lmapCurTick=curTick;
     // Cache closed LPs permanently (they never change)
     try{
       var closedLPs=[];
@@ -3146,7 +3179,7 @@ function syncFcmToServer(){
   }).then(function(r){
     if(r.ok){
       $("pushStatus").innerHTML='<span style="color:var(--g)">✓ Token an Hetzner gesendet</span>';
-      try{localStorage.setItem("fcm_synced_ts",Date.now().toString());}catch(e){}
+      try{localStorage.setItem("fcm_synced_ts",Date.now().toString());localStorage.setItem("fcm_synced_value",fcm);}catch(e){}
     }else{
       $("pushStatus").innerHTML='<span style="color:var(--o)">⚠ Server antwortet '+r.status+'. Endpoint POST /fcm/register evtl. noch nicht aktiv. Token alternativ kopieren und manuell auf Hetzner ablegen.</span>';
     }
@@ -4481,5 +4514,22 @@ brFetchPtax().then(function(rate){
 try{lmapTs=0;scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
+// Auto-sync FCM token to Hetzner on startup (silent, only if token exists & changed since last sync)
+setTimeout(function(){
+  try{
+    var fcm=localStorage.getItem("fcm_token");
+    if(!fcm)return;
+    var lastSynced=localStorage.getItem("fcm_synced_value");
+    if(lastSynced===fcm)return; // already synced this exact token, skip
+    fetch(FCM_REGISTER_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({token:fcm,ts:Date.now()})}).then(function(r){
+      if(r.ok){
+        try{localStorage.setItem("fcm_synced_value",fcm);localStorage.setItem("fcm_synced_ts",Date.now().toString());}catch(e){}
+        console.log("FCM auto-synced to Hetzner");
+        try{renderPushStatus();}catch(e){}
+      }
+    }).catch(function(e){console.log("FCM auto-sync skipped:",e.message);});
+  }catch(e){}
+},8000);
 startRefresh();
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
