@@ -797,14 +797,15 @@ function render(){
     }
     return{usdc:totalUsdc,burn:totalBurn};
   }
-  // SHARED: identical buyflow estimation for Next Fill + Market Analysis.
-  // 3-tier hierarchy: V3 buckets (most accurate, post-LP-scan) → V2 K=X*Y → 0
-  // POOL_LIQ tier removed because it includes DAO Full-Range liq → unrealistic for wide price moves.
+  // SHARED: buyflow estimation for Next Fill + Market Analysis.
+  // Uses real tick-liquidity (simBuyImpactToPrice) when scan data present → V2 fallback → 0.
+  // This walks to a TARGET PRICE and returns the USDC + BURN consumed to get there.
   function buyflowEstimate(curP,tgtP){
     if(!curP||!tgtP||tgtP<=curP)return{usdc:0,burn:0,src:""};
-    if(lmapCache&&lmapCache.length>0){
-      var bf=v3BuyflowCalc(curP,tgtP);
-      return{usdc:bf.usdc,burn:bf.burn,src:"V3"};
+    // V3 exact: walk tick segments from curP up to tgtP using summed liquidity
+    if(window._lmapRanges&&window._lmapRanges.length>0&&typeof simBuyToPrice==="function"){
+      var bf=simBuyToPrice(tgtP);
+      if(bf&&bf.burn>0)return{usdc:bf.usdc,burn:bf.burn,src:"V3"};
     }
     if(K>0&&Y>0&&X>0){
       var u=Math.sqrt(K*tgtP)-Y;
@@ -813,7 +814,7 @@ function render(){
     }
     return{usdc:0,burn:0,src:""};
   }
-  var bR="",hasV3=lmapCache&&lmapCache.length>0;
+  var bR="",hasV3=(window._lmapRanges&&window._lmapRanges.length>0);
   for(var i=0;i<TGT.length;i++){var tp=TGT[i],ok=tp>P&&P>0,m=P>0?tp/P:0;
     var uN=0,bB=0,bSrc="";
     if(ok){
@@ -1179,6 +1180,28 @@ function simBuyImpact(burnBought){
   }
   var pEnd2=1/(invCur*invCur);
   return {usdc:usdcIn,newPrice:pEnd2,partial:true,filled:burnBought-remaining};
+}
+function simBuyToPrice(tgtP){
+  // How much USDC + BURN to push price UP from current to tgtP. Uses real tick liquidity.
+  if(!tgtP||tgtP<=P||P<=0)return null;
+  var segs=_activeLiqSegments();if(!segs||!segs.length)return null;
+  var curTick=window._lmapCurTick;
+  // Buying raises price → tick decreases. Target tick (lower than current).
+  var tgtTick=Math.round(Math.log(1e12/tgtP)/Math.log(1.0001));
+  var desc=segs.filter(function(s){return s.tL<curTick;}).sort(function(a,b){return b.tH-a.tH;});
+  var usdcIn=0,burnOut=0,tickPos=curTick;
+  for(var i=0;i<desc.length;i++){
+    var s=desc[i];if(s.Lb<=0)continue;
+    var tHi=Math.min(tickPos,s.tH),tLo=Math.max(tgtTick,s.tL);
+    if(tHi<=tLo)continue;
+    var invHi=_siv(tHi),invLo=_siv(tLo);
+    var spHi=1/invHi,spLo=1/invLo;
+    usdcIn+=s.Lb*(spLo-spHi);          // USDC consumed pushing price up
+    burnOut+=s.Lb*(invHi-invLo);       // BURN received
+    tickPos=tLo;
+    if(tickPos<=tgtTick)break;
+  }
+  return {usdc:usdcIn,burn:burnOut};
 }
 function runTradeSim(side){
   var amt=parseFloat(document.getElementById("simAmt").value);
