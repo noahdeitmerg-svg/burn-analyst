@@ -1226,18 +1226,25 @@ function runTradeSim(side){
     label="Verkauf";color="var(--r)";arrow="▼";
   }
   if(!res){box.innerHTML='<span style="color:var(--warn)">Keine Liquiditätsdaten — bitte erst die Pool Liquidity Map scannen lassen.</span>';return;}
-  var impact=P>0?((res.newPrice-P)/P)*100:0;
+  var impact=P>0?((res.newPrice-P)/P)*100:0;        // FINAL marginal price impact (where price ends up)
   var src=res.v2?"V2 Schätzung":"V3 live (alle LPs)";
   var avgPx=amt>0?res.usdc/amt:0;
   var effAmt=res.partial?res.filled:amt;
+  // AVG price impact = what you actually pay/lose vs spot (the real slippage)
+  var avgImpact=P>0?((avgPx-P)/P)*100:0;
+  var spotValue=effAmt*P;                            // value at current spot price
+  var lossUsd=side==="buy"?(res.usdc-spotValue):(spotValue-res.usdc); // $ lost to slippage+fee
+  var lossPct=spotValue>0?(lossUsd/spotValue)*100:0;
+  var lossColor=Math.abs(lossPct)>10?"var(--r)":Math.abs(lossPct)>3?"var(--o)":"var(--g)";
   var partialNote=res.partial?'<div style="color:var(--warn);font-size:9px;margin-top:6px">⚠ Pool-Liquidität reicht nur für '+F(res.filled,0)+' BURN ('+(side==="buy"?"darüber kein Angebot":"darunter keine Nachfrage")+')</div>':'';
   box.innerHTML=
     '<div style="background:rgba(8,12,22,.5);border:1px solid '+(side==="buy"?"rgba(34,197,94,.25)":"rgba(248,113,113,.25)")+';border-radius:10px;padding:13px">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">'+arrow+' '+label+'</span><span style="color:'+color+';font-weight:700">'+F(effAmt,0)+' BURN</span></div>'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">'+(side==="buy"?"Kostet dich":"Bringt dir")+'</span><span style="color:var(--tx);font-weight:700">$'+F(res.usdc,2)+' USDC</span></div>'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">Ø Preis</span><span style="color:var(--tx)">'+FP(avgPx)+'</span></div>'+
-      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--mt)">Preis vorher → danach</span><span style="color:var(--tx)">'+FP(P)+' → <span style="color:'+color+'">'+FP(res.newPrice)+'</span></span></div>'+
-      '<div style="display:flex;justify-content:space-between"><span style="color:var(--mt)">Preis-Impact</span><span style="color:'+(Math.abs(impact)>20?"var(--r)":Math.abs(impact)>5?"var(--o)":"var(--g)")+';font-weight:700">'+(impact>=0?"+":"")+impact.toFixed(2)+'%</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:9px;padding-bottom:9px;border-bottom:1px solid rgba(48,54,68,.4)"><span style="color:var(--mt)">Preis vorher → danach</span><span style="color:var(--tx)">'+FP(P)+' → <span style="color:'+color+'">'+FP(res.newPrice)+'</span></span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:7px"><span style="color:var(--tx);font-weight:600">Dein Verlust (Slippage)</span><span style="color:'+lossColor+';font-weight:700">−$'+F(Math.abs(lossUsd),2)+' ('+lossPct.toFixed(2)+'%)</span></div>'+
+      '<div style="display:flex;justify-content:space-between"><span style="color:var(--dm);font-size:9px">Finaler Preis-Impact</span><span style="color:var(--dm);font-size:9px">'+(impact>=0?"+":"")+impact.toFixed(2)+'%</span></div>'+
       '<div style="font-size:8px;color:var(--dm);text-align:right;margin-top:7px">'+src+'</div>'+
       partialNote+
     '</div>';
