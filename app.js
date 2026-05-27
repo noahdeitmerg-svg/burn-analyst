@@ -1627,6 +1627,13 @@ async function scanLiqMap(){
       localStorage.setItem("lmap_owners",JSON.stringify(lpOwners));
       // Cache buckets so V3 buyflow works immediately on next app start
       try{localStorage.setItem("lmap_buckets",JSON.stringify({buckets:buckets,ts:Date.now()}));}catch(e3){}
+      // Cache raw ranges + curTick so the trade simulator / market analysis use exact
+      // V3 tick-liquidity immediately on next app start (instead of falling back to V2).
+      try{
+        var slimRanges=[];
+        for(var ri=0;ri<ranges.length;ri++){if(ranges[ri].liq>0)slimRanges.push({tL:ranges[ri].tL,tH:ranges[ri].tH,liq:ranges[ri].liq});}
+        localStorage.setItem("lmap_ranges",JSON.stringify({ranges:slimRanges,curTick:curTick,ts:Date.now()}));
+      }catch(e4){}
       window._lpOwners=lpOwners;
       console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs + "+buckets.length+" buckets");
     }catch(e){}
@@ -4498,6 +4505,21 @@ try{$("ptfBuyDate").value=new Date().toISOString().split("T")[0];}catch(e){}
 go(); fetchSt(); fetchSup(); fetchTrades(); fetchWal(); fetchLPs();
 fetchBurn30d().then(function(){if(P>0)try{render();}catch(e){}});
 try{var savedExtra=localStorage.getItem("lmap_extra");if(savedExtra&&$("lmapExtra"))$("lmapExtra").value=savedExtra;}catch(e){}
+// Restore cached raw ranges + curTick so trade simulator / market analysis use exact V3
+// tick-liquidity immediately at app start (instead of V2 fallback until manual rescan).
+try{
+  var rcacheRaw=localStorage.getItem("lmap_ranges");
+  if(rcacheRaw){
+    var rcache=JSON.parse(rcacheRaw);
+    if(rcache&&rcache.ranges&&rcache.ranges.length>0){
+      window._lmapRanges=rcache.ranges;
+      window._lmapCurTick=rcache.curTick;
+      console.log("LMAP: restored "+rcache.ranges.length+" ranges for V3 simulator (curTick "+rcache.curTick+")");
+      // Re-render market analysis so Buyflow + Sell Impact tables use V3 (not V2) right away
+      try{if(P>0&&typeof render==="function")render();}catch(e){}
+    }
+  }
+}catch(e){}
 // Load cached buckets so V3 buyflow works immediately at app start (before scan completes)
 try{
   var bcacheRaw=localStorage.getItem("lmap_buckets");
