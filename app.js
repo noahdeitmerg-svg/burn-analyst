@@ -1575,17 +1575,23 @@ async function scanLiqMap(){
     }catch(e6){console.log("LMAP owner scan err:",e6);}
 
     // 5. Reconstruct liquidity per range
+    var MIN_TICK=-887272,MAX_TICK=887272; // Uniswap V3 absolute tick bounds
     var ranges=[];
     var below=tickData.filter(function(t){return t.tick<=curTick;}).sort(function(a,b){return b.tick-a.tick;});
     var L=curLiq,prev=curTick;
     for(var b2=0;b2<below.length;b2++){
       if(prev!==below[b2].tick)ranges.push({tL:below[b2].tick,tH:prev,liq:L});
       L-=below[b2].liqNet;prev=below[b2].tick;}
+    // Tail below: remaining liquidity after last boundary belongs to full-range positions (DAO).
+    // Extend it down to MIN_TICK so price can rise (tick falls) past the last LP without freezing.
+    if(L>0&&prev>MIN_TICK)ranges.push({tL:MIN_TICK,tH:prev,liq:L});
     var above=tickData.filter(function(t){return t.tick>curTick;}).sort(function(a,b){return a.tick-b.tick;});
     L=curLiq;prev=curTick;
     for(var a2=0;a2<above.length;a2++){
       if(prev!==above[a2].tick)ranges.push({tL:prev,tH:above[a2].tick,liq:L});
       L+=above[a2].liqNet;prev=above[a2].tick;}
+    // Tail above: remaining liquidity extends up to MAX_TICK (price falls / sell side full-range depth).
+    if(L>0&&prev<MAX_TICK)ranges.push({tL:prev,tH:MAX_TICK,liq:L});
 
     // 6. Aggregate into price buckets
     var buckets=[];
