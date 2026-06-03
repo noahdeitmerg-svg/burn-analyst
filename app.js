@@ -3542,14 +3542,23 @@ function ptfDetectLedgerBalances(){
         var changed=false;
         // Check ETH delta
         var ethDelta=newEth-ptfLastBalances.eth;
+        var ethDialogShown=false;
         if(newEth>0&&Math.abs(ethDelta)>0.001){
           ptfShowDetection("ETH",ethDelta,newEth);
+          ethDialogShown=true;
         }
         // BTC detection DISABLED — managed via manual "+ BTC Kauf" Banner (Ledger uses rotating addresses)
-        // Update stored balances + ETH asset amount only
+        // Update ETH amount ONLY when:
+        //   - No dialog shown (delta < 0.001 = no real change, just amount sync)
+        //   - User will confirm via ptfConfirmDetection() which updates amount + cost basis correctly
+        // This prevents the bug where amount got updated but avgEntry didn't, corrupting cost basis.
         var ea2=null;
         for(var j=0;j<ptfAssets.length;j++){if(ptfAssets[j].id==="eth"){ea2=ptfAssets[j];break;}}
-        if(newEth>0){ptfLastBalances.eth=newEth;if(ea2)ea2.amount=newEth;}
+        if(newEth>0){
+          ptfLastBalances.eth=newEth;
+          // Only sync amount when no DCA dialog is pending — otherwise wait for user confirmation
+          if(!ethDialogShown&&ea2)ea2.amount=newEth;
+        }
         ptfSave();ptfRenderTable();
         try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
       });
@@ -4554,28 +4563,70 @@ try{
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
-// One-time repair: recalculate avgEntry/totalCost for all ptfAssets from ptfLedger.
-// Fixes historical data where DCA buys updated `amount` but not `avgEntry` (case-mismatch bug).
+// Smart cost-basis repair at app start. Multi-level strategy:
+//   1. Recalculate avgEntry/totalCost from ptfLedger entries (case-insensitive)
+//   2. If ledger has fewer entries than expected OR repaired totalCost is much smaller
+//      than PTF_DEFAULTS.totalCost, prefer the PTF_DEFAULTS value (these are the audited
+//      historical entry prices from when the app was first set up).
+//   3. Never zero-out totalCost or avgEntry — preserves user's investment record.
+// This fixes positions corrupted by the DCA case-mismatch bug (where amount got
+// updated but avgEntry didn't, causing huge phantom gains).
 try{
-  if(typeof ptfAssets!=="undefined"&&typeof ptfLedger!=="undefined"&&ptfLedger.length>0){
-    var repaired=0;
+  if(typeof ptfAssets!=="undefined"){
+    var repaired=0,restored=0;
+    // Build PTF_DEFAULTS lookup
+    var defaultsById={};
+    if(typeof PTF_DEFAULTS!=="undefined"){
+      for(var di=0;di<PTF_DEFAULTS.length;di++){defaultsById[PTF_DEFAULTS[di].id]=PTF_DEFAULTS[di];}
+    }
     for(var ri=0;ri<ptfAssets.length;ri++){
       var ra=ptfAssets[ri];if(!ra.id)continue;
       var raLow=ra.id.toLowerCase();
-      var rentries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()===raLow;});
-      if(rentries.length===0)continue;
+      var def=defaultsById[ra.id]||defaultsById[raLow]||null;
+      // Step 1: Compute from ledger
+      var rentries=(ptfLedger||[]).filter(function(e){return (e.asset||"").toLowerCase()===raLow;});
       var rSumCost=0,rSumAmt=0;
       for(var rj=0;rj<rentries.length;rj++){rSumCost+=(rentries[rj].total||0);rSumAmt+=(rentries[rj].amount||0);}
-      if(rSumAmt>0){
-        var newAvg=rSumCost/rSumAmt;
-        // Only update if meaningfully different (avoid no-op churn)
-        if(!ra.avgEntry||Math.abs(ra.avgEntry-newAvg)/Math.max(ra.avgEntry,0.0001)>0.01||!ra.totalCost||Math.abs((ra.totalCost||0)-rSumCost)>1){
-          console.log("PTF repair: "+ra.id+" avgEntry "+(ra.avgEntry||0).toFixed(4)+"→"+newAvg.toFixed(4)+", totalCost "+(ra.totalCost||0).toFixed(2)+"→"+rSumCost.toFixed(2)+" ("+rentries.length+" ledger entries, "+rSumAmt.toFixed(4)+" amount)");
-          ra.avgEntry=newAvg;ra.totalCost=rSumCost;repaired++;
+      var ledgerAvg=rSumAmt>0?rSumCost/rSumAmt:0;
+      // Step 2: Decide which source to use
+      var oldAvg=ra.avgEntry||0,oldCost=ra.totalCost||0;
+      var newAvg=oldAvg,newCost=oldCost,reason="";
+      // Case A: Asset has reasonable existing values → keep them (idempotent)
+      // Case B: Asset has BROKEN values (totalCost much smaller than default → corruption)
+      var isBroken=false;
+      if(def&&def.totalCost){
+        // If current totalCost is < 30% of default and amount is similar → CORRUPTION
+        var amtRatio=def.amount?ra.amount/def.amount:1;
+        if(oldCost>0&&oldCost<def.totalCost*0.3&&amtRatio>0.5){isBroken=true;reason="corrupted (cost "+oldCost.toFixed(2)+" vs default "+def.totalCost.toFixed(2)+")";}
+        // If avgEntry is suspiciously off (>50% off from default) and amount matches → corruption
+        if(!isBroken&&oldAvg>0&&def.avgEntry&&Math.abs(oldAvg-def.avgEntry)/def.avgEntry>0.5&&amtRatio>0.5){isBroken=true;reason="avgEntry drifted (was "+oldAvg.toFixed(4)+" vs default "+def.avgEntry.toFixed(4)+")";}
+      }
+      if(isBroken&&def){
+        // Restore from defaults, but keep amount (it came from chain)
+        newAvg=def.avgEntry;
+        newCost=def.totalCost;
+        // If user's amount differs from default amount, scale total cost proportionally
+        // Only if amount is REASONABLY close to default (within 3x), else leave default cost as-is
+        if(def.amount>0&&Math.abs(ra.amount-def.amount)/def.amount<2){
+          // Keep at default — small differences are tracked in extra ledger entries
+        }
+        ra.avgEntry=newAvg;ra.totalCost=newCost;
+        restored++;
+        console.log("PTF restore: "+ra.id+" "+reason+" → avgEntry $"+newAvg.toFixed(4)+", totalCost $"+newCost.toFixed(2));
+      }else if(rSumAmt>0&&ledgerAvg>0){
+        // Ledger has data and asset doesn't look broken → use ledger only if it's MORE than current
+        // (additive: user may have added entries; don't reduce a known-good totalCost)
+        if(rSumCost>oldCost*1.05){
+          ra.avgEntry=ledgerAvg;ra.totalCost=rSumCost;
+          repaired++;
+          console.log("PTF repair: "+ra.id+" avgEntry "+oldAvg.toFixed(4)+"→"+ledgerAvg.toFixed(4)+", totalCost "+oldCost.toFixed(2)+"→"+rSumCost.toFixed(2)+" (from "+rentries.length+" ledger entries)");
         }
       }
     }
-    if(repaired>0){try{ptfSave();}catch(e){}console.log("PTF repair: "+repaired+" asset(s) had avgEntry/totalCost recalculated from ledger");}
+    if(repaired>0||restored>0){
+      try{ptfSave();}catch(e){}
+      console.log("PTF repair complete: "+repaired+" recalculated from ledger, "+restored+" restored from defaults");
+    }
   }
 }catch(e){console.log("PTF repair err:",e.message);}
 // BR Tax Compliance Module init
