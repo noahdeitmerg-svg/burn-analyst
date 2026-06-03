@@ -625,9 +625,23 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button class="btn" id="cflowBtnDay" onclick="setCflowMode('day')" style="flex:1;font-size:10px;background:rgba(96,165,250,.18);border-color:rgba(96,165,250,.5);color:var(--b)">Tag (14T)</button>
       <button class="btn" id="cflowBtnMonth" onclick="setCflowMode('month')" style="flex:1;font-size:10px">Monat (12M)</button>
+      <button class="btn" id="cflowBtnFull" onclick="openCflowFullscreen()" style="flex:0 0 auto;font-size:10px;padding-left:12px;padding-right:12px" title="Vollbild">⛶</button>
     </div>
     <div id="cflowChart" style="margin-bottom:8px"><span style="color:var(--dm);font-size:10px">Loading trades...</span></div>
   </div>
+</div>
+
+<!-- Capital Flow Fullscreen Overlay -->
+<div id="cflowFsOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,9,16,.97);backdrop-filter:blur(8px);overflow-y:auto;padding:0">
+  <div style="position:sticky;top:0;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:rgba(6,9,16,.95);border-bottom:1px solid rgba(48,54,68,.5)">
+    <div style="font-weight:700;color:var(--g);font-size:14px;letter-spacing:.5px">💰 Capital Flow — Vollbild</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn" id="cflowFsBtnDay" onclick="setCflowFsMode('day')" style="font-size:10px;background:rgba(96,165,250,.18);border-color:rgba(96,165,250,.5);color:var(--b)">Tag</button>
+      <button class="btn" id="cflowFsBtnMonth" onclick="setCflowFsMode('month')" style="font-size:10px">Monat</button>
+      <button class="btn" onclick="closeCflowFullscreen()" style="font-size:14px;padding:6px 14px;color:var(--r);border-color:rgba(248,113,113,.4)">✕</button>
+    </div>
+  </div>
+  <div id="cflowFsContent" style="padding:16px"></div>
 </div>
 
 <!-- ═══ 5. CLOSED POSITIONS (collapsible) ═══ -->

@@ -1183,22 +1183,29 @@ function simBuyImpact(burnBought){
   return {usdc:usdcIn,newPrice:pEnd2,partial:true,filled:burnBought-remaining};
 }
 function simBuyToPrice(tgtP){
-  // How much USDC + BURN to push price UP from current to tgtP. Uses real tick liquidity.
+  // How much USDC + BURN to push price UP from current spot to tgtP.
+  // Symmetric to simSellImpact (verified vs Uniswap): walks tick segments using the
+  // SAME real per-segment liquidity from all scanned LP ranges. Buying raises price →
+  // tick DECREASES (price=1e12/1.0001^tick). We walk from curTick down to tgtTick.
   if(!tgtP||tgtP<=P||P<=0)return null;
   var segs=_activeLiqSegments();if(!segs||!segs.length)return null;
   var curTick=window._lmapCurTick;
-  // Buying raises price → tick decreases. Target tick (lower than current).
   var tgtTick=Math.round(Math.log(1e12/tgtP)/Math.log(1.0001));
+  if(tgtTick>=curTick)return {usdc:0,burn:0}; // target not above current price
+  // Segments below current tick (= above current price). Walk from highest tick down.
   var desc=segs.filter(function(s){return s.tL<curTick;}).sort(function(a,b){return b.tH-a.tH;});
   var usdcIn=0,burnOut=0,tickPos=curTick;
   for(var i=0;i<desc.length;i++){
     var s=desc[i];if(s.Lb<=0)continue;
+    // Active span within this segment as we descend: from min(tickPos,tH) down to max(tgtTick,tL)
     var tHi=Math.min(tickPos,s.tH),tLo=Math.max(tgtTick,s.tL);
     if(tHi<=tLo)continue;
-    var invHi=_siv(tHi),invLo=_siv(tLo);
-    var spHi=1/invHi,spLo=1/invLo;
-    usdcIn+=s.Lb*(spLo-spHi);          // USDC consumed pushing price up
-    burnOut+=s.Lb*(invHi-invLo);       // BURN received
+    var invHi=_siv(tHi),invLo=_siv(tLo); // invHi>invLo (higher tick → larger 1/sqrtP)
+    var spHi=1/invHi,spLo=1/invLo;        // spHi<spLo (sqrtPrice); price rises as tick falls
+    // USDC consumed pushing price up across this span = L*(spLo - spHi)
+    usdcIn+=s.Lb*(spLo-spHi);
+    // BURN received = L*(1/spHi - 1/spLo) = L*(invHi - invLo)
+    burnOut+=s.Lb*(invHi-invLo);
     tickPos=tLo;
     if(tickPos<=tgtTick)break;
   }
@@ -3318,6 +3325,80 @@ function renderCapitalFlow(){
     svg+='</svg>';
     $("cflowChart").innerHTML=svg;
   }catch(e){console.log("cflow err:",e);}
+}
+
+// ═══ CAPITAL FLOW FULLSCREEN ═══
+var cflowFsMode="month";
+function openCflowFullscreen(){
+  cflowFsMode=cflowMode; // start in same mode as inline
+  var ov=$("cflowFsOverlay");if(ov)ov.style.display="block";
+  setCflowFsMode(cflowFsMode);
+}
+function closeCflowFullscreen(){var ov=$("cflowFsOverlay");if(ov)ov.style.display="none";}
+function setCflowFsMode(m){
+  cflowFsMode=m;
+  var bd=$("cflowFsBtnDay"),bm=$("cflowFsBtnMonth");
+  if(bd&&bm){
+    if(m==="day"){
+      bd.style.background="rgba(96,165,250,.18)";bd.style.borderColor="rgba(96,165,250,.5)";bd.style.color="var(--b)";
+      bm.style.background="";bm.style.borderColor="";bm.style.color="";
+    }else{
+      bm.style.background="rgba(96,165,250,.18)";bm.style.borderColor="rgba(96,165,250,.5)";bm.style.color="var(--b)";
+      bd.style.background="";bd.style.borderColor="";bd.style.color="";
+    }
+  }
+  renderCflowFullscreen();
+}
+function renderCflowFullscreen(){
+  try{
+    var box=$("cflowFsContent");if(!box||!allTrades||allTrades.length<2){if(box)box.innerHTML='<div style="color:var(--dm);font-size:12px">Keine Trade-Daten.</div>';return;}
+    var now=Date.now();
+    var isMonth=(cflowFsMode==="month");
+    var buckets={};
+    for(var i=0;i<allTrades.length;i++){
+      var t=allTrades[i];
+      var ms=now-t.minAgo*60000;var dt=new Date(ms);
+      var key=isMonth?(dt.toISOString().slice(0,7)):(dt.toISOString().split("T")[0]);
+      if(!buckets[key])buckets[key]={buy:0,sell:0,net:0,count:0};
+      if(t.isBuy){buckets[key].buy+=t.usdc;}else{buckets[key].sell+=t.usdc;}
+      buckets[key].net+=(t.isBuy?t.usdc:-t.usdc);buckets[key].count++;
+    }
+    var keys=Object.keys(buckets).sort();
+    var shown=isMonth?keys.slice(-24):keys.slice(-60); // more history in fullscreen
+    var monthNames=["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+    // Summary
+    var totalBuy=0,totalSell=0;
+    for(var s=0;s<shown.length;s++){totalBuy+=buckets[shown[s]].buy;totalSell+=buckets[shown[s]].sell;}
+    var net=totalBuy-totalSell;
+    var html='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">'+
+      '<div style="flex:1;min-width:120px;background:rgba(8,12,22,.6);border:1px solid rgba(52,211,153,.25);border-radius:10px;padding:12px"><div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Buy Volume</div><div style="font-size:20px;font-weight:700;color:var(--g)">$'+F(totalBuy,0)+'</div></div>'+
+      '<div style="flex:1;min-width:120px;background:rgba(8,12,22,.6);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:12px"><div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Sell Volume</div><div style="font-size:20px;font-weight:700;color:var(--r)">$'+F(totalSell,0)+'</div></div>'+
+      '<div style="flex:1;min-width:120px;background:rgba(8,12,22,.6);border:1px solid '+(net>=0?"rgba(52,211,153,.25)":"rgba(248,113,113,.25)")+';border-radius:10px;padding:12px"><div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Net Flow</div><div style="font-size:20px;font-weight:700;color:'+(net>=0?"var(--g)":"var(--r)")+'">'+(net>=0?"+":"-")+"$"+F(Math.abs(net),0)+'</div></div>'+
+    '</div>';
+    // Horizontal bar list — each row shows period + buy/sell/net explicitly
+    html+='<div style="display:flex;flex-direction:column;gap:8px">';
+    var maxAbs=1;
+    for(var m2=0;m2<shown.length;m2++){var a=Math.max(buckets[shown[m2]].buy,buckets[shown[m2]].sell);if(a>maxAbs)maxAbs=a;}
+    // Show newest first
+    for(var d=shown.length-1;d>=0;d--){
+      var dk=shown[d];var bk=buckets[dk];
+      var lbl;
+      if(isMonth){var mp=dk.split("-");lbl=monthNames[parseInt(mp[1])-1]+" "+mp[0];}
+      else{lbl=dk;}
+      var buyW=bk.buy/maxAbs*100,sellW=bk.sell/maxAbs*100;
+      var netColor=bk.net>=0?"var(--g)":"var(--r)";
+      html+='<div style="background:rgba(8,12,22,.5);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:12px">'+
+        '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="font-weight:700;color:var(--tx);font-size:13px;font-family:Geist Mono,monospace">'+lbl+'</span><span style="font-weight:700;color:'+netColor+';font-size:13px">Net '+(bk.net>=0?"+":"-")+"$"+F(Math.abs(bk.net),0)+'</span></div>'+
+        // Buy bar
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><span style="font-size:9px;color:var(--g);width:34px">Buy</span><div style="flex:1;height:14px;background:rgba(8,12,22,.6);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+buyW.toFixed(1)+'%;background:#34d399;border-radius:4px"></div></div><span style="font-size:10px;color:var(--g);width:70px;text-align:right;font-family:Geist Mono,monospace">$'+F(bk.buy,0)+'</span></div>'+
+        // Sell bar
+        '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:9px;color:var(--r);width:34px">Sell</span><div style="flex:1;height:14px;background:rgba(8,12,22,.6);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+sellW.toFixed(1)+'%;background:#f87171;border-radius:4px"></div></div><span style="font-size:10px;color:var(--r);width:70px;text-align:right;font-family:Geist Mono,monospace">$'+F(bk.sell,0)+'</span></div>'+
+        '<div style="font-size:8px;color:var(--dm);text-align:right;margin-top:5px">'+bk.count+' Trades</div>'+
+      '</div>';
+    }
+    html+='</div>';
+    box.innerHTML=html;
+  }catch(e){console.log("cflow fs err:",e);if($("cflowFsContent"))$("cflowFsContent").innerHTML='<div style="color:var(--r)">Fehler beim Rendern.</div>';}
 }
 
 // ═══ PORTFOLIO SYNC TO SERVER ═══
