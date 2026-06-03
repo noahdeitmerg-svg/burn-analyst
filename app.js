@@ -3658,15 +3658,22 @@ function ptfConfirmDetection(){
         d.isBuy?"Auto-detected buy":"Auto-detected sell",dateNow);
     }
   }catch(e){console.log("BR auto-permuta confirm err:",e.message);}
-  // Recalc avgEntry
+  // Recalc avgEntry (case-insensitive match — d.symbol is "ETH"/"BTC", asset.id is "eth"/"btc")
   var asset=null;
-  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===d.symbol){asset=ptfAssets[i];break;}}
+  var symLower=(d.symbol||"").toLowerCase();
+  for(var i=0;i<ptfAssets.length;i++){
+    if((ptfAssets[i].id||"").toLowerCase()===symLower){asset=ptfAssets[i];break;}
+  }
   if(asset){
-    var entries=ptfLedger.filter(function(e){return e.asset===d.symbol;});
+    // Match ledger entries case-insensitively to handle historical entries
+    var entries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()===symLower;});
     var sumCost=0,sumAmt=0;
-    for(var j=0;j<entries.length;j++){sumCost+=entries[j].total;sumAmt+=entries[j].amount;}
+    for(var j=0;j<entries.length;j++){sumCost+=(entries[j].total||0);sumAmt+=(entries[j].amount||0);}
     if(sumAmt>0){asset.avgEntry=sumCost/sumAmt;asset.totalCost=sumCost;}
     asset.amount=d.newBalance;
+    console.log("PTF: recalculated "+asset.id+" avgEntry=$"+(asset.avgEntry||0).toFixed(4)+" totalCost=$"+(asset.totalCost||0).toFixed(2)+" from "+entries.length+" ledger entries (amount "+asset.amount+")");
+  }else{
+    console.log("PTF: WARNING — no asset found for "+d.symbol+" (lowercase "+symLower+"), avgEntry NOT recalculated");
   }
   ptfSave();ptfRenderTable();ptfRenderLedger();
   console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price+" (mode:"+ptfDetectMode+")");
@@ -4547,6 +4554,30 @@ try{
   }
 }catch(e){console.log("LMAP cache load err:",e.message);}
 try{ptfFetchPrices();ptfDetectBalances();ptfDetectLedgerBalances();}catch(e){}
+// One-time repair: recalculate avgEntry/totalCost for all ptfAssets from ptfLedger.
+// Fixes historical data where DCA buys updated `amount` but not `avgEntry` (case-mismatch bug).
+try{
+  if(typeof ptfAssets!=="undefined"&&typeof ptfLedger!=="undefined"&&ptfLedger.length>0){
+    var repaired=0;
+    for(var ri=0;ri<ptfAssets.length;ri++){
+      var ra=ptfAssets[ri];if(!ra.id)continue;
+      var raLow=ra.id.toLowerCase();
+      var rentries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()===raLow;});
+      if(rentries.length===0)continue;
+      var rSumCost=0,rSumAmt=0;
+      for(var rj=0;rj<rentries.length;rj++){rSumCost+=(rentries[rj].total||0);rSumAmt+=(rentries[rj].amount||0);}
+      if(rSumAmt>0){
+        var newAvg=rSumCost/rSumAmt;
+        // Only update if meaningfully different (avoid no-op churn)
+        if(!ra.avgEntry||Math.abs(ra.avgEntry-newAvg)/Math.max(ra.avgEntry,0.0001)>0.01||!ra.totalCost||Math.abs((ra.totalCost||0)-rSumCost)>1){
+          console.log("PTF repair: "+ra.id+" avgEntry "+(ra.avgEntry||0).toFixed(4)+"→"+newAvg.toFixed(4)+", totalCost "+(ra.totalCost||0).toFixed(2)+"→"+rSumCost.toFixed(2)+" ("+rentries.length+" ledger entries, "+rSumAmt.toFixed(4)+" amount)");
+          ra.avgEntry=newAvg;ra.totalCost=rSumCost;repaired++;
+        }
+      }
+    }
+    if(repaired>0){try{ptfSave();}catch(e){}console.log("PTF repair: "+repaired+" asset(s) had avgEntry/totalCost recalculated from ledger");}
+  }
+}catch(e){console.log("PTF repair err:",e.message);}
 // BR Tax Compliance Module init
 try{brLoadPermutas();}catch(e){console.log("brLoadPermutas err:",e.message);}
 brFetchPtax().then(function(rate){
