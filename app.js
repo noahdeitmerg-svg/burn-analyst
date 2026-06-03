@@ -602,7 +602,7 @@ function render(){
       if(!isFinite(nfBuy)||nfBuy<0)nfBuy=0;
       if(nfBuy>10000000){console.log("NEXTFILL: capped from $"+nfBuy.toFixed(0)+" — likely DAO full-range pollution");nfBuy=0;}
       var nfV=v3(LP[bestNf].b,LP[bestNf].lo,LP[bestNf].hi,LP[bestNf].hi);
-      nxtFill='<div style="line-height:1.8">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(2)+'</b> <span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span><br>'+
+      nxtFill='<div style="line-height:1.8">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(3)+'</b> <span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span><br>'+
         '<span style="color:var(--cy)">$'+F(nfBuy,0)+'</span> <span style="color:var(--tx)">buying power needed</span> · '+
         '<b style="color:var(--g)">$'+nfV.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</b> <span style="color:var(--tx)">earnings when filled</span> · '+
         '<span style="color:var(--o)">'+F(LP[bestNf].b,0)+'</span> <span style="color:var(--tx)">BURN position</span></div>';}}
@@ -3252,44 +3252,66 @@ function renderPushStatus(){
 
 
 // ═══ CAPITAL FLOW CHART ═══
+var cflowMode="day";
+function setCflowMode(m){
+  cflowMode=m;
+  var bd=$("cflowBtnDay"),bm=$("cflowBtnMonth");
+  if(bd&&bm){
+    if(m==="day"){
+      bd.style.background="rgba(96,165,250,.18)";bd.style.borderColor="rgba(96,165,250,.5)";bd.style.color="var(--b)";
+      bm.style.background="";bm.style.borderColor="";bm.style.color="";
+    }else{
+      bm.style.background="rgba(96,165,250,.18)";bm.style.borderColor="rgba(96,165,250,.5)";bm.style.color="var(--b)";
+      bd.style.background="";bd.style.borderColor="";bd.style.color="";
+    }
+  }
+  renderCapitalFlow();
+}
 function renderCapitalFlow(){
   try{
     if(!$("cflowChart")||!allTrades||allTrades.length<2)return;
-    // Aggregate by day
-    var days={};
     var now=Date.now();
+    var isMonth=(cflowMode==="month");
+    // Aggregate by day OR month
+    var buckets={};
     for(var i=0;i<allTrades.length;i++){
       var t=allTrades[i];
-      var dayMs=now-t.minAgo*60000;
-      var dayKey=new Date(dayMs).toISOString().split("T")[0];
-      if(!days[dayKey])days[dayKey]={buy:0,sell:0,net:0,count:0};
-      if(t.isBuy){days[dayKey].buy+=t.usdc;}else{days[dayKey].sell+=t.usdc;}
-      days[dayKey].net+=(t.isBuy?t.usdc:-t.usdc);
-      days[dayKey].count++;
+      var ms=now-t.minAgo*60000;
+      var dt=new Date(ms);
+      var key=isMonth?(dt.toISOString().slice(0,7)):(dt.toISOString().split("T")[0]); // YYYY-MM or YYYY-MM-DD
+      if(!buckets[key])buckets[key]={buy:0,sell:0,net:0,count:0};
+      if(t.isBuy){buckets[key].buy+=t.usdc;}else{buckets[key].sell+=t.usdc;}
+      buckets[key].net+=(t.isBuy?t.usdc:-t.usdc);
+      buckets[key].count++;
     }
-    var dayKeys=Object.keys(days).sort();
-    if(dayKeys.length<1)return;
-    var last14=dayKeys.slice(-14);
+    var keys=Object.keys(buckets).sort();
+    if(keys.length<1)return;
+    var shown=isMonth?keys.slice(-12):keys.slice(-14);
     // Summary
     var totalBuy=0,totalSell=0;
-    for(var d=0;d<last14.length;d++){totalBuy+=days[last14[d]].buy;totalSell+=days[last14[d]].sell;}
+    for(var d=0;d<shown.length;d++){totalBuy+=buckets[shown[d]].buy;totalSell+=buckets[shown[d]].sell;}
     $("cflowSummary").innerHTML=MB("Buy Volume","$"+F(totalBuy,0),"var(--g)")+MB("Sell Volume","$"+F(totalSell,0),"var(--r)")+
       MB("Net Flow",(totalBuy-totalSell>=0?"+":"-")+"$"+F(Math.abs(totalBuy-totalSell),0),totalBuy>=totalSell?"var(--g)":"var(--r)")+
-      MB("Days",last14.length,"var(--br)");
+      MB(isMonth?"Months":"Days",shown.length,"var(--br)");
     // SVG bar chart
     var maxVal=1;
-    for(var d2=0;d2<last14.length;d2++){var abs=Math.abs(days[last14[d2]].net);if(abs>maxVal)maxVal=abs;}
-    var svgW=700,svgH=160,barW=Math.floor(svgW/last14.length)-4,midY=svgH/2;
-    var svg='<svg viewBox="0 0 '+svgW+' '+(svgH+20)+'" style="width:100%;height:auto">';
+    for(var d2=0;d2<shown.length;d2++){var abs=Math.abs(buckets[shown[d2]].net);if(abs>maxVal)maxVal=abs;}
+    var svgW=700,svgH=160,barW=Math.floor(svgW/shown.length)-4,midY=svgH/2;
+    var svg='<svg viewBox="0 0 '+svgW+' '+(svgH+22)+'" style="width:100%;height:auto">';
     svg+='<line x1="0" y1="'+midY+'" x2="'+svgW+'" y2="'+midY+'" stroke="rgba(148,163,184,.3)" stroke-width="1" stroke-dasharray="4"/>';
-    for(var d3=0;d3<last14.length;d3++){
-      var dk=last14[d3];var net=days[dk].net;
+    var monthNames=["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"];
+    for(var d3=0;d3<shown.length;d3++){
+      var dk=shown[d3];var net=buckets[dk].net;
       var barH=Math.abs(net)/maxVal*(midY-10);
       var x=d3*(barW+4)+2;
       var clr=net>=0?"#34d399":"#f87171";
       var y=net>=0?midY-barH:midY;
-      svg+='<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+Math.max(barH,1)+'" fill="'+clr+'" rx="2" opacity=".8"/>';
-      svg+='<text x="'+(x+barW/2)+'" y="'+(svgH+14)+'" text-anchor="middle" fill="#94a3b8" font-size="7" font-family="JetBrains Mono">'+dk.slice(5)+'</text>';
+      svg+='<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+Math.max(barH,1)+'" fill="'+clr+'" rx="2" opacity=".85"><title>'+dk+': '+(net>=0?"+":"")+"$"+F(net,0)+' (Buy $'+F(buckets[dk].buy,0)+' / Sell $'+F(buckets[dk].sell,0)+')</title></rect>';
+      // Label: month name for month mode, MM-DD for day mode
+      var lbl;
+      if(isMonth){var mp=dk.split("-");lbl=monthNames[parseInt(mp[1])-1]+(shown.length<=12?"":" "+mp[0].slice(2));}
+      else{lbl=dk.slice(5);}
+      svg+='<text x="'+(x+barW/2)+'" y="'+(svgH+14)+'" text-anchor="middle" fill="#94a3b8" font-size="'+(isMonth?9:7)+'" font-family="JetBrains Mono">'+lbl+'</text>';
     }
     svg+='<text x="4" y="12" fill="#94a3b8" font-size="8">+$'+F(maxVal,0)+'</text>';
     svg+='<text x="4" y="'+(svgH-4)+'" fill="#94a3b8" font-size="8">-$'+F(maxVal,0)+'</text>';
