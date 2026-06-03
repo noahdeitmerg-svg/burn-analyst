@@ -453,7 +453,8 @@ function fetchServerWalletState(){
         if(d.eth>0&&typeof ptfAssets!=="undefined"){
           for(var i=0;i<ptfAssets.length;i++){
             if(ptfAssets[i].id==="eth"&&d.eth>ptfAssets[i].amount){
-              ptfAssets[i].amount=d.eth;
+              // Use safe update: scales cost on decrease, holds cost on increase (avgEntry recomputed)
+              ptfSafeSetAmount(ptfAssets[i],d.eth,{amountOnly:true});
             }
           }
           try{ptfSave();ptfRenderTable();}catch(e){}
@@ -3354,6 +3355,50 @@ document.addEventListener("touchend",function(){if(ptrActive){ptrActive=false;$(
 // ═══ PORTFOLIO TERMINAL FUNCTIONS ═══
 function ptfSave(){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));ptfSyncServer();}catch(e){console.log("PTF save err:",e);}}
 
+// ═══ SAFE AMOUNT UPDATE — preserves cost basis ═══
+// Updates an asset's amount when detected on-chain, WITHOUT corrupting avgEntry/totalCost.
+// - If amount DECREASED (sent/sold): scale totalCost down proportionally (keep avgEntry).
+// - If amount INCREASED (bought): we DON'T know the buy price here, so we keep the existing
+//   totalCost and avgEntry UNCHANGED and just sync amount. The proper cost update happens
+//   via the buy-detection dialog (ptfConfirmDetection). This prevents the bug where amount
+//   grows but cost stays flat → fake gains. Instead avgEntry is recomputed from the new amount
+//   ONLY if no dialog mechanism exists, by holding totalCost constant (conservative).
+// Returns true if the asset was modified.
+function ptfSafeSetAmount(asset,newAmount,opts){
+  opts=opts||{};
+  if(!asset||!(newAmount>0))return false;
+  var oldAmount=asset.amount||0;
+  if(Math.abs(newAmount-oldAmount)/Math.max(oldAmount,0.0001)<=0.001)return false; // no real change
+  if(newAmount<oldAmount){
+    // Sold/sent portion → reduce totalCost proportionally, avgEntry unchanged
+    if(asset.totalCost>0&&oldAmount>0){
+      asset.totalCost=asset.totalCost*(newAmount/oldAmount);
+    }
+    asset.amount=newAmount;
+    return true;
+  }else{
+    // Increased. If caller provides a buyPrice, average it in properly.
+    if(opts.buyPrice>0){
+      var bought=newAmount-oldAmount;
+      var addCost=bought*opts.buyPrice;
+      asset.totalCost=(asset.totalCost||0)+addCost;
+      asset.amount=newAmount;
+      asset.avgEntry=asset.totalCost/newAmount;
+      return true;
+    }
+    // No buy price known: keep totalCost, update amount, recompute avgEntry so it stays consistent.
+    // This means avgEntry DROPS (more tokens, same cost) — conservative but never inflates gains.
+    // The buy dialog (if it fires) will correct this with the real price.
+    if(opts.amountOnly){
+      asset.amount=newAmount;
+      if(asset.totalCost>0)asset.avgEntry=asset.totalCost/newAmount;
+      return true;
+    }
+    // Default: don't touch amount on unconfirmed increase (wait for dialog).
+    return false;
+  }
+}
+
 // Sync portfolio to Hetzner for push notifications
 var _ptfLastSync=0;
 function ptfSyncServer(){
@@ -3449,8 +3494,12 @@ function ptfDetectBalances(){
             var bal=h2n(hex);
             if(bal<=0&&a.amount>0){console.log("PTF balance: "+a.symbol+" returned 0, keeping stored "+a.amount);}
             else if(bal>0&&Math.abs(bal-a.amount)/Math.max(a.amount,0.0001)>0.001){
-              console.log("PTF balance: "+a.symbol+" updated "+a.amount+" → "+bal);
-              a.amount=bal;changed=true;updates++;
+              var oldA=a.amount;
+              // Safe update: on decrease scale cost down; on increase hold cost (avgEntry recomputed).
+              // Prevents fake gains from un-priced buys. Real buy price comes via DCA dialog.
+              ptfSafeSetAmount(a,bal,{amountOnly:true});
+              console.log("PTF balance: "+a.symbol+" "+oldA+" → "+bal+" (cost basis preserved: $"+(a.totalCost||0).toFixed(2)+")");
+              changed=true;updates++;
             }
           }
           nextBalance();
@@ -3532,11 +3581,13 @@ function ptfDetectLedgerBalances(){
           ptfLastBalances.eth=ea?ea.amount:0;
           ptfLastBalances.btc=ba?ba.amount:0;
           try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
-          // Still update amounts silently on first run
-          if(ea&&newEth>0)ea.amount=newEth;
-          if(ba&&newBtc>0)ba.amount=newBtc;
+          // First-run amount sync: use SAFE update so cost basis isn't destroyed when the
+          // on-chain balance differs from the stored default amount. avgEntry recomputed to
+          // keep totalCost intact (never inflates gains). The DCA dialog handles real buy prices.
+          if(ea&&newEth>0)ptfSafeSetAmount(ea,newEth,{amountOnly:true});
+          if(ba&&newBtc>0)ptfSafeSetAmount(ba,newBtc,{amountOnly:true});
           ptfSave();ptfRenderTable();
-          console.log("PTF detect: calibrated (first run)");
+          console.log("PTF detect: calibrated (first run) — cost basis preserved");
           return;
         }
         var changed=false;
@@ -3556,8 +3607,9 @@ function ptfDetectLedgerBalances(){
         for(var j=0;j<ptfAssets.length;j++){if(ptfAssets[j].id==="eth"){ea2=ptfAssets[j];break;}}
         if(newEth>0){
           ptfLastBalances.eth=newEth;
-          // Only sync amount when no DCA dialog is pending — otherwise wait for user confirmation
-          if(!ethDialogShown&&ea2)ea2.amount=newEth;
+          // Only sync amount when no DCA dialog is pending — otherwise wait for user confirmation.
+          // Safe helper preserves cost basis (scales on decrease, recomputes avgEntry on increase).
+          if(!ethDialogShown&&ea2)ptfSafeSetAmount(ea2,newEth,{amountOnly:true});
         }
         ptfSave();ptfRenderTable();
         try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
@@ -3674,15 +3726,27 @@ function ptfConfirmDetection(){
     if((ptfAssets[i].id||"").toLowerCase()===symLower){asset=ptfAssets[i];break;}
   }
   if(asset){
-    // Match ledger entries case-insensitively to handle historical entries
-    var entries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()===symLower;});
-    var sumCost=0,sumAmt=0;
-    for(var j=0;j<entries.length;j++){sumCost+=(entries[j].total||0);sumAmt+=(entries[j].amount||0);}
-    if(sumAmt>0){asset.avgEntry=sumCost/sumAmt;asset.totalCost=sumCost;}
-    asset.amount=d.newBalance;
-    console.log("PTF: recalculated "+asset.id+" avgEntry=$"+(asset.avgEntry||0).toFixed(4)+" totalCost=$"+(asset.totalCost||0).toFixed(2)+" from "+entries.length+" ledger entries (amount "+asset.amount+")");
+    // Average the new buy/sell into the EXISTING cost basis (don't replace with ledger-only sum,
+    // because the original baseline cost may not be in the ledger as an entry).
+    if(d.isBuy){
+      // Buy: add this purchase's cost on top of existing totalCost, recompute avg
+      var addCost=d.delta*price;
+      asset.totalCost=(asset.totalCost||0)+addCost;
+      asset.amount=d.newBalance;
+      asset.avgEntry=asset.amount>0?asset.totalCost/asset.amount:price;
+      console.log("PTF buy: "+asset.id+" +"+d.delta.toFixed(6)+" @ $"+price.toFixed(4)+" → totalCost $"+asset.totalCost.toFixed(2)+", avgEntry $"+asset.avgEntry.toFixed(4)+", amount "+asset.amount);
+    }else{
+      // Sell: reduce totalCost proportionally (realized portion leaves at avgEntry), keep avgEntry
+      var soldFraction=asset.amount>0?Math.abs(d.delta)/asset.amount:0;
+      if(soldFraction>0&&soldFraction<=1){
+        asset.totalCost=(asset.totalCost||0)*(1-soldFraction);
+      }
+      asset.amount=d.newBalance;
+      // avgEntry stays the same on a sell (cost basis per unit unchanged)
+      console.log("PTF sell: "+asset.id+" -"+Math.abs(d.delta).toFixed(6)+" → totalCost $"+(asset.totalCost||0).toFixed(2)+", avgEntry $"+(asset.avgEntry||0).toFixed(4)+", amount "+asset.amount);
+    }
   }else{
-    console.log("PTF: WARNING — no asset found for "+d.symbol+" (lowercase "+symLower+"), avgEntry NOT recalculated");
+    console.log("PTF: WARNING — no asset found for "+d.symbol+" (lowercase "+symLower+"), cost basis NOT updated");
   }
   ptfSave();ptfRenderTable();ptfRenderLedger();
   console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price+" (mode:"+ptfDetectMode+")");
@@ -3798,10 +3862,10 @@ function btcConfirmBuy(){
   });
   // Auto BR Permuta
   try{if(typeof brAddPermuta==="function")brAddPermuta("buy","BTC",delta,paid,"Manual BTC buy",new Date().toISOString().split("T")[0]);}catch(e){}
-  // Recalc avgEntry/totalCost from full ledger
-  var entries=ptfLedger.filter(function(e){return e.asset==="btc";});
+  // Recalc avgEntry/totalCost from full ledger (case-insensitive)
+  var entries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()==="btc";});
   var sumCost=0,sumAmt=0;
-  for(var j=0;j<entries.length;j++){sumCost+=entries[j].total;sumAmt+=entries[j].amount;}
+  for(var j=0;j<entries.length;j++){sumCost+=(entries[j].total||0);sumAmt+=(entries[j].amount||0);}
   if(sumAmt>0){
     btcAsset.avgEntry=sumCost/sumAmt;
     btcAsset.totalCost=sumCost;
@@ -3930,14 +3994,17 @@ function ptfUpdateDropdown(){
 }
 
 function ptfRecalcAsset(assetId){
-  var entries=ptfLedger.filter(function(e){return e.asset===assetId;});
+  var idLow=(assetId||"").toLowerCase();
+  var entries=ptfLedger.filter(function(e){return (e.asset||"").toLowerCase()===idLow;});
   var asset=null;
-  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id===assetId){asset=ptfAssets[i];break;}}
+  for(var i=0;i<ptfAssets.length;i++){if((ptfAssets[i].id||"").toLowerCase()===idLow){asset=ptfAssets[i];break;}}
   if(!asset)return;
+  if(entries.length===0)return; // no ledger entries → don't zero out existing cost basis
   var totalCost=0,totalAmt=0;
-  for(var j=0;j<entries.length;j++){totalCost+=entries[j].total;totalAmt+=entries[j].amount;}
+  for(var j=0;j<entries.length;j++){totalCost+=(entries[j].total||0);totalAmt+=(entries[j].amount||0);}
+  if(totalAmt<=0)return; // guard against division by zero / cost wipe
   asset.totalCost=totalCost;
-  asset.avgEntry=totalAmt>0?totalCost/totalAmt:0;
+  asset.avgEntry=totalCost/totalAmt;
   if(asset.source==="manual")asset.amount=totalAmt;
 }
 
@@ -4602,17 +4669,26 @@ try{
         if(!isBroken&&oldAvg>0&&def.avgEntry&&Math.abs(oldAvg-def.avgEntry)/def.avgEntry>0.5&&amtRatio>0.5){isBroken=true;reason="avgEntry drifted (was "+oldAvg.toFixed(4)+" vs default "+def.avgEntry.toFixed(4)+")";}
       }
       if(isBroken&&def){
-        // Restore from defaults, but keep amount (it came from chain)
-        newAvg=def.avgEntry;
-        newCost=def.totalCost;
-        // If user's amount differs from default amount, scale total cost proportionally
-        // Only if amount is REASONABLY close to default (within 3x), else leave default cost as-is
-        if(def.amount>0&&Math.abs(ra.amount-def.amount)/def.amount<2){
-          // Keep at default — small differences are tracked in extra ledger entries
+        // CORRUPTION DETECTED — combine DEFAULTS (baseline) + LEDGER (subsequent DCA buys).
+        // Defaults represent everything before the app started tracking precisely.
+        // Ledger entries are user-confirmed buys recorded SINCE then.
+        // To avoid double-counting, only include ledger entries with non-"Initial" notes.
+        var ledgerExtraAmt=0,ledgerExtraCost=0,ledgerExtraCount=0;
+        for(var lj=0;lj<rentries.length;lj++){
+          var le=rentries[lj];
+          // Skip entries that look like the initial seed (matches default amount+price closely)
+          if(le.note==="Initial")continue;
+          if(def.amount&&Math.abs((le.amount||0)-def.amount)/def.amount<0.05&&def.avgEntry&&Math.abs((le.price||0)-def.avgEntry)/def.avgEntry<0.05)continue;
+          ledgerExtraAmt+=(le.amount||0);
+          ledgerExtraCost+=(le.total||0);
+          ledgerExtraCount++;
         }
-        ra.avgEntry=newAvg;ra.totalCost=newCost;
+        var combinedAmt=def.amount+ledgerExtraAmt;
+        var combinedCost=def.totalCost+ledgerExtraCost;
+        var combinedAvg=combinedAmt>0?combinedCost/combinedAmt:def.avgEntry;
+        ra.avgEntry=combinedAvg;ra.totalCost=combinedCost;
         restored++;
-        console.log("PTF restore: "+ra.id+" "+reason+" → avgEntry $"+newAvg.toFixed(4)+", totalCost $"+newCost.toFixed(2));
+        console.log("PTF restore: "+ra.id+" "+reason+" → defaults ($"+def.totalCost.toFixed(2)+", "+def.amount+") + "+ledgerExtraCount+" DCA ledger entries ($"+ledgerExtraCost.toFixed(2)+", "+ledgerExtraAmt.toFixed(4)+") = avgEntry $"+combinedAvg.toFixed(2)+", totalCost $"+combinedCost.toFixed(2));
       }else if(rSumAmt>0&&ledgerAvg>0){
         // Ledger has data and asset doesn't look broken → use ledger only if it's MORE than current
         // (additive: user may have added entries; don't reduce a known-good totalCost)
