@@ -445,8 +445,12 @@ function fetchServerWalletState(){
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d||d.error)return;
-        // Sync confirmed_total — server wins
-        if(d.confirmed_total>0){
+        // Sync confirmed_total — but DON'T overwrite a locally-known baseline on every load.
+        // If we already have a local confirmed total, keep it so the app can detect deviations
+        // against the real on-chain balance. Only seed from server if we have nothing yet.
+        // (Previously "server wins" wiped the baseline → -100 BURN changes went undetected.)
+        var localConfirmed=localStorage.getItem("walConfirmedTotal");
+        if(d.confirmed_total>0&&(!localConfirmed||parseFloat(localConfirmed)<=0)){
           localStorage.setItem("walConfirmedTotal",d.confirmed_total.toString());
         }
         // ETH balance: take higher value (server vs local cache)
