@@ -106,6 +106,18 @@ var CL=[
   {d:"25.04.26",b:10043,lo:.149,hi:.20,u:1630,n:"Partial (10K BURN returned)"}
 ];
 var MS=[{d:"05.12.25",b:10500,u:1196,n:"Market"}];
+// Load persisted manual/OTC sells from localStorage and merge into MS.
+// These flow automatically into: Closed Positions, Realized Profit (TS/TR),
+// LP P&L, BR Tax backfill, and CSV exports — because everything reads from MS.
+try{
+  var msExtra=JSON.parse(localStorage.getItem("ms_extra")||"[]");
+  if(Array.isArray(msExtra)){
+    for(var mex=0;mex<msExtra.length;mex++){
+      var me=msExtra[mex];
+      if(me&&me.b>0&&me.u>=0&&me.d)MS.push({d:me.d,b:me.b,u:me.u,n:me.n||"OTC"});
+    }
+  }
+}catch(e){console.log("MS extra load err:",e);}
 var TS=0,TR=0;
 for(var ci=0;ci<CL.length;ci++){TS+=CL[ci].b;TR+=CL[ci].u;}
 for(var si2=0;si2<MS.length;si2++){TS+=MS[si2].b;TR+=MS[si2].u;}
@@ -2779,6 +2791,103 @@ function prmAddManual(){
   var ev=brAddPermuta(type,asset.toUpperCase(),qty,usd,note,date);
   alert("Event erfasst:\n"+date+" "+type+" "+asset+"\n"+qty+" @ $"+usd+" = R$"+ev.brl.toFixed(0)+"\nGewinn: R$"+ev.profitBrl.toFixed(0));
   brRenderTaxUI();
+}
+
+// ═══ OTC / MARKET SELL — clean entry that flows everywhere ═══
+// Records a sale into MS (→ Closed Positions, Realized Profit, LP P&L, exports)
+// AND into BR Tax (custo médio reduction + DARF). stBURN is converted to BURN-equivalent
+// so it draws from the same BURN cost basis (stBURN is BURN-backed).
+function otcSellPrompt(){
+  try{
+    var ov=document.getElementById("otcOverlay");
+    if(ov){ov.remove();}
+    var today=new Date().toISOString().split("T")[0];
+    var html='<div id="otcOverlay" style="position:fixed;inset:0;z-index:10000;background:rgba(6,9,16,.92);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:18px" onclick="if(event.target===this)this.remove()">'+
+      '<div style="background:#0d1320;border:1px solid rgba(96,165,250,.4);border-radius:16px;padding:20px;max-width:380px;width:100%;box-shadow:0 0 40px rgba(0,0,0,.6)">'+
+        '<div style="font-weight:700;color:var(--g);font-size:15px;margin-bottom:4px">💸 OTC / Market Verkauf</div>'+
+        '<div style="font-size:10px;color:var(--dm);margin-bottom:16px">Fließt in Closed Positions, Realized Profit & BR Tax</div>'+
+        '<div style="display:flex;flex-direction:column;gap:12px">'+
+          '<div><label style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Was verkauft?</label>'+
+            '<select id="otcAsset" onchange="otcRecalc()" style="width:100%;margin-top:4px;background:#0a0f1a;border:1px solid rgba(48,54,68,.6);border-radius:8px;padding:10px;color:var(--tx);font-size:13px">'+
+              '<option value="stburn">stBURN (wird als BURN gerechnet)</option>'+
+              '<option value="burn">BURN</option>'+
+            '</select></div>'+
+          '<div><label style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Menge</label>'+
+            '<input id="otcQty" type="number" inputmode="decimal" oninput="otcRecalc()" placeholder="14000" style="width:100%;margin-top:4px;background:#0a0f1a;border:1px solid rgba(48,54,68,.6);border-radius:8px;padding:10px;color:var(--tx);font-size:15px;font-family:Geist Mono,monospace"></div>'+
+          '<div><label style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Erlös (USDC)</label>'+
+            '<input id="otcUsd" type="number" inputmode="decimal" oninput="otcRecalc()" placeholder="2510" style="width:100%;margin-top:4px;background:#0a0f1a;border:1px solid rgba(48,54,68,.6);border-radius:8px;padding:10px;color:var(--g);font-size:15px;font-family:Geist Mono,monospace"></div>'+
+          '<div><label style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Datum</label>'+
+            '<input id="otcDate" type="date" value="'+today+'" style="width:100%;margin-top:4px;background:#0a0f1a;border:1px solid rgba(48,54,68,.6);border-radius:8px;padding:10px;color:var(--tx);font-size:13px"></div>'+
+          '<div><label style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">Notiz</label>'+
+            '<input id="otcNote" type="text" value="Market OTC" style="width:100%;margin-top:4px;background:#0a0f1a;border:1px solid rgba(48,54,68,.6);border-radius:8px;padding:10px;color:var(--tx);font-size:13px"></div>'+
+          '<div id="otcPreview" style="font-size:11px;color:var(--mt);background:rgba(8,12,22,.6);border-radius:8px;padding:10px;line-height:1.6;min-height:20px"></div>'+
+        '</div>'+
+        '<div style="display:flex;gap:10px;margin-top:18px">'+
+          '<button onclick="document.getElementById(\'otcOverlay\').remove()" style="flex:1;background:rgba(48,54,68,.3);border:1px solid rgba(48,54,68,.6);color:var(--mt);padding:11px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Abbrechen</button>'+
+          '<button onclick="otcConfirm()" style="flex:2;background:linear-gradient(180deg,rgba(52,211,153,.25),rgba(52,211,153,.08));border:1px solid rgba(52,211,153,.6);color:var(--g);padding:11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">✓ Verkauf eintragen</button>'+
+        '</div>'+
+      '</div></div>';
+    document.body.insertAdjacentHTML("beforeend",html);
+    otcRecalc();
+  }catch(e){alert("OTC Fehler: "+e.message);}
+}
+
+function otcRecalc(){
+  try{
+    var asset=document.getElementById("otcAsset").value;
+    var qty=parseFloat(document.getElementById("otcQty").value)||0;
+    var usd=parseFloat(document.getElementById("otcUsd").value)||0;
+    var stRv=(typeof stRatio!=="undefined"&&stRatio>0)?stRatio:((typeof stR!=="undefined"&&stR>0)?stR:1.038);
+    var burnEq=asset==="stburn"?qty*stRv:qty;
+    var avgEntry=(typeof AVG_ENTRY!=="undefined")?AVG_ENTRY:0.003682;
+    var cost=burnEq*avgEntry;
+    var profit=usd-cost;
+    var price=qty>0?usd/qty:0;
+    var pv=document.getElementById("otcPreview");
+    if(pv){
+      var conv=asset==="stburn"?('<div>'+qty.toLocaleString()+' stBURN × '+stRv.toFixed(4)+' = <b style="color:var(--o)">'+Math.round(burnEq).toLocaleString()+' BURN</b></div>'):'';
+      pv.innerHTML=conv+
+        '<div>Ø Preis: <b>$'+price.toFixed(5)+'</b></div>'+
+        '<div>Cost-Basis: $'+cost.toFixed(2)+' (@ $'+avgEntry+')</div>'+
+        '<div>Realisierter Gewinn: <b style="color:'+(profit>=0?"var(--g)":"var(--r)")+'">$'+profit.toFixed(2)+'</b></div>';
+    }
+  }catch(e){}
+}
+
+function otcConfirm(){
+  try{
+    var asset=document.getElementById("otcAsset").value;
+    var qty=parseFloat(document.getElementById("otcQty").value)||0;
+    var usd=parseFloat(document.getElementById("otcUsd").value)||0;
+    var date=document.getElementById("otcDate").value;
+    var note=document.getElementById("otcNote").value||"Market OTC";
+    if(qty<=0||usd<0||!date){alert("Bitte Menge, Erlös und Datum ausfüllen.");return;}
+    var stRv=(typeof stRatio!=="undefined"&&stRatio>0)?stRatio:((typeof stR!=="undefined"&&stR>0)?stR:1.038);
+    // stBURN → BURN equivalent (stBURN is BURN-backed: swap stBURN→BURN then sell BURN)
+    var burnEq=asset==="stburn"?Math.round(qty*stRv):qty;
+    // Date format for MS display: DD.MM.YY
+    var dp=date.split("-");var dDisp=dp[2]+"."+dp[1]+"."+dp[0].slice(2);
+    var noteFull=asset==="stburn"?(note+" ("+qty.toLocaleString()+" stBURN)"):note;
+    // 1. Persist to ms_extra (localStorage) → flows into Closed Positions, Realized Profit, exports
+    var msExtra=[];
+    try{msExtra=JSON.parse(localStorage.getItem("ms_extra")||"[]");}catch(e){}
+    msExtra.push({d:dDisp,b:burnEq,u:usd,n:noteFull});
+    localStorage.setItem("ms_extra",JSON.stringify(msExtra));
+    // 2. Add to live MS array (so no reload needed)
+    if(typeof MS!=="undefined"){MS.push({d:dDisp,b:burnEq,u:usd,n:noteFull});
+      if(typeof TS!=="undefined"&&typeof TR!=="undefined"){TS+=burnEq;TR+=usd;}}
+    // 3. BR Tax: rebuild custo médio + permutas from ALL sources (CL/MS/ledger).
+    // We DON'T call brAddPermuta separately — that would double-count, because
+    // brInitCustoMedio already processes every MS entry (including this new one).
+    if(typeof brInitCustoMedio==="function"){try{brInitCustoMedio();}catch(e){}}
+    // 4. Refresh everything
+    try{render();}catch(e){}
+    try{brRenderTaxUI();}catch(e){}
+    var avgEntry=(typeof AVG_ENTRY!=="undefined")?AVG_ENTRY:0.003682;
+    var profit=usd-burnEq*avgEntry;
+    document.getElementById("otcOverlay").remove();
+    alert("✓ Verkauf eingetragen!\n\n"+burnEq.toLocaleString()+" BURN für $"+usd+"\nØ $"+(usd/burnEq).toFixed(5)+"\nRealisierter Gewinn: $"+profit.toFixed(2)+"\n\nErscheint jetzt in Closed Positions, Realized Profit & BR Tax.");
+  }catch(e){alert("Fehler beim Eintragen: "+e.message);}
 }
 
 // DeCripto CSV Export (Receita Federal compatible-ish format)
