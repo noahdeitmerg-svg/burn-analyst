@@ -80,7 +80,18 @@ var ADDR_BOOK={
   "0xd1ea440cd0c1ec23e72a19e86bc78369c9ac6cce":"Satoshi_7",
   "0x141bd9c930a544b528851b4c5b6973f2562fd50d":"Alex",
   "0x0e7121299279d976c246957617db97a81a9a1a4b":"reiss.eth",
-  "0x575dbf4a67b549f72f98a80fe9a2afe0925c4dca":"Mario"
+  "0x575dbf4a67b549f72f98a80fe9a2afe0925c4dca":"Mario",
+  // ── Daocademy CSV: offizielle Projekt-Vaults + ergänzte Wallets ──
+  "0x9ae5453f156a1f7ac297781c15c77b622e42c12c":"Stalking Vault",
+  "0x5b08d24efcb4b485fa34bbdced6d63205100afd6":"Core Contributors Vault",
+  "0x2e9237771d0ae73b7d9a2c791209efd5a1ea9513":"Client Vault",
+  "0x521b33d8bd645986e0d7f0db01bdf8a166408aa8":"Stalking Pool",
+  "0xf42904ae1b58e8e1fde7180e2f9ebacdb9c06cd5":"Staking in/out",
+  "0x4cc7e699cdf6baeb850f1e5b7084ca179da98aee":"Elite Staking Pool",
+  "0x1b5b969fcccc12ddcf3022bbf1c586b775ddfb42":"Elite DAO",
+  "0xbb751e832d9da605eacebec153101afc3aadd154":"T-Free",
+  "0x68bb36c5ec72868549a1cb4ab93eccfc39ca52d4":"Alex",
+  "0x8dbd81fd2fe6074bbdca0b6b2fce05c7d54263e6":"Luis"
 };
 // Merge any user-added names from localStorage
 try{var abExtra=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");for(var abk in abExtra){if(abExtra.hasOwnProperty(abk))ADDR_BOOK[abk.toLowerCase()]=abExtra[abk];}}catch(e){}
@@ -1206,12 +1217,18 @@ function decodeSwap(log,latest){
 function tradeRow(t){
   var agoT=t.minAgo<1?"now":t.minAgo<60?t.minAgo+"m":t.minAgo<1440?Math.round(t.minAgo/60)+"h":Math.round(t.minAgo/1440)+"d";
   var clr=t.isBuy?"var(--g)":"var(--r)";
-  var wS=t.wallet?addrName(t.wallet):"—";
   var isKnown=t.wallet&&typeof ADDR_BOOK!=="undefined"&&ADDR_BOOK[(t.wallet+"").toLowerCase()];
   var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
   var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
   var whaleTag=t.usdc>=WHALE_MIN?"🐋 ":"";
-  var wLink=t.wallet?'<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:'+(isKnown?"var(--o)":"var(--b)")+';font-weight:'+(isKnown?"600":"400")+'">'+wS+'</a>':'<span style="font-size:9px;color:var(--dm)">—</span>';
+  // Wallet column: show NAME if known, otherwise leave empty (no hex).
+  var wLink;
+  if(isKnown){
+    var nm=addrName(t.wallet);
+    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--o);font-weight:600">'+nm+'</a>';
+  }else{
+    wLink='<span style="font-size:9px;color:var(--dm)">—</span>';
+  }
   var whaleBg=t.usdc>=1000?"background:rgba(251,191,36,.04);":t.usdc>=500?"background:rgba(251,191,36,.02);":"";
   return'<tr style="'+whaleBg+'"><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+whaleTag+uD+'</td><td>'+FP(t.price)+'</td><td>'+wLink+'</td></tr>';}
 
