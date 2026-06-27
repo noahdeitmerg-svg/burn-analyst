@@ -35,6 +35,72 @@ var USDC_TK="0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
 // ═══ CONFIG ═══
 var W_LEDGER="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
 var W_DEFI="0x505042fF781eA1689e44e1d200eFD691C30Db86C";
+
+// ═══ ADDRESS BOOK ═══
+// Discord wallet-verifizierung names → addresses (all lowercase keys for matching).
+// When a known wallet trades / LPs / changes, the app shows the NAME instead of the hex.
+// Verify-Bot-confirmed addresses take priority (those are the user's current verified wallet).
+var ADDR_BOOK={
+  "0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2":"Noah ⭐",
+  "0x505042ff781ea1689e44e1d200efd691c30db86c":"Noah (DeFi) ⭐",
+  "0x751de1df943f22b90468ed5d6b193549cd5bd4b8":"Lion",
+  "0x4b29414c800f84f27056a55298eb685f134bcff4":"MartinaLartey",
+  "0xbc6de8f9712f9308d368d00828944a93bb81d4ad":"chris_u",
+  "0xecbcc7c2fdc04b151c9dfa8d4e2303be98a0ed61":"Little-powerprincess",
+  "0xe73bcb80ec39551677b79916126d65165fe38f7a":"mislavm",
+  "0xff2f41ed3ac6f2e0394c0dac26b6a356aab53547":"annablume4699",
+  "0x7d32f1334265a77fbea2a03c3a5ca6b5b1319f17":"Den91Re_ETH",
+  "0x1f3f931ed40273a8e71dee7771322bb3c28aa22e":"Nicole",
+  "0x441c5c0aae9f9325b31f9691d19d283fbf5438ac":"Vitja",
+  "0xced145bd4bcfaa9688e6006837ba51026a665911":"Viktor",
+  "0x1fbaa25057578f29bcbb95a9ce833f5c5cbe93de":"Dominic",
+  "0x98896671e67107e3e41c0e6c90d138b485eff3de":"Björn",
+  "0x7a28a86fcac8a75bb5d1fa5777662997a5ae543d":"OFalk",
+  "0xb5d252d5f996fee396d63829eaffe8fbdb1dea8b":"ManuelZ",
+  "0xf5ed30e23fe38f42cf9f4c9ee06d283270f33df8":"mislavm",
+  "0xe9a6e15ed22b7fe8ab804d18152c8df04bc480c3":"Christian",
+  "0x9f2406cfc9738337dcaaaf16ab6382da359b6d56":"Zora",
+  "0xdda2914eb046c6305e12de73fcdf6c87e4000edb":"Julian Schüle",
+  "0x4489103f76d4191224b0c3b035fb310da7e4e038":"Elias",
+  "0x872d3f5015a389ca46784e90cdf4901fd65e52b6":"Katja Kügler",
+  "0x346303a6e64900f2c1ba7127eed94974c8b67784":"Chris",
+  "0x88ea25a88a0840d30b4171c7f732271225cea270":"Stefan",
+  "0xdd91ef9232047dcc5f308d5358d1b7d80da311b5":"Benny",
+  "0x7635c7ca8e1c66b5a5c5203e6f4a6f12603d061d":"Sergej",
+  "0xee3c4986f928ca07e3f345ef28b8bfd6cd3542a1":"Jan",
+  "0xf76bb59da518be636ca3396286010493d7dc2541":"Asita",
+  "0xe9956194b6e86f3f4abd89c0184deb04f3ca6d7e":"Jens",
+  "0x58098a94c6ec47937557f8790a5531eaf196e939":"Halima",
+  "0xe0c6e5432bf1cd3d4927d71c8fbe467ee8d91236":"_ezy_",
+  "0xd1ea6173bfd0d53899b0203b9025edd74e783a48":"Alfonso",
+  "0x9e4e0a1c623c4f8a8f8a2d81f1b477bc8f80b888":"Samu",
+  "0xba006ccc22038cf3885ac8e7cece8957afb1b3e6":"Justin",
+  "0x9b0207f16f290e0220c47baab52594356e6d45c7":"Arthur Viktor Rein",
+  "0xc017eed38558e8c2d5923ff0f4a036063bb18e48":"Denis",
+  "0xd1ea440cd0c1ec23e72a19e86bc78369c9ac6cce":"Satoshi_7",
+  "0x141bd9c930a544b528851b4c5b6973f2562fd50d":"Alex",
+  "0x0e7121299279d976c246957617db97a81a9a1a4b":"reiss.eth",
+  "0x575dbf4a67b549f72f98a80fe9a2afe0925c4dca":"Mario"
+};
+// Merge any user-added names from localStorage
+try{var abExtra=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");for(var abk in abExtra){if(abExtra.hasOwnProperty(abk))ADDR_BOOK[abk.toLowerCase()]=abExtra[abk];}}catch(e){}
+// Resolve an address to a display name (or shortened hex if unknown).
+function addrName(addr,opts){
+  opts=opts||{};
+  if(!addr)return "—";
+  var low=(addr+"").toLowerCase();
+  var name=ADDR_BOOK[low];
+  if(name)return opts.withHex?(name+" ("+addr.slice(0,6)+"…"+addr.slice(-4)+")"):name;
+  return addr.length>10?addr.slice(0,6)+"…"+addr.slice(-4):addr;
+}
+// Add/update a name for an address (persists to localStorage)
+function addrBookSet(addr,name){
+  if(!addr||!name)return;
+  var low=(addr+"").toLowerCase();
+  ADDR_BOOK[low]=name;
+  try{var ex=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");ex[low]=name;localStorage.setItem("addr_book_extra",JSON.stringify(ex));}catch(e){}
+}
+
 var TGT=[.20,.30,.50,1,2,5,10,20,30,50,100], SEL=[10000,50000,100000,180000];
 var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
@@ -1140,11 +1206,12 @@ function decodeSwap(log,latest){
 function tradeRow(t){
   var agoT=t.minAgo<1?"now":t.minAgo<60?t.minAgo+"m":t.minAgo<1440?Math.round(t.minAgo/60)+"h":Math.round(t.minAgo/1440)+"d";
   var clr=t.isBuy?"var(--g)":"var(--r)";
-  var wS=t.wallet.length>10?t.wallet.slice(0,6)+"…"+t.wallet.slice(-4):"—";
+  var wS=t.wallet?addrName(t.wallet):"—";
+  var isKnown=t.wallet&&typeof ADDR_BOOK!=="undefined"&&ADDR_BOOK[(t.wallet+"").toLowerCase()];
   var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
   var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
   var whaleTag=t.usdc>=WHALE_MIN?"🐋 ":"";
-  var wLink=t.wallet?'<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)">'+wS+'</a>':'<span style="font-size:9px;color:var(--dm)">—</span>';
+  var wLink=t.wallet?'<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:'+(isKnown?"var(--o)":"var(--b)")+';font-weight:'+(isKnown?"600":"400")+'">'+wS+'</a>':'<span style="font-size:9px;color:var(--dm)">—</span>';
   var whaleBg=t.usdc>=1000?"background:rgba(251,191,36,.04);":t.usdc>=500?"background:rgba(251,191,36,.02);":"";
   return'<tr style="'+whaleBg+'"><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+whaleTag+uD+'</td><td>'+FP(t.price)+'</td><td>'+wLink+'</td></tr>';}
 
@@ -1971,7 +2038,9 @@ function renderLmap(buckets){
     var ow=owners[wi];
     var wS=ow.addr.slice(0,6)+"…"+ow.addr.slice(-4);
     var WALLET_LABELS={"0x72ade1":"DAO Vault","0x505042":"Noah (DeFi)","0x6e37cc":"Noah (Alt)","0x1b5b96":"Elite","0x0e7121":"Founder","0x6324b1":"Private","0x988966":"Private"};
-    var wLabel="";for(var wk in WALLET_LABELS){if(ow.addr.indexOf(wk)===0){wLabel=WALLET_LABELS[wk];break;}}
+    var wLabel="";for(var wk in WALLET_LABELS){if(ow.addr.toLowerCase().indexOf(wk)===0){wLabel=WALLET_LABELS[wk];break;}}
+    // If no special label, fall back to Discord name from address book
+    if(!wLabel&&typeof ADDR_BOOK!=="undefined"){var abn=ADDR_BOOK[(ow.addr+"").toLowerCase()];if(abn)wLabel=abn.replace(" ⭐","");}
     var wLink='<a href="https://arbiscan.io/address/'+ow.addr+'" target="_blank" style="color:'+(ow.isMe?"var(--cy)":ow.activeCount>0?"var(--g)":"var(--dm)")+'">'+(ow.isMe?"⭐ ":"")+wS+'</a>';
     var labelHtml=wLabel?' <span style="font-size:9px;color:var(--cy);margin-left:4px">'+wLabel+'</span>':'';
     var statusTxt=ow.activeCount>0?ow.activeCount+" active"+(ow.closedCount>0?", "+ow.closedCount+" closed":""):ow.closedCount+" closed";
@@ -2155,8 +2224,9 @@ async function wtLoad(){
 }
 
 function wtRender(d){
-  var wS=d.addr.slice(0,6)+"…"+d.addr.slice(-4);
-  var h='<div style="margin-bottom:8px"><a href="https://arbiscan.io/address/'+d.addr+'" target="_blank" style="color:var(--b);font-size:10px">'+wS+'</a></div>';
+  var wS=addrName(d.addr);
+  var isKnown=typeof ADDR_BOOK!=="undefined"&&ADDR_BOOK[(d.addr+"").toLowerCase()];
+  var h='<div style="margin-bottom:8px"><a href="https://arbiscan.io/address/'+d.addr+'" target="_blank" style="color:'+(isKnown?"var(--o)":"var(--b)")+';font-size:10px;font-weight:'+(isKnown?"600":"400")+'">'+wS+'</a></div>';
   h+='<div class="mg">'+MB("BURN",F(d.burn,0),"var(--o)")+MB("stBURN",F(d.stBurn,0),"var(--p)")+
     MB("BURN Equiv",F(d.totalEq,0),"var(--br)")+MB("Value","$"+F(d.totalVal,0),"var(--g)")+'</div>';
   if(d.lps.length>0){
