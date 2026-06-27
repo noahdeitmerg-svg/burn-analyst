@@ -362,17 +362,22 @@ function renderWal(){
   var bClr=bDrop?"var(--r)":"var(--g)",sClr=sDrop?"var(--r)":"var(--g)";
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   var totalTokens=MY_BURN+MY_STBURN;
-  // Calculate LP BURN-Left (BURN tokens still in active LPs, not yet sold to USDC)
-  var lpBurnLeft=0;
+  // Calculate LP detail: BURN deposited, BURN-left (sellable), BURN already sold to USDC, USDC value
+  var lpBurnLeft=0,lpBurnDeposited=0,lpBurnSold=0,lpUsdcValue=0,lpCount=0;
   try{
     if(typeof LP!=="undefined"&&typeof v3==="function"&&typeof P!=="undefined"&&P>0){
       for(var lpi=0;lpi<LP.length;lpi++){
         if(LP[lpi].fr)continue; // skip DAO full range
         var lpv=v3(LP[lpi].b,LP[lpi].lo,LP[lpi].hi,P);
         lpBurnLeft+=lpv.left;
+        lpBurnDeposited+=LP[lpi].b;
+        lpBurnSold+=Math.max(0,LP[lpi].b-lpv.left);
+        lpUsdcValue+=lpv.usdc;
+        lpCount++;
       }
     }
   }catch(e){}
+  window._lpDetail={left:lpBurnLeft,deposited:lpBurnDeposited,sold:lpBurnSold,usdc:lpUsdcValue,count:lpCount};
   var totalBurnEq=MY_BURN+(MY_STBURN*stR)+lpBurnLeft;
 
   // ─── Wallet Change Detection ───
@@ -432,9 +437,153 @@ function renderWal(){
       '<span style="font-size:11px;color:var(--cy);margin-left:4px;font-weight:500;opacity:.8">BURN</span>'+
       (lpBurnLeft>0?'<div style="font-size:9px;color:var(--mt);margin-top:3px;letter-spacing:.3px">incl. <span style="color:var(--b);font-weight:600">'+F(lpBurnLeft,0)+'</span> BURN in LPs</div>':'')+
     '</div>';
+  try{renderStrategy(MY_BURN,MY_STBURN,lpBurnLeft);}catch(e){console.log("strat err:",e.message);}
 }
 
-// Confirm wallet balance change — invoked by inline onclick
+// ═══ STRATEGY COCKPIT ═══
+// Visual long/mid-term plan: what I own (BURN/stBURN/equiv), what I plan to HOLD,
+// what I've already SOLD (+profit), and what's FREE to deploy into LPs / further sells.
+var STRAT_HOLD_TARGET=parseFloat(localStorage.getItem("strat_hold_target")||"600000");
+function setStratHoldTarget(){
+  var v=prompt("Wie viele BURN willst du mittelfristig (z.B. nächstes Jahr) mindestens HALTEN?\n\nAktuell: "+F(STRAT_HOLD_TARGET,0)+" BURN",STRAT_HOLD_TARGET);
+  if(v===null)return;
+  var n=parseFloat((v+"").replace(/[^0-9.]/g,""));
+  if(n>0){STRAT_HOLD_TARGET=n;localStorage.setItem("strat_hold_target",n.toString());try{renderWal();}catch(e){}}
+}
+function renderStrategy(burn,stburn,lpLeft){
+  var box=document.getElementById("stratBox");if(!box)return;
+  burn=burn||0;stburn=stburn||0;lpLeft=lpLeft||0;
+  var ratio=(typeof stR!=="undefined"&&stR>0)?stR:1.038;
+  var price=(typeof P!=="undefined"&&P>0)?P:0;
+  var avgEntry=(typeof AVG_ENTRY!=="undefined")?AVG_ENTRY:0.003682;
+  // OWNERSHIP
+  var stburnEq=stburn*ratio;
+  var ownedEquiv=burn+stburnEq+lpLeft; // total BURN-equivalent incl LP
+  // SOLD
+  var sold=(typeof TS!=="undefined")?TS:0;
+  var soldUsdc=(typeof TR!=="undefined")?TR:0;
+  var realizedProfit=soldUsdc-(sold*avgEntry);
+  var avgSell=sold>0?soldUsdc/sold:0;
+  // PLAN
+  var holdTarget=STRAT_HOLD_TARGET;
+  var surplus=Math.max(0,ownedEquiv-holdTarget); // free to sell/LP
+  var holdPctOfOwned=ownedEquiv>0?Math.min(100,holdTarget/ownedEquiv*100):0;
+  // VALUES at current price
+  var ownedValue=ownedEquiv*price;
+  var holdValue=holdTarget*price;
+  var surplusValue=surplus*price;
+  var unrealizedVsEntry=(price-avgEntry)*ownedEquiv;
+  // "Journey" totals: originally had owned+sold
+  var lifetimeBurn=ownedEquiv+sold;
+  var soldPctOfLifetime=lifetimeBurn>0?(sold/lifetimeBurn*100):0;
+  var heldPctOfLifetime=lifetimeBurn>0?(ownedEquiv/lifetimeBurn*100):0;
+
+  function fmtUsd(n){return "$"+Math.round(n).toLocaleString("en");}
+  function card(label,val,sub,color){
+    return '<div style="flex:1;min-width:130px;background:rgba(8,12,22,.55);border:1px solid '+color+'33;border-radius:10px;padding:11px 12px">'+
+      '<div style="font-size:8.5px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">'+label+'</div>'+
+      '<div style="font-size:18px;font-weight:700;color:'+color+';font-family:Geist Mono,monospace;line-height:1.1">'+val+'</div>'+
+      (sub?'<div style="font-size:9px;color:var(--mt);margin-top:3px">'+sub+'</div>':'')+
+    '</div>';
+  }
+
+  var html="";
+
+  // ─── SECTION 1: Lifetime journey bar (held vs sold) ───
+  html+='<div style="margin-bottom:16px">'+
+    '<div style="display:flex;justify-content:space-between;font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px"><span>BURN-Reise gesamt</span><span>'+F(lifetimeBurn,0)+' BURN</span></div>'+
+    '<div style="display:flex;height:26px;border-radius:7px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
+      '<div style="width:'+heldPctOfLifetime.toFixed(1)+'%;background:linear-gradient(180deg,#22d3ee,#0891b2);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#04141a" title="Noch gehalten">'+(heldPctOfLifetime>12?F(ownedEquiv,0):'')+'</div>'+
+      '<div style="width:'+soldPctOfLifetime.toFixed(1)+'%;background:linear-gradient(180deg,#34d399,#059669);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#04140c" title="Verkauft">'+(soldPctOfLifetime>12?F(sold,0):'')+'</div>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:5px">'+
+      '<span style="color:var(--cy)">▮ Gehalten '+heldPctOfLifetime.toFixed(0)+'%</span>'+
+      '<span style="color:var(--g)">Verkauft '+soldPctOfLifetime.toFixed(0)+'% ▮</span>'+
+    '</div>'+
+  '</div>';
+
+  // ─── SECTION 2: Ownership cards (both views) ───
+  html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📦 Was ich besitze</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+    card("BURN (Ledger)",F(burn,0),fmtUsd(burn*price),"#fb923c")+
+    card("stBURN",F(stburn,0),"≈ "+F(stburnEq,0)+" BURN","#a78bfa")+
+  '</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'+
+    card("In LPs (BURN übrig)",F(lpLeft,0),fmtUsd(lpLeft*price),"#60a5fa")+
+    card("BURN-Äquiv. gesamt",F(ownedEquiv,0),fmtUsd(ownedValue),"#22d3ee")+
+  '</div>';
+
+  // ─── SECTION 2b: LP detail block ───
+  var lpd=window._lpDetail||{left:lpLeft,deposited:0,sold:0,usdc:0,count:0};
+  if(lpd.deposited>0||lpd.left>0){
+    var lpFillPct=lpd.deposited>0?(lpd.sold/lpd.deposited*100):0;
+    html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💧 In Liquidity-Positionen ('+lpd.count+')</div>';
+    html+='<div style="background:rgba(8,12,22,.55);border:1px solid rgba(96,165,250,.25);border-radius:10px;padding:12px;margin-bottom:16px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:7px"><span style="color:var(--mt)">Eingezahlt: <b style="color:var(--o)">'+F(lpd.deposited,0)+'</b> BURN</span><span style="color:var(--mt)">'+lpFillPct.toFixed(0)+'% gefüllt</span></div>'+
+      '<div style="display:flex;height:20px;border-radius:6px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
+        '<div style="width:'+(100-lpFillPct).toFixed(1)+'%;background:linear-gradient(180deg,#60a5fa,#2563eb);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff" title="BURN übrig (verkaufbar)">'+((100-lpFillPct)>18?F(lpd.left,0)+' BURN':'')+'</div>'+
+        '<div style="width:'+lpFillPct.toFixed(1)+'%;background:linear-gradient(180deg,#34d399,#059669);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#04140c" title="schon zu USDC">'+(lpFillPct>18?fmtUsd(lpd.usdc):'')+'</div>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:9px;margin-top:6px">'+
+        '<span style="color:#60a5fa">▮ '+F(lpd.left,0)+' BURN übrig</span>'+
+        '<span style="color:var(--g)">verkauft → '+fmtUsd(lpd.usdc)+' ▮</span>'+
+      '</div>'+
+    '</div>';
+  }
+
+  // ─── SECTION 3: Hold plan ───
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'+
+    '<span style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">🎯 Mein Hold-Plan</span>'+
+    '<button onclick="setStratHoldTarget()" style="background:rgba(167,139,250,.15);border:1px solid rgba(167,139,250,.4);color:#a78bfa;font-size:9px;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:600">Ziel ändern</button>'+
+  '</div>';
+  // Hold target bar: how much of owned is "locked for hold" vs "surplus/free"
+  var holdFillPct=ownedEquiv>0?Math.min(100,holdTarget/ownedEquiv*100):0;
+  var surplusPct=100-holdFillPct;
+  html+='<div style="background:rgba(8,12,22,.55);border:1px solid rgba(167,139,250,.25);border-radius:10px;padding:12px;margin-bottom:8px">'+
+    '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:7px"><span style="color:var(--mt)">Halten-Ziel: <b style="color:#a78bfa">'+F(holdTarget,0)+'</b></span><span style="color:var(--mt)">Besitz: <b style="color:var(--cy)">'+F(ownedEquiv,0)+'</b></span></div>'+
+    '<div style="display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
+      '<div style="width:'+holdFillPct.toFixed(1)+'%;background:linear-gradient(180deg,#a78bfa,#7c3aed);display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;color:#fff" title="Halten">'+(holdFillPct>15?'HALTEN':'')+'</div>'+
+      '<div style="width:'+surplusPct.toFixed(1)+'%;background:linear-gradient(180deg,#34d399,#059669);display:flex;align-items:center;justify-content:center;font-size:8.5px;font-weight:700;color:#04140c" title="Frei">'+(surplusPct>15?'FREI':'')+'</div>'+
+    '</div>'+
+    (ownedEquiv>=holdTarget?
+      '<div style="font-size:10px;color:var(--g);margin-top:8px">✓ Ziel erreicht — <b>'+F(surplus,0)+' BURN frei</b> ('+fmtUsd(surplusValue)+') für LPs / Verkäufe</div>':
+      '<div style="font-size:10px;color:var(--o);margin-top:8px">⚠ Noch <b>'+F(holdTarget-ownedEquiv,0)+' BURN</b> unter Ziel — aktuell nichts frei zum Verkaufen</div>')+
+  '</div>';
+
+  // ─── SECTION 4: Free-to-deploy + sold/profit cards ───
+  html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">💰 Verkauft & Frei</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+    card("Frei verfügbar",F(surplus,0),fmtUsd(surplusValue)+" @ Spot","#34d399")+
+    card("Schon verkauft",F(sold,0),fmtUsd(soldUsdc)+" erhalten","#f59e0b")+
+  '</div>';
+  html+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+    card("Realisierter Gewinn",fmtUsd(realizedProfit),"Ø Verkauf $"+avgSell.toFixed(4),"#34d399")+
+    card("Unrealisiert (vs Entry)",fmtUsd(unrealizedVsEntry),"bei Spot $"+price.toFixed(4),price>avgEntry?"#22d3ee":"#f87171")+
+  '</div>';
+
+  // ─── SECTION 5: Price scenarios for held stack ───
+  html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">📈 Wert meines Hold-Stacks bei Preis X</div>';
+  html+='<div style="background:rgba(8,12,22,.55);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:10px">';
+  var scenarios=[0.50,1.00,2.00,5.00];
+  html+='<div style="display:flex;flex-direction:column;gap:6px">';
+  scenarios.forEach(function(sp){
+    var val=holdTarget*sp;
+    var mult=price>0?sp/price:0;
+    var barW=Math.min(100,sp/5.00*100);
+    html+='<div style="display:flex;align-items:center;gap:8px">'+
+      '<span style="font-size:10px;color:var(--tx);width:42px;font-family:Geist Mono,monospace">$'+sp.toFixed(2)+'</span>'+
+      '<div style="flex:1;height:16px;background:rgba(8,12,22,.6);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+barW.toFixed(0)+'%;background:linear-gradient(90deg,#a78bfa,#22d3ee);border-radius:4px"></div></div>'+
+      '<span style="font-size:10px;color:var(--g);width:78px;text-align:right;font-family:Geist Mono,monospace">'+fmtUsd(val)+'</span>'+
+      '<span style="font-size:9px;color:var(--mt);width:34px;text-align:right">'+(mult>0?mult.toFixed(1)+"x":"")+'</span>'+
+    '</div>';
+  });
+  html+='</div>';
+  html+='<div style="font-size:8.5px;color:var(--dm);margin-top:8px;text-align:center">Wert deines Halten-Ziels ('+F(holdTarget,0)+' BURN) bei verschiedenen Preisen</div>';
+  html+='</div>';
+
+  box.innerHTML=html;
+}
+
 
 function walConfirmChange(){
   var totalNow=MY_BURN+MY_STBURN;
@@ -485,6 +634,10 @@ function fetchServerWalletState(){
 // ═══ FETCH: Live LP Positions (DeFi wallet NFTs) ═══
 async function fetchLPs(){
   try{
+    // FALLBACK ONLY: scanLiqMap() is the primary source for LP[] (single source of truth).
+    // Runs only as bootstrap before the first full pool scan, so the "My Active LP" table
+    // shows something on cold start. Once scanLiqMap runs, it owns LP[] (avoids two-scan drift).
+    if(window._lmapRanges&&window._lmapRanges.length>0&&lpLive){return;}
     var nH=await rpc(WT_NFT,bof(W_DEFI));var nC=parseInt(nH,16);if(nC>50)nC=50;
     if(nC<=0)return;
     var newLP=[],bLow=BURN_TK.toLowerCase(),uLow=USDC_TK.toLowerCase();
@@ -726,13 +879,17 @@ function render(){
       if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
       else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:12px;color:var(--g)">✓</span>';}
       else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:11px;color:var(--mt)">↓'+dLo.toFixed(0)+'%</span><br><span style="font-size:11px;color:var(--tx)">↑'+dHi.toFixed(0)+'%</span>';}
-    // USDC to Fill — uses buyflowEstimate (same V3/V2 hierarchy as Next Fill + Market Analysis)
+    // USDC to Fill — THIS position's remaining USDC (100% value minus current USDC).
+    // Previously used buyflowEstimate(P,pos.hi) which returned the POOL-WIDE USDC needed to
+    // push price to pos.hi (incl. DAO + all other LPs) → wrong: showed $72k for a small LP.
+    // Correct: how much more USDC THIS position receives as its remaining BURN sells off.
     var fillH="";
+    var vMaxCalc=v3(pos.b,pos.lo,pos.hi,pos.hi); // position fully filled → all USDC
     if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
     else if(P<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
-    else{var bfFill=buyflowEstimate(P,pos.hi);var dU2=bfFill.usdc;fillH=dU2>0?'<span style="color:var(--cy)">$'+F(dU2,0)+'</span>':'—';}
+    else{var toFillU=Math.max(0,vMaxCalc.usdc-uE);fillH=toFillU>0?'<span style="color:var(--cy)">$'+F(toFillU,0)+'</span>':'—';}
     // 100% filled USDC
-    var vMax=v3(pos.b,pos.lo,pos.hi,pos.hi);var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
+    var vMax=vMaxCalc;var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
     var bSold=Math.max(0,bI-bL);
     tBI+=bI;tBL+=bL;tU2+=uE;
     lpR+='<tr><td class="bld">'+rng+'</td><td style="color:var(--o)">'+F(bI,0)+'</td><td style="color:var(--cy)">'+F(bSold,0)+'</td><td>'+F(bL,0)+'</td><td style="color:var(--g)">$'+F(uE,2)+'</td><td>'+maxH+'</td><td>'+fillH+'</td><td>'+distH+'</td><td style="text-align:center">'+ringH+'</td></tr>';}
@@ -1683,7 +1840,37 @@ async function scanLiqMap(){
       }
     }catch(e){}
     renderLmap(buckets);
-    // Show fresh scan indicator with timestamp
+    // ═══ SINGLE SOURCE OF TRUTH ═══
+    // Rebuild LP[] (the "My Active LP Positions" table) from THE SAME scan data (lpOwners),
+    // instead of a separate fetchLPs() scan. This guarantees both tables show identical
+    // numbers — they now share one scan, one price, one moment. Filters to MY wallets (isMe).
+    try{
+      var myLPs=[];
+      for(var ml=0;ml<lpOwners.length;ml++){
+        var lo3=lpOwners[ml];
+        if(!lo3.isMe||lo3.closed)continue;
+        if(lo3.hi>100000)continue; // skip full-range (DAO-style), shown separately
+        // Convert this position's on-chain liquidity to BURN deposited (burnIn)
+        var burnIn=0;
+        try{burnIn=wtLiqToBurn(lo3.liq,lo3.tL,lo3.tU);}catch(e){}
+        if(!(burnIn>0))continue;
+        myLPs.push({b:Math.round(burnIn),lo:Math.round(lo3.lo*10000)/10000,hi:Math.round(lo3.hi*10000)/10000,label:"Sell"});
+      }
+      if(myLPs.length>0){
+        myLPs.sort(function(a,b){return a.lo-b.lo;});
+        var daoKeep=null;for(var dk=0;dk<LP.length;dk++){if(LP[dk].fr)daoKeep=LP[dk];}
+        LP=myLPs;if(daoKeep)LP.push(daoKeep);
+        LP.sort(function(a,b){if(a.fr)return 1;if(b.fr)return-1;return a.lo-b.lo;});
+        ALP=0;for(var al=0;al<LP.length;al++)if(!LP[al].fr)ALP+=LP[al].b;
+        lpLive=true;
+        console.log("LP[] synced from scanLiqMap: "+myLPs.length+" of my positions (single source)");
+        try{
+          var slimMy=[];for(var sm=0;sm<myLPs.length;sm++)slimMy.push(myLPs[sm]);
+          localStorage.setItem("lp_cache",JSON.stringify({lps:slimMy,ts:Date.now()}));
+        }catch(e){}
+        try{render();}catch(e){}
+      }
+    }catch(e){console.log("LP sync err:",e.message);}
     if($("lmapStatus"))$("lmapStatus").innerHTML='<span style="color:var(--g)">✓ Live scan · '+new Date().toLocaleTimeString()+'</span>';
     // Re-render Market Analysis + Sell Impact with fresh V3 data
     console.log("LMAP DONE: cache="+(lmapCache?lmapCache.length:0)+" buckets, P="+P+", calling render()");
