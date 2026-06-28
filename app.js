@@ -1221,33 +1221,70 @@ function tradeRow(t){
   var bD=t.burn>=100000?F(t.burn,1):t.burn.toLocaleString("en",{maximumFractionDigits:2});
   var uD="$"+(t.usdc>=100000?F(t.usdc,1):t.usdc.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2}));
   var whaleTag=t.usdc>=WHALE_MIN?"🐋 ":"";
-  // Wallet column: show NAME if known, otherwise leave empty (no hex).
+  // Wallet column: NAME if known (clickable → filter trades), else short hex with Arbiscan link.
   var wLink;
   if(isKnown){
     var nm=addrName(t.wallet);
-    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--o);font-weight:600">'+nm+'</a>';
+    wLink='<span onclick="filterTradesByWallet(\''+t.wallet+'\')" style="font-size:9px;color:var(--o);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" title="Alle Trades von '+nm+' zeigen">'+nm+'</span>';
+  }else if(t.wallet){
+    var wS=t.wallet.slice(0,6)+"…"+t.wallet.slice(-4);
+    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)" onclick="event.stopPropagation()">'+wS+'</a>';
   }else{
     wLink='<span style="font-size:9px;color:var(--dm)">—</span>';
   }
   var whaleBg=t.usdc>=1000?"background:rgba(251,191,36,.04);":t.usdc>=500?"background:rgba(251,191,36,.02);":"";
   return'<tr style="'+whaleBg+'"><td style="color:var(--mt)">'+agoT+'</td><td style="color:'+clr+';font-weight:600">'+(t.isBuy?"BUY":"SELL")+'</td><td style="color:var(--o)">'+bD+'</td><td style="color:var(--g)">'+whaleTag+uD+'</td><td>'+FP(t.price)+'</td><td>'+wLink+'</td></tr>';}
 
+var tradeWalletFilter=null; // null = alle, sonst lowercase Adresse
+function filterTradesByWallet(addr){
+  if(!addr)return;
+  tradeWalletFilter=(addr+"").toLowerCase();
+  tradePg_=0;
+  try{renderTrades();}catch(e){}
+  // Zur Trade-Sektion scrollen
+  try{var el=$("tradeAll");if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}
+}
+function clearTradeFilter(){
+  tradeWalletFilter=null;
+  tradePg_=0;
+  try{renderTrades();}catch(e){}
+}
 function renderTrades(){
-  // Top 5 always visible
+  // Filter anwenden falls gesetzt
+  var list=allTrades;
+  if(tradeWalletFilter){
+    list=allTrades.filter(function(t){return t.wallet&&(t.wallet+"").toLowerCase()===tradeWalletFilter;});
+  }
+  // Filter-Banner anzeigen/verstecken
+  var fb=$("tradeFilterBanner");
+  if(fb){
+    if(tradeWalletFilter){
+      var fname=addrName(tradeWalletFilter);
+      var buys=0,sells=0,buyU=0,sellU=0;
+      for(var fi=0;fi<list.length;fi++){if(list[fi].isBuy){buys++;buyU+=list[fi].usdc;}else{sells++;sellU+=list[fi].usdc;}}
+      fb.style.display="block";
+      fb.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.4);border-radius:8px;padding:8px 12px;margin-bottom:8px">'+
+        '<div style="font-size:11px"><span style="color:var(--o);font-weight:700">'+fname+'</span> <span style="color:var(--mt)">· '+list.length+' Trades ('+buys+' Buy / '+sells+' Sell)</span><br><span style="font-size:9px;color:var(--g)">Buy $'+F(buyU,0)+'</span> <span style="font-size:9px;color:var(--r)">Sell $'+F(sellU,0)+'</span></div>'+
+        '<button onclick="clearTradeFilter()" style="background:rgba(48,54,68,.4);border:1px solid rgba(48,54,68,.6);color:var(--mt);font-size:10px;padding:5px 10px;border-radius:6px;cursor:pointer;white-space:nowrap">✕ Filter</button>'+
+      '</div>';
+    }else{
+      fb.style.display="none";fb.innerHTML="";
+    }
+  }
+  // Top 1 always visible (immer aus voller Liste)
   var top1="";if(allTrades.length>0)top1=tradeRow(allTrades[0]);
   $("tradeTop").innerHTML=top1||'<tr><td colspan="6"><span class="skel" style="width:100%;height:12px"></span></td></tr>';
-  $("tradeCnt").textContent=allTrades.length;
-  // Paginated all
-  var pages=Math.max(1,Math.ceil(allTrades.length/TRADES_PP));
+  $("tradeCnt").textContent=tradeWalletFilter?list.length:allTrades.length;
+  // Paginated
+  var pages=Math.max(1,Math.ceil(list.length/TRADES_PP));
   if(tradePg_>=pages)tradePg_=pages-1;
   var start=tradePg_*TRADES_PP,rows="";
-  for(var j=start;j<Math.min(start+TRADES_PP,allTrades.length);j++)rows+=tradeRow(allTrades[j]);
+  for(var j=start;j<Math.min(start+TRADES_PP,list.length);j++)rows+=tradeRow(list[j]);
   $("tradeAll").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No trades</td></tr>';
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
   try{renderCapitalFlow();}catch(e){}
 }
-
 function tradePg(d){tradePg_+=d;renderTrades();}
 
 async function fetchTradesChunk(fromBlock,toBlock){
@@ -3768,6 +3805,116 @@ function renderCflowFullscreen(){
       '<div style="flex:1;min-width:120px;background:rgba(8,12,22,.6);border:1px solid rgba(248,113,113,.25);border-radius:10px;padding:12px"><div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Sell Volume</div><div style="font-size:20px;font-weight:700;color:var(--r)">$'+F(totalSell,0)+'</div></div>'+
       '<div style="flex:1;min-width:120px;background:rgba(8,12,22,.6);border:1px solid '+(net>=0?"rgba(52,211,153,.25)":"rgba(248,113,113,.25)")+';border-radius:10px;padding:12px"><div style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Net Flow</div><div style="font-size:20px;font-weight:700;color:'+(net>=0?"var(--g)":"var(--r)")+'">'+(net>=0?"+":"-")+"$"+F(Math.abs(net),0)+'</div></div>'+
     '</div>';
+    // ─── KUMULATIVER NET-FLOW (Pool-Tiefe-Verlauf) ───
+    // Summiert den monatlichen Net-Flow auf → zeigt ob Kapital netto rein- oder rausfließt über Zeit.
+    // Das ist das Frühwarnsystem: steigende Linie = These intakt, fallende = Zuflüsse versiegen.
+    if(isMonth&&shown.length>=2){
+      var cum=0,cumPts=[],cumLabels=[];
+      for(var cf=0;cf<shown.length;cf++){
+        cum+=buckets[shown[cf]].net;
+        cumPts.push(cum);
+        var cmp=shown[cf].split("-");cumLabels.push(monthNames[parseInt(cmp[1])-1]);
+      }
+      var cMin=Math.min.apply(null,cumPts),cMax=Math.max.apply(null,cumPts);
+      var cRange=Math.max(1,cMax-cMin);
+      var W=320,H=90,pad=4;
+      var stepX=cumPts.length>1?(W-pad*2)/(cumPts.length-1):0;
+      var pts="",areaPts="";
+      for(var cp=0;cp<cumPts.length;cp++){
+        var px=pad+cp*stepX;
+        var py=H-pad-((cumPts[cp]-cMin)/cRange)*(H-pad*2);
+        pts+=(cp===0?"":" ")+px.toFixed(1)+","+py.toFixed(1);
+      }
+      var lastCum=cumPts[cumPts.length-1];
+      var firstCum=cumPts[0];
+      var cumTrend=lastCum>=firstCum;
+      var lineColor=cumTrend?"#34d399":"#f87171";
+      // Zero-Linie Position (falls im Bereich)
+      var zeroY=null;
+      if(cMin<0&&cMax>0){zeroY=(H-pad-((0-cMin)/cRange)*(H-pad*2));}
+      var areaPath="M "+pad+","+(H-pad)+" L "+pts.replace(/ /g," L ")+" L "+(pad+(cumPts.length-1)*stepX).toFixed(1)+","+(H-pad);
+      html+='<div style="background:rgba(8,12,22,.6);border:1px solid '+(cumTrend?"rgba(52,211,153,.3)":"rgba(248,113,113,.3)")+';border-radius:10px;padding:14px;margin-bottom:20px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+          '<span style="font-size:10px;color:var(--mt);text-transform:uppercase;letter-spacing:1px">📈 Kumulativer Kapitalzufluss</span>'+
+          '<span style="font-size:14px;font-weight:700;color:'+lineColor+';font-family:Geist Mono,monospace">'+(lastCum>=0?"+":"-")+"$"+F(Math.abs(lastCum),0)+'</span>'+
+        '</div>'+
+        '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block">'+
+          '<defs><linearGradient id="cumGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="'+lineColor+'" stop-opacity="0.25"/><stop offset="100%" stop-color="'+lineColor+'" stop-opacity="0"/></linearGradient></defs>'+
+          (zeroY!==null?'<line x1="'+pad+'" y1="'+zeroY.toFixed(1)+'" x2="'+(W-pad)+'" y2="'+zeroY.toFixed(1)+'" stroke="rgba(148,163,184,.3)" stroke-width="1" stroke-dasharray="3,3"/>':'')+
+          '<path d="'+areaPath+' Z" fill="url(#cumGrad)"/>'+
+          '<polyline points="'+pts+'" fill="none" stroke="'+lineColor+'" stroke-width="2" stroke-linejoin="round"/>'+
+          '<circle cx="'+(pad+(cumPts.length-1)*stepX).toFixed(1)+'" cy="'+(H-pad-((lastCum-cMin)/cRange)*(H-pad*2)).toFixed(1)+'" r="3.5" fill="'+lineColor+'"/>'+
+        '</svg>'+
+        '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dm);margin-top:4px"><span>'+cumLabels[0]+'</span><span>'+cumLabels[cumLabels.length-1]+'</span></div>'+
+        '<div style="font-size:9px;color:var(--mt);text-align:center;margin-top:8px;line-height:1.5">'+
+          (cumTrend?'✅ Netto fließt Kapital in den Pool — Liquidität wächst':'⚠️ Netto fließt Kapital ab — Zuflüsse beobachten')+
+        '</div>'+
+      '</div>';
+
+      // ─── TRADE-AKTIVITÄT: Anzahl + Ø-Größe ───
+      // Steigende Trade-Zahl = mehr Teilnehmer (Adoption). Steigende Ø-Größe = größere Tickets.
+      // Beides zusammen = gesundes organisches Wachstum (nicht nur ein paar Wale).
+      var counts=[],avgSizes=[],actLabels=[];
+      for(var ac=0;ac<shown.length;ac++){
+        var b=buckets[shown[ac]];
+        counts.push(b.count);
+        avgSizes.push(b.count>0?(b.buy+b.sell)/b.count:0);
+        var amp=shown[ac].split("-");actLabels.push(monthNames[parseInt(amp[1])-1]);
+      }
+      var maxCount=Math.max.apply(null,counts)||1;
+      var maxAvg=Math.max.apply(null,avgSizes)||1;
+      // Trend: vergleiche letzte 3 vs erste 3 (oder weniger)
+      function trendOf(arr){
+        if(arr.length<2)return 0;
+        var h=Math.ceil(arr.length/2);
+        var early=arr.slice(0,h).reduce(function(a,b){return a+b;},0)/h;
+        var late=arr.slice(-h).reduce(function(a,b){return a+b;},0)/h;
+        return late-early;
+      }
+      var countTrend=trendOf(counts)>=0;
+      var avgTrend=trendOf(avgSizes)>=0;
+      var lastCount=counts[counts.length-1];
+      var lastAvg=avgSizes[avgSizes.length-1];
+
+      // Mini-Balken-Builder
+      function miniBars(vals,labels,maxV,color){
+        var bars='<div style="display:flex;align-items:flex-end;gap:3px;height:48px;margin:6px 0">';
+        for(var mb=0;mb<vals.length;mb++){
+          var h=maxV>0?(vals[mb]/maxV*100):0;
+          var isLast=(mb===vals.length-1);
+          bars+='<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">'+
+            '<div style="width:100%;height:'+Math.max(3,h).toFixed(0)+'%;background:'+(isLast?color:color+"88")+';border-radius:2px 2px 0 0"></div>'+
+          '</div>';
+        }
+        bars+='</div>';
+        return bars;
+      }
+
+      html+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">'+
+        // Trade-Anzahl
+        '<div style="flex:1;min-width:150px;background:rgba(8,12,22,.6);border:1px solid '+(countTrend?"rgba(96,165,250,.3)":"rgba(148,163,184,.2)")+';border-radius:10px;padding:12px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Trades / Monat</span><span style="font-size:16px;font-weight:700;color:#60a5fa;font-family:Geist Mono,monospace">'+lastCount+'</span></div>'+
+          miniBars(counts,actLabels,maxCount,"#60a5fa")+
+          '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dm)"><span>'+actLabels[0]+'</span><span>'+actLabels[actLabels.length-1]+'</span></div>'+
+          '<div style="font-size:8.5px;color:'+(countTrend?"var(--g)":"var(--mt)")+';margin-top:6px">'+(countTrend?"↗ mehr Teilnehmer":"↘ flach/rückläufig")+'</div>'+
+        '</div>'+
+        // Ø Trade-Größe
+        '<div style="flex:1;min-width:150px;background:rgba(8,12,22,.6);border:1px solid '+(avgTrend?"rgba(167,139,250,.3)":"rgba(148,163,184,.2)")+';border-radius:10px;padding:12px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px"><span style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Ø Trade-Größe</span><span style="font-size:16px;font-weight:700;color:#a78bfa;font-family:Geist Mono,monospace">$'+F(lastAvg,0)+'</span></div>'+
+          miniBars(avgSizes,actLabels,maxAvg,"#a78bfa")+
+          '<div style="display:flex;justify-content:space-between;font-size:8px;color:var(--dm)"><span>'+actLabels[0]+'</span><span>'+actLabels[actLabels.length-1]+'</span></div>'+
+          '<div style="font-size:8.5px;color:'+(avgTrend?"var(--g)":"var(--mt)")+';margin-top:6px">'+(avgTrend?"↗ größere Tickets":"↘ kleinere Tickets")+'</div>'+
+        '</div>'+
+      '</div>';
+      // Gesamt-Bewertung
+      var bothUp=countTrend&&avgTrend;
+      html+='<div style="background:rgba(8,12,22,.4);border:1px solid rgba(48,54,68,.4);border-radius:8px;padding:10px 12px;margin-bottom:20px;font-size:9.5px;color:var(--mt);line-height:1.5;text-align:center">'+
+        (bothUp?'🟢 <b style="color:var(--g)">Gesundes Wachstum:</b> mehr Trades UND größere Tickets — breite Adoption, nicht Wal-getrieben':
+         countTrend&&!avgTrend?'🟡 Mehr Teilnehmer, aber kleinere Tickets — Retail wächst, Volumen pro Trade sinkt':
+         !countTrend&&avgTrend?'🟡 Weniger, aber größere Trades — eher Wal-getrieben, weniger Breite':
+         '🟠 Aktivität flacht ab — Trade-Zahl und -Größe beobachten')+
+      '</div>';
+    }
     // Horizontal bar list — each row shows period + buy/sell/net explicitly
     html+='<div style="display:flex;flex-direction:column;gap:8px">';
     var maxAbs=1;

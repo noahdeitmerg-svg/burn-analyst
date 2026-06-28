@@ -421,6 +421,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeTop"></tbody></table></div>
   <div class="col" onclick="tog(this,'sec-trades')" style="margin-top:10px">📋 All Trades (<span id="tradeCnt">0</span>)</div>
   <div id="sec-trades" class="col-b">
+    <div id="tradeFilterBanner" style="display:none"></div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Time</th><th>Type</th><th>BURN</th><th>USDC</th><th>Price</th><th>Wallet</th></tr></thead><tbody id="tradeAll"></tbody></table></div>
     <div style="display:flex;justify-content:center;gap:12px;margin-top:10px;align-items:center">
       <button class="btn" id="tPrev" onclick="tradePg(-1)">← Prev</button>
