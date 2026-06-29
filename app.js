@@ -759,9 +759,12 @@ async function fetchLPs(){
         });
         localStorage.setItem("lp_cache",JSON.stringify({lps:lpCache,ts:Date.now()}));
       }catch(e){}
-      // Save state for next close detection
+      // Save state for next close detection — use EXACT pool price (not DexScreener spot)
+      // so the captured left/usdc match Uniswap. This is what a partial close books as
+      // returned BURN + received USDC, so it must be the on-chain-accurate value.
+      var _ppPrev=poolPriceExact();
       lpPrevious=LP.filter(function(lp){return!lp.fr;}).map(function(lp){
-        var cv2=v3(lp.b,lp.lo,lp.hi,P);
+        var cv2=v3(lp.b,lp.lo,lp.hi,_ppPrev);
         return{b:lp.b,lo:lp.lo,hi:lp.hi,left:cv2.left,usdc:cv2.usdc,pct:cv2.pct,ts:Date.now()};
       });
       try{localStorage.setItem("lp_previous",JSON.stringify(lpPrevious));}catch(e){}
@@ -3572,6 +3575,88 @@ try{
   }
 }catch(e){}
 
+// ═══ EXACT CLOSE AMOUNTS from on-chain Burn event ═══
+// When an LP is closed, Uniswap emits a Burn(owner,tickLower,tickUpper,amount,amount0,amount1)
+// event on the POOL with the EXACT token amounts removed — real numbers, not a calculation.
+// We match by the position's tick range and read amount0 (USDC) + amount1 (BURN) directly.
+// This runs AFTER detectClosedLPs flags a close, then patches the entry with exact values.
+var BURN_EVT_SIG="0x0c396cd989a39f4459b5fa1aed6a9a8dcdbc45908acfd67e028cd568da98982c";
+function _tickFromPrice(p){ // inverse of wtTickToPrice: tick = log(1e12/p)/log(1.0001)
+  return Math.round(Math.log(1e12/p)/Math.log(1.0001));
+}
+async function fetchExactCloseAmounts(entry){
+  try{
+    // The pool stores ticks as token0/token1 ordering. Our lo/hi are human BURN prices.
+    // wtTickToPrice(tick)=1e12/1.0001^tick, so price=hi → lower tick, price=lo → higher tick.
+    var tickAtHi=_tickFromPrice(entry.hi), tickAtLo=_tickFromPrice(entry.lo);
+    var tLower=Math.min(tickAtHi,tickAtLo), tUpper=Math.max(tickAtHi,tickAtLo);
+    var bnRes=await batchRpc([{jsonrpc:"2.0",method:"eth_blockNumber",params:[],id:0}]);
+    var head=0;if(bnRes&&bnRes[0]&&bnRes[0].result)head=parseInt(bnRes[0].result,16);
+    if(!head)return null;
+    // Scan recent blocks for Burn events (Arbitrum ~4 blk/s → ~1 day = 350k blocks).
+    var from=head-400000;
+    var logs=null;
+    for(var ri=0;ri<RPC_LIST.length&&!logs;ri++){
+      try{
+        var idx=(rpcIdx+ri)%RPC_LIST.length;
+        var r=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{
+            address:POOL,topics:[BURN_EVT_SIG],
+            fromBlock:"0x"+from.toString(16),toBlock:"latest"}],id:0})});
+        var j=await r.json();
+        if(j&&Array.isArray(j.result))logs=j.result;
+      }catch(e){}
+    }
+    if(!logs||!logs.length)return null;
+    // Match by tick range (topics[2]=tickLower, topics[3]=tickUpper as int24, padded).
+    function parseTick(hex){var v=parseInt(hex.slice(-6),16);if(v>=0x800000)v-=0x1000000;return v;}
+    var best=null;
+    for(var i=logs.length-1;i>=0;i--){ // newest first
+      var lg=logs[i];
+      if(!lg.topics||lg.topics.length<4)continue;
+      var tL=parseTick(lg.topics[2]), tU=parseTick(lg.topics[3]);
+      if(Math.abs(tL-tLower)<=2&&Math.abs(tU-tUpper)<=2){ // tick spacing tolerance
+        best=lg;break;
+      }
+    }
+    if(!best)return null;
+    // data = amount(liq, uint128) | amount0 (uint256) | amount1 (uint256)
+    var d=best.data.slice(2);
+    var amount0=parseInt(d.slice(64,128),16)/1e6;   // USDC (6 decimals)
+    var amount1=parseInt(d.slice(128,192),16)/1e18;  // BURN (18 decimals)
+    // Sanity: amounts must be finite & non-negative
+    if(!isFinite(amount0)||!isFinite(amount1)||amount0<0||amount1<0)return null;
+    return{usdc:amount0,burnReturned:amount1,txHash:best.transactionHash};
+  }catch(e){console.log("fetchExactCloseAmounts err:",e.message);return null;}
+}
+// After a close is detected, refine the entry with exact on-chain amounts (async, non-blocking).
+async function refineClosedWithExact(entry){
+  var exact=await fetchExactCloseAmounts(entry);
+  if(!exact)return false; // keep calculated values (fallback)
+  // exact.burnReturned = BURN that came back to wallet; exact.usdc = USDC received.
+  // Sold BURN = deposited − returned.
+  var soldBurn=Math.max(0,(entry.bDeposited||entry.b)-Math.round(exact.burnReturned));
+  // Adjust the running totals: remove old (calculated), add exact.
+  TS+=(soldBurn-entry.b);
+  TR+=(exact.usdc-entry.u);
+  entry.b=soldBurn;
+  entry.u=Math.round(exact.usdc*100)/100;
+  entry.left=Math.round(exact.burnReturned);
+  entry.exact=true;
+  entry.n="🔄 $"+entry.lo.toFixed(3)+"→$"+entry.hi.toFixed(2)+" (exakt"+(entry.left>0?", "+F(entry.left,0)+" BURN zurück":"")+")";
+  console.log("LP CLOSE refined with EXACT on-chain: sold "+soldBurn+" BURN → $"+entry.u+(entry.left>0?", "+entry.left+" BURN returned":""));
+  // Re-record BR event with exact values (replace the estimated one).
+  try{
+    if(typeof brAddPermuta==="function"&&soldBurn>0){
+      var dDate=new Date().toISOString().split("T")[0];
+      brAddPermuta("lp_fill","BURN",soldBurn,entry.u,
+        "Auto-exakt: LP "+entry.lo.toFixed(3)+"-"+entry.hi.toFixed(2)+" closed (on-chain)",dDate);
+    }
+  }catch(e){}
+  try{localStorage.setItem("closed_lps",JSON.stringify(CL));}catch(e){}
+  if(typeof render==="function")render();
+  return true;
+}
 function detectClosedLPs(newLPs){
   if(!lpPrevious||lpPrevious.length===0)return;
   var detected=[];
@@ -3584,26 +3669,35 @@ function detectClosedLPs(newLPs){
     if(!found){
       var key=prev.b.toFixed(0)+"_"+prev.lo.toFixed(4)+"_"+prev.hi.toFixed(4);
       if(clSeen[key])continue;
+      // Partial-close correctness: only the BURN that actually SOLD counts as realized.
+      // A 95%-filled position returns (prev.left) BURN + (prev.usdc) USDC when closed.
+      // The returned BURN flows back into the wallet/ledger on the next scan, so we must
+      // NOT book the full deposited amount as sold — only (prev.b − prev.left).
+      var soldBurn=Math.max(0,prev.b-Math.round(prev.left||0));
+      var leftBurn=Math.round(prev.left||0);
       var entry={
         d:new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}),
-        b:prev.b, lo:prev.lo, hi:prev.hi,
+        b:soldBurn, lo:prev.lo, hi:prev.hi,
         u:Math.round(prev.usdc*100)/100,
-        n:"🔄 $"+prev.lo.toFixed(3)+"→$"+prev.hi.toFixed(2)+" ("+prev.pct.toFixed(0)+"% filled)",
-        left:Math.round(prev.left), pct:prev.pct
+        n:"🔄 $"+prev.lo.toFixed(3)+"→$"+prev.hi.toFixed(2)+" ("+prev.pct.toFixed(0)+"% filled"+(leftBurn>0?", "+F(leftBurn,0)+" BURN zurück":"")+")",
+        left:leftBurn, pct:prev.pct, bDeposited:prev.b
       };
       CL.push(entry);TS+=entry.b;TR+=entry.u;
       detected.push(entry);
       clSeen[key]=Date.now();
-      console.log("LP CLOSED detected: "+entry.n+" USDC earned: $"+entry.u);
-      // Auto-add as BR Permuta Event (lp_fill = BURN→USDC)
+      console.log("LP CLOSED detected: "+entry.n+" sold "+soldBurn+" BURN → $"+entry.u+(leftBurn>0?" ("+leftBurn+" BURN returned to wallet)":""));
+      // Auto-add as BR Permuta Event (lp_fill = BURN→USDC) — only the SOLD burn.
       try{
-        if(typeof brAddPermuta==="function"&&entry.b>0){
+        if(typeof brAddPermuta==="function"&&soldBurn>0){
           var dDate=new Date().toISOString().split("T")[0];
-          brAddPermuta("lp_fill","BURN",entry.b,entry.u,
-            "Auto: LP "+entry.lo.toFixed(3)+"-"+entry.hi.toFixed(2)+" closed",dDate);
-          console.log("BR Permuta auto-recorded: lp_fill BURN "+entry.b);
+          brAddPermuta("lp_fill","BURN",soldBurn,entry.u,
+            "Auto: LP "+entry.lo.toFixed(3)+"-"+entry.hi.toFixed(2)+" closed"+(leftBurn>0?" ("+F(leftBurn,0)+" BURN zurück)":""),dDate);
+          console.log("BR Permuta auto-recorded: lp_fill BURN "+soldBurn);
         }
       }catch(e){console.log("BR auto-permuta err:",e.message);}
+      // Refine with EXACT on-chain Burn-event amounts (async, non-blocking).
+      // Calculated values show immediately; exact values patch in a few seconds later.
+      try{refineClosedWithExact(entry);}catch(e){console.log("refine err:",e.message);}
     }
   }
   if(detected.length>0){
