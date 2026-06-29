@@ -3707,6 +3707,17 @@ try{
   var clStored=localStorage.getItem("cl_history");
   if(clStored){
     var clExtra=JSON.parse(clStored);
+    // ONE-TIME CLEANUP: older builds booked dry-pull closes (closed with $0 USDC, BURN returned
+    // to wallet) with b = full deposit, inflating "sold" tokens and tanking the avg sell price.
+    // Correct any stored $0-close so its sold-token count is 0 (nothing was actually sold).
+    for(var cz=0;cz<clExtra.length;cz++){
+      if(clExtra[cz]&&(clExtra[cz].u||0)<1&&(clExtra[cz].b||0)>0){
+        clExtra[cz].left=Math.round(clExtra[cz].b);
+        clExtra[cz].b=0;
+        if(clExtra[cz].n&&clExtra[cz].n.indexOf("nur Token")<0)clExtra[cz].n=clExtra[cz].n.replace(/\(.*\)/,"(nur Token zurück)");
+      }
+    }
+    try{localStorage.setItem("cl_history",JSON.stringify(clExtra));}catch(e){}
     for(var ci2=0;ci2<clExtra.length;ci2++){
       var isDupe=false;
       for(var cj=0;cj<CL.length;cj++){if(clExtra[ci2].d===CL[cj].d&&clExtra[ci2].b===CL[cj].b&&clExtra[ci2].n===CL[cj].n){isDupe=true;break;}}
@@ -3815,11 +3826,19 @@ function detectClosedLPs(newLPs){
       // NOT book the full deposited amount as sold — only (prev.b − prev.left).
       var soldBurn=Math.max(0,prev.b-Math.round(prev.left||0));
       var leftBurn=Math.round(prev.left||0);
+      // DRY-PULL GUARD: if the position closed with ~$0 USDC, NOTHING was sold — the BURN
+      // came back to the wallet. Without this, a position the app thought was "full" (left=0)
+      // would book the whole deposit as sold for $0, inflating "sold" and tanking the avg price.
+      // When usdc≈0, force soldBurn=0 and treat the full deposit as returned BURN.
+      if((prev.usdc||0)<1){
+        soldBurn=0;
+        leftBurn=Math.round(prev.b);
+      }
       var entry={
         d:new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}),
         b:soldBurn, lo:prev.lo, hi:prev.hi,
         u:Math.round(prev.usdc*100)/100,
-        n:"🔄 $"+prev.lo.toFixed(3)+"→$"+prev.hi.toFixed(2)+" ("+prev.pct.toFixed(0)+"% filled"+(leftBurn>0?", "+F(leftBurn,0)+" BURN zurück":"")+")",
+        n:"🔄 $"+prev.lo.toFixed(3)+"→$"+prev.hi.toFixed(2)+" ("+(soldBurn>0?prev.pct.toFixed(0)+"% filled":"nur Token zurück")+(leftBurn>0&&soldBurn>0?", "+F(leftBurn,0)+" BURN zurück":"")+")",
         left:leftBurn, pct:prev.pct, bDeposited:prev.b
       };
       CL.push(entry);TS+=entry.b;TR+=entry.u;
