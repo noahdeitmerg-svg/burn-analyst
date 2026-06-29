@@ -836,11 +836,12 @@ function render(){
   // NEXT FILL — show LP with lowest hi above current price (next to be fully filled)
   var nxtFill="";
   if(P>0){
+    var Pnf=poolPriceExact(); // exact pool price for position fill; spot (P) still drives pool buyflow
     var bestNf=null,bestHi=Infinity;
     for(var nf=0;nf<LP.length;nf++){if(LP[nf].fr)continue;
-      // LP's hi must be above current P (not yet filled). Pick lowest hi.
-      if(LP[nf].hi>P&&LP[nf].hi<bestHi){bestHi=LP[nf].hi;bestNf=nf;}}
-    if(bestNf!==null){var nfDist=((LP[bestNf].hi-P)/P*100);
+      // LP's hi must be above current pool price (not yet filled). Pick lowest hi.
+      if(LP[nf].hi>Pnf&&LP[nf].hi<bestHi){bestHi=LP[nf].hi;bestNf=nf;}}
+    if(bestNf!==null){var nfDist=((LP[bestNf].hi-Pnf)/Pnf*100);
       var nfBuy=0,nfSrc="";
       var nfEst=buyflowEstimate(P,LP[bestNf].hi);
       nfBuy=nfEst.usdc;nfSrc=nfEst.src;
@@ -849,10 +850,39 @@ function render(){
       if(!isFinite(nfBuy)||nfBuy<0)nfBuy=0;
       if(nfBuy>10000000){console.log("NEXTFILL: capped from $"+nfBuy.toFixed(0)+" — likely DAO full-range pollution");nfBuy=0;}
       var nfV=v3(LP[bestNf].b,LP[bestNf].lo,LP[bestNf].hi,LP[bestNf].hi);
-      nxtFill='<div style="line-height:1.8">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(3)+'</b> <span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span><br>'+
-        '<span style="color:var(--cy)">$'+F(nfBuy,0)+'</span> <span style="color:var(--tx)">buying power needed</span> · '+
-        '<b style="color:var(--g)">$'+nfV.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</b> <span style="color:var(--tx)">earnings when filled</span> · '+
-        '<span style="color:var(--o)">'+F(LP[bestNf].b,0)+'</span> <span style="color:var(--tx)">BURN position</span></div>';}}
+      // ── ZWEI GETRENNTE METRIKEN (vorher vermischt → Zahlen gingen nicht auf) ──
+      // METRIK 1 (position-spezifisch): wie viel USDC noch in MEINE Position fließt bis 100%.
+      //   = IF_FILLED.usdc − NOW.usdc. Konsistent mit der LP-Tabelle.
+      var nfNow=v3(LP[bestNf].b,LP[bestNf].lo,LP[bestNf].hi,Pnf);
+      var nfPosRemaining=Math.max(0,nfV.usdc-nfNow.usdc);
+      var nfBurnLeft=Math.max(0,nfNow.left);
+      var nfFillPct=nfV.usdc>0?(nfNow.usdc/nfV.usdc*100):0;
+      // METRIK 2 (pool-weit): wie viel USDC ein Käufer TOTAL reinpumpen muss um Spot→hi zu treiben.
+      //   Verteilt sich auf ALLE LPs (deine + DAO Full-Range + andere) → immer ≥ Metrik 1.
+      //   Das ist nfBuy (buyflowEstimate), oben bereits berechnet + gegen DAO-Pollution gecappt.
+      var nfPoolValid=(nfBuy>0&&isFinite(nfBuy));
+      nxtFill='<div style="line-height:1.7">'+
+        '<div style="margin-bottom:6px">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(3)+'</b> '+
+          '<span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span> · '+
+          '<span style="color:'+(nfFillPct>=90?"var(--g)":"var(--cy)")+'">'+nfFillPct.toFixed(0)+'% gefüllt</span></div>'+
+        // Metrik 1 — meine Position
+        '<div style="font-size:11px;margin-bottom:3px">'+
+          '<span style="color:var(--tx)">➜ In meine Position:</span> '+
+          '<b style="color:var(--cy)">$'+F(nfPosRemaining,0)+'</b> '+
+          '<span style="color:var(--dm)">('+F(nfBurnLeft,0)+' BURN bis voll)</span></div>'+
+        // Metrik 2 — pool-weiter Kaufdruck
+        (nfPoolValid?
+          '<div style="font-size:11px;margin-bottom:3px">'+
+            '<span style="color:var(--tx)">➜ Pool-Kaufdruck bis $'+LP[bestNf].hi.toFixed(3)+':</span> '+
+            '<b style="color:#a78bfa">$'+F(nfBuy,0)+'</b> '+
+            '<span style="color:var(--dm)">(alle LPs inkl. DAO)</span></div>'
+          :'')+
+        // Ertrag bei Fill
+        '<div style="font-size:11px">'+
+          '<span style="color:var(--tx)">➜ Ertrag bei voll:</span> '+
+          '<b style="color:var(--g)">$'+nfV.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</b> '+
+          '<span style="color:var(--dm)">('+F(LP[bestNf].b,0)+' BURN Position)</span></div>'+
+      '</div>';}}
   $("nextFill").innerHTML=nxtFill||'<span style="color:var(--g)">All active positions filled ✓</span>';
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
@@ -946,16 +976,18 @@ function render(){
     MB("vs Entry",realMult>0?realMult.toFixed(1)+"x":"…",realMult>=10?"var(--g)":"var(--o)")].join("");
   try{renderTaxReport();}catch(e){}
 
-  // LP TABLE
-  var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,P);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
+  // LP TABLE — use EXACT pool price (from on-chain tick) for fill math, not DexScreener spot.
+  // For positions near a range edge, the rounded/laggy spot distorts "BURN left" (277 vs 540).
+  var Pp=poolPriceExact();
+  var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,Pp);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
   function ring(p,cl,tx){p=Math.max(0,Math.min(100,p||0));return'<div style="width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:conic-gradient('+cl+' '+p+'%,#1a2235 '+p+'% 100%)"><div style="width:34px;height:34px;border-radius:50%;background:#0c1220;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+cl+'">'+tx+'</div></div>';}
   var lpR="",tBI=0,tBL=0,tU2=0;
   for(var lp=0;lp<LP.length;lp++){var pos=LP[lp],st,cl,bI,bL,uE,rng,pTxt,ringH,distH="";
     if(pos.fr)continue; // DAO shown in Pool Liquidity Map, not here
-    rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,P);bL=v.left;uE=v.usdc;
-      var dLo=pos.lo>0?((P-pos.lo)/pos.lo*100):0,dHi=P>0?((pos.hi-P)/P*100):0;
-      if(P<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-P)/P)*100).toFixed(0)+'%</span>';}
-      else if(P>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:12px;color:var(--g)">✓</span>';}
+    rng="$"+pos.lo.toFixed(pos.lo<1?3:2)+" → $"+pos.hi.toFixed(2);bI=pos.b;var v=v3(pos.b,pos.lo,pos.hi,Pp);bL=v.left;uE=v.usdc;
+      var dLo=pos.lo>0?((Pp-pos.lo)/pos.lo*100):0,dHi=Pp>0?((pos.hi-Pp)/Pp*100):0;
+      if(Pp<pos.lo){ringH=ring(0,"#334155","—");distH='<span style="font-size:12px;color:var(--dm)">↑'+Math.abs(((pos.lo-Pp)/Pp)*100).toFixed(0)+'%</span>';}
+      else if(Pp>=pos.hi){ringH=ring(100,"#34d399","✓");distH='<span style="font-size:12px;color:var(--g)">✓</span>';}
       else{var fp=v.pct;ringH=ring(fp,"#34d399",fp.toFixed(0)+"%");distH='<span style="font-size:11px;color:var(--mt)">↓'+dLo.toFixed(0)+'%</span><br><span style="font-size:11px;color:var(--tx)">↑'+dHi.toFixed(0)+'%</span>';}
     // USDC to Fill — THIS position's remaining USDC (100% value minus current USDC).
     // Previously used buyflowEstimate(P,pos.hi) which returned the POOL-WIDE USDC needed to
@@ -963,8 +995,8 @@ function render(){
     // Correct: how much more USDC THIS position receives as its remaining BURN sells off.
     var fillH="";
     var vMaxCalc=v3(pos.b,pos.lo,pos.hi,pos.hi); // position fully filled → all USDC
-    if(P>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
-    else if(P<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
+    if(Pp>=pos.hi){fillH='<span style="color:var(--g);font-size:10px">Filled</span>';}
+    else if(Pp<pos.lo){fillH='<span style="color:var(--dm);font-size:9px">Below</span>';}
     else{var toFillU=Math.max(0,vMaxCalc.usdc-uE);fillH=toFillU>0?'<span style="color:var(--cy)">$'+F(toFillU,0)+'</span>':'—';}
     // 100% filled USDC
     var vMax=vMaxCalc;var maxH='<span style="color:var(--cy)">$'+vMax.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</span>';
@@ -2189,6 +2221,15 @@ var wtCache=null,wtCacheTs=0;
 function wtPad(n){return BigInt(n).toString(16).padStart(64,"0");}
 function wtI24(hex){var v=parseInt(hex,16);return v>=0x800000?v-0x1000000:v;}
 function wtTickToPrice(tick){return 1e12/Math.pow(1.0001,tick);}
+// Exact pool price from the on-chain current tick (matches Uniswap precisely).
+// Used for position fill math instead of the DexScreener spot, which is rounded/laggy
+// and — for positions near a range edge — distorts "BURN left" badly (e.g. 277 vs 540).
+// Falls back to global P (DexScreener spot) only when no tick is available yet (cold start).
+function poolPriceExact(){
+  var t=window._lmapCurTick;
+  if(typeof t==="number"&&isFinite(t)){var pp=1e12/Math.pow(1.0001,t);if(pp>0&&isFinite(pp))return pp;}
+  return P;
+}
 function wtLiqToBurn(liq,tL,tU){var sL=Math.pow(1.0001,tL/2),sU=Math.pow(1.0001,tU/2);return liq*(sU-sL)/1e18;}
 
 // Dedicated RPC for WT — no "0x" filter, longer timeout, tries each endpoint
