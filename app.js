@@ -416,7 +416,8 @@ async function fetchSup(){
     if(sup.total>0)cache.sup={total:sup.total,burned:sup.burned,locked:sup.locked,circ:sup.circ,stSup:sup.stSup};
   }catch(e){if(cache.sup){sup.total=cache.sup.total;sup.burned=cache.sup.burned;sup.locked=cache.sup.locked;sup.circ=cache.sup.circ;sup.stSup=cache.sup.stSup;}}}
 
-// ═══ FETCH: Wallet (Ledger) ═══
+// ═══ FETCH: Wallet (Ledger + DeFi free BURN) ═══
+var MY_DEFI_BURN=0; // free BURN sitting on the DeFi wallet (not in LPs) — e.g. OTC-received BURN
 async function fetchWal(){
   try{
     var lb=await rpc(BURN_TK,bof(W_LEDGER)),ls=await rpc(STBURN_TK,bof(W_LEDGER));
@@ -426,6 +427,14 @@ async function fetchWal(){
     if(newS<=0&&MY_STBURN>0)return;
     wal.prev.burn=MY_BURN;wal.prev.st=MY_STBURN;
     MY_BURN=newB;MY_STBURN=newS;
+    // Also read FREE BURN on the DeFi wallet (W_DEFI). This is BURN that is NOT in LPs —
+    // e.g. OTC-received BURN sitting in the wallet. It counts toward total BURN-equivalent.
+    // LP-locked BURN is tracked separately via lpBurnLeft, so this is purely the loose balance.
+    try{
+      var db=await rpc(BURN_TK,bof(W_DEFI));
+      var newDefiB=Math.round(h2n(db));
+      if(newDefiB>=0&&isFinite(newDefiB))MY_DEFI_BURN=newDefiB;
+    }catch(e){console.log("DeFi BURN bal err:",e.message);}
     try{checkBalanceDecrease();}catch(e){}
     wal.burn=MY_BURN;wal.st=MY_STBURN;
     wal.ok=true;renderWal();
@@ -456,7 +465,7 @@ function renderWal(){
     }
   }catch(e){}
   window._lpDetail={left:lpBurnLeft,deposited:lpBurnDeposited,sold:lpBurnSold,usdc:lpUsdcValue,count:lpCount};
-  var totalBurnEq=MY_BURN+(MY_STBURN*stR)+lpBurnLeft;
+  var totalBurnEq=MY_BURN+(MY_STBURN*stR)+lpBurnLeft+MY_DEFI_BURN;
 
   // ─── Wallet Change Detection ───
   // Persist last confirmed total. If current total deviates >1 BURN → ALARM
@@ -482,6 +491,46 @@ function renderWal(){
   var totalClr=isChanged?"var(--r)":"var(--g)";
   var totalAlertIcon=isChanged?'<span style="color:var(--r);font-weight:900;margin-right:4px;animation:skelPulse 1.5s ease-in-out infinite">⚠</span>':'';
 
+  // ─── DeFi Wallet BURN Change Detection (mirrors ledger logic) ───
+  // Same alarm + push + confirm pattern as the ledger, but for free BURN on W_DEFI.
+  // Catches OTC-received BURN, transfers in/out, etc. on the DeFi wallet.
+  var defiLastConfirmed=parseFloat(localStorage.getItem("defiConfirmedBurn")||"-1");
+  var defiChanged=false,defiDelta=0;
+  if(MY_DEFI_BURN>=0){
+    if(defiLastConfirmed<0){
+      // First-ever load: silently set baseline (even if 0)
+      localStorage.setItem("defiConfirmedBurn",MY_DEFI_BURN.toString());
+      defiLastConfirmed=MY_DEFI_BURN;
+    }
+    defiDelta=MY_DEFI_BURN-defiLastConfirmed;
+    defiChanged=Math.abs(defiDelta)>1;
+    if(defiChanged){
+      var defiKey=defiLastConfirmed.toFixed(0)+"_"+MY_DEFI_BURN.toFixed(0);
+      var defiNotifKey=localStorage.getItem("defiNotifKey")||"";
+      if(defiNotifKey!==defiKey){
+        localStorage.setItem("defiNotifKey",defiKey);
+        var defiDir=defiDelta>0?"+"+F(defiDelta,0):F(defiDelta,0);
+        notify("⚠ DeFi-Wallet BURN geändert","DeFi: "+F(defiLastConfirmed,0)+" → "+F(MY_DEFI_BURN,0)+" ("+defiDir+" BURN). Tap to confirm.");
+        if(soundOn)beep();
+      }
+    }
+  }
+  var defiBanner='';
+  if(defiChanged){
+    var defiDir2=defiDelta>0?"+"+F(defiDelta,0):F(defiDelta,0);
+    defiBanner='<div style="margin:-4px -2px 10px;padding:10px 12px;border-radius:10px;'+
+      'background:linear-gradient(180deg,rgba(251,146,60,.15),rgba(251,146,60,.05));'+
+      'border:1px solid rgba(251,146,60,.4);'+
+      'box-shadow:0 0 16px rgba(251,146,60,.2),0 0 0 1px rgba(251,146,60,.15) inset;'+
+      'display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+      '<div style="font-size:10px;color:var(--tx);line-height:1.4">'+
+        '<div style="font-weight:700;color:var(--o);text-transform:uppercase;letter-spacing:1px;font-size:9px;font-family:Inter,sans-serif;margin-bottom:2px">⚠ DeFi-Wallet BURN geändert</div>'+
+        '<div style="color:var(--mt)"><span style="color:var(--dm)">prev:</span> '+F(defiLastConfirmed,0)+' → <span style="color:var(--o);font-weight:600">'+F(MY_DEFI_BURN,0)+'</span> <span style="color:'+(defiDelta>0?"var(--g)":"var(--r)")+';font-weight:600">('+defiDir2+')</span></div>'+
+      '</div>'+
+      '<button onclick="defiConfirmChange()" style="background:linear-gradient(180deg,rgba(52,211,153,.18),rgba(52,211,153,.05));border:1px solid rgba(52,211,153,.5);color:var(--g);padding:8px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:36px;white-space:nowrap">✓ Ich war\'s</button>'+
+    '</div>';
+  }
+
   // Confirm banner (shown only when change detected)
   var banner='';
   if(isChanged){
@@ -501,6 +550,7 @@ function renderWal(){
 
   $("walGrid").innerHTML=
     banner+
+    defiBanner+
     '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">'+
       '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span>'+
       '<span style="color:var(--dm)">·</span>'+
@@ -514,6 +564,7 @@ function renderWal(){
       '<span style="color:var(--cy);font-weight:700;font-size:17px;margin-left:2px">'+F(totalBurnEq,0)+'</span>'+
       '<span style="font-size:11px;color:var(--cy);margin-left:4px;font-weight:500;opacity:.8">BURN</span>'+
       (lpBurnLeft>0?'<div style="font-size:9px;color:var(--mt);margin-top:3px;letter-spacing:.3px">incl. <span style="color:var(--b);font-weight:600">'+F(lpBurnLeft,0)+'</span> BURN in LPs</div>':'')+
+      (MY_DEFI_BURN>0?'<div style="font-size:9px;color:var(--mt);margin-top:2px;letter-spacing:.3px">incl. <span style="color:var(--o);font-weight:600">'+F(MY_DEFI_BURN,0)+'</span> BURN auf DeFi-Wallet</div>':'')+
     '</div>';
   try{renderStrategy(MY_BURN,MY_STBURN,lpBurnLeft);}catch(e){console.log("strat err:",e.message);}
 }
@@ -639,24 +690,38 @@ function renderStrategy(burn,stburn,lpLeft){
     card("Unrealisiert (vs Entry)",fmtUsd(unrealizedVsEntry),"bei Spot $"+price.toFixed(4),price>avgEntry?"#22d3ee":"#f87171")+
   '</div>';
 
-  // ─── SECTION 5: Price scenarios for held stack ───
-  html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">📈 Wert meines Hold-Stacks bei Preis X</div>';
+  // ─── SECTION 5: Price scenarios for held stack (REALISTIC exit value) ───
+  html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px">📈 Realer Wert meines Hold-Stacks bei Preis X</div>';
   html+='<div style="background:rgba(8,12,22,.55);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:10px">';
   var scenarios=[0.50,1.00,2.00,5.00];
-  html+='<div style="display:flex;flex-direction:column;gap:6px">';
+  html+='<div style="display:flex;flex-direction:column;gap:9px">';
   scenarios.forEach(function(sp){
-    var val=holdTarget*sp;
-    var mult=price>0?sp/price:0;
+    var book=holdTarget*sp;
+    var rv=(typeof holdStackRealValue==="function")?holdStackRealValue(holdTarget,sp):null;
+    var real=(rv&&rv.model==="v3")?rv.real:book;
+    var avgP=(rv&&rv.model==="v3"&&rv.avgPrice>0)?rv.avgPrice:sp;
+    var isModel=(rv&&rv.model==="v3");
+    var pctOfBook=book>0?(real/book*100):0;
     var barW=Math.min(100,sp/5.00*100);
-    html+='<div style="display:flex;align-items:center;gap:8px">'+
-      '<span style="font-size:10px;color:var(--tx);width:42px;font-family:Geist Mono,monospace">$'+sp.toFixed(2)+'</span>'+
-      '<div style="flex:1;height:16px;background:rgba(8,12,22,.6);border-radius:4px;overflow:hidden"><div style="height:100%;width:'+barW.toFixed(0)+'%;background:linear-gradient(90deg,#a78bfa,#22d3ee);border-radius:4px"></div></div>'+
-      '<span style="font-size:10px;color:var(--g);width:78px;text-align:right;font-family:Geist Mono,monospace">'+fmtUsd(val)+'</span>'+
-      '<span style="font-size:9px;color:var(--mt);width:34px;text-align:right">'+(mult>0?mult.toFixed(1)+"x":"")+'</span>'+
+    var realBarW=book>0?Math.min(100,real/book*barW):0; // green fill scaled to realistic fraction
+    html+='<div>'+
+      '<div style="display:flex;align-items:center;gap:8px">'+
+        '<span style="font-size:10px;color:var(--tx);width:42px;font-family:Geist Mono,monospace">$'+sp.toFixed(2)+'</span>'+
+        '<div style="flex:1;height:16px;background:rgba(8,12,22,.6);border-radius:4px;overflow:hidden;position:relative">'+
+          '<div style="position:absolute;top:0;left:0;height:100%;width:'+barW.toFixed(0)+'%;background:rgba(167,139,250,.18);border-radius:4px"></div>'+
+          '<div style="position:absolute;top:0;left:0;height:100%;width:'+realBarW.toFixed(0)+'%;background:linear-gradient(90deg,#22d3ee,#34d399);border-radius:4px"></div>'+
+        '</div>'+
+        '<span style="font-size:10px;color:var(--g);width:78px;text-align:right;font-family:Geist Mono,monospace;font-weight:600">'+fmtUsd(real)+'</span>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:2px;padding-left:50px">'+
+        '<span style="font-size:8px;color:var(--dm);flex:1">Buchwert <span style="text-decoration:line-through">'+fmtUsd(book)+'</span>'+(isModel?' · real Ø $'+avgP.toFixed(4)+' ('+pctOfBook.toFixed(0)+'%)':'')+'</span>'+
+      '</div>'+
     '</div>';
   });
   html+='</div>';
-  html+='<div style="font-size:8.5px;color:var(--dm);margin-top:8px;text-align:center">Wert deines Halten-Ziels ('+F(holdTarget,0)+' BURN) bei verschiedenen Preisen</div>';
+  html+='<div style="font-size:8.5px;color:var(--dm);margin-top:8px;text-align:center;line-height:1.5">'+
+    '<span style="color:var(--g)">Grün</span> = realer Verkaufserlös für '+F(holdTarget,0)+' BURN, wenn der Preis durch echte Käufe auf $X getrieben wäre und du dann verkaufst.<br>'+
+    '<span style="color:var(--dm)">Modell: heutige Pool-Tiefe + nötiges Kaufvolumen. Kein Zukunfts-Orakel — bei höheren Preisen kämen real neue LPs dazu.</span></div>';
   html+='</div>';
 
   box.innerHTML=html;
@@ -677,7 +742,19 @@ function walConfirmChange(){
   try{renderWal();}catch(e){}
 }
 
-// Hydrate from server on app load — server is source of truth
+// Confirm DeFi-wallet BURN change (resets baseline, stops the alarm).
+function defiConfirmChange(){
+  localStorage.setItem("defiConfirmedBurn",MY_DEFI_BURN.toString());
+  localStorage.removeItem("defiNotifKey");
+  // Sync to Hetzner server (so the monitor stops alerting too)
+  try{
+    fetch("http://95.216.152.31:8082/defi/confirm",{method:"POST",mode:"cors"})
+      .then(function(r){return r.json();})
+      .then(function(d){console.log("server defi confirm:",d);})
+      .catch(function(e){console.log("server defi confirm sync failed (browser blocks HTTP, APK ok):",e&&e.message);});
+  }catch(e){}
+  try{renderWal();}catch(e){}
+}
 function fetchServerWalletState(){
   try{
     fetch("http://95.216.152.31:8082/wallet/state",{mode:"cors"})
@@ -691,6 +768,11 @@ function fetchServerWalletState(){
         var localConfirmed=localStorage.getItem("walConfirmedTotal");
         if(d.confirmed_total>0&&(!localConfirmed||parseFloat(localConfirmed)<=0)){
           localStorage.setItem("walConfirmedTotal",d.confirmed_total.toString());
+        }
+        // Same logic for the DeFi-wallet baseline: seed from server only if we have nothing local.
+        var localDefiConfirmed=localStorage.getItem("defiConfirmedBurn");
+        if(typeof d.defi_confirmed!=="undefined"&&d.defi_confirmed>=0&&(localDefiConfirmed===null||localDefiConfirmed==="")){
+          localStorage.setItem("defiConfirmedBurn",d.defi_confirmed.toString());
         }
         // ETH balance: take higher value (server vs local cache)
         if(d.eth>0&&typeof ptfAssets!=="undefined"){
@@ -1481,6 +1563,46 @@ function simSellImpact(burnSold){
   // ran out of liquidity
   var pEnd2=1/(invCur*invCur);
   return {usdc:usdcOut,newPrice:pEnd2,partial:true,filled:burnSold-remaining};
+}
+// ─── REALISTIC hold-stack value at a target price ───
+// Models: (1) the price is pushed from spot up to tgtP by real buying (which DEEPENS the
+// pool with USDC and removes BURN, using today's tick liquidity), then (2) you sell your
+// whole stack back DOWN into that deepened pool. Returns the realistic USD you'd net,
+// far below the naive (amount × price) book value but above today's thin-pool exit.
+// Falls back to book value if V3 tick data isn't available.
+function holdStackRealValue(burnAmount, tgtP){
+  if(!burnAmount||burnAmount<=0||!tgtP||tgtP<=0)return null;
+  var hasV3=window._lmapRanges&&window._lmapRanges.length>0&&typeof _activeLiqSegments==="function";
+  if(!hasV3||P<=0)return {real:burnAmount*tgtP, book:burnAmount*tgtP, avgPrice:tgtP, model:"book"};
+  var segs=_activeLiqSegments();if(!segs||!segs.length)return {real:burnAmount*tgtP, book:burnAmount*tgtP, avgPrice:tgtP, model:"book"};
+  var curTick=window._lmapCurTick;
+  var tgtTick=Math.round(Math.log(1e12/tgtP)/Math.log(1.0001));
+  // If target is at/below current price, selling just uses the current pool (no pump needed).
+  // Sell your stack DOWN from tgtTick (the pumped state) through the tick segments.
+  // Selling BURN → price DOWN → tick UP. Walk ascending from tgtTick.
+  var startTick=(tgtTick<curTick)?tgtTick:curTick; // if tgt above spot, start at pumped tick
+  var asc=segs.filter(function(s){return s.tH>startTick;}).sort(function(a,b){return a.tL-b.tL;});
+  var remaining=burnAmount,usdcOut=0,invCur=_siv(startTick),tickPos=startTick;
+  for(var i=0;i<asc.length;i++){
+    var s=asc[i];if(s.Lb<=0)continue;
+    var tStart=Math.max(tickPos,s.tL),tEnd=s.tH;
+    if(tEnd<=tStart)continue;
+    var invStart=_siv(tStart),invEnd=_siv(tEnd);
+    var burnCap=s.Lb*(invEnd-invStart);
+    if(burnCap<=0)continue;
+    if(remaining<=burnCap){
+      var invFinal=invStart+remaining/s.Lb;
+      usdcOut+=s.Lb*(1/invStart-1/invFinal);
+      remaining=0;break;
+    }else{
+      usdcOut+=s.Lb*(1/invStart-1/invEnd);
+      remaining-=burnCap;tickPos=tEnd;
+    }
+  }
+  var sold=burnAmount-remaining;
+  var book=burnAmount*tgtP;
+  var avgPrice=sold>0?usdcOut/sold:0;
+  return {real:usdcOut, book:book, avgPrice:avgPrice, sold:sold, unsold:remaining, model:"v3"};
 }
 function simBuyImpact(burnBought){
   // Buy BURN → price UP → tick DOWN. Walk segments toward lower ticks.
