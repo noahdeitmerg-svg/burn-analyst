@@ -769,10 +769,21 @@ function fetchServerWalletState(){
         if(d.confirmed_total>0&&(!localConfirmed||parseFloat(localConfirmed)<=0)){
           localStorage.setItem("walConfirmedTotal",d.confirmed_total.toString());
         }
-        // Same logic for the DeFi-wallet baseline: seed from server only if we have nothing local.
+        // DeFi-wallet baseline: adopt the SERVER's confirmed baseline as source of truth.
+        // The server runs 24/7 and tracks the last confirmed DeFi balance. By using its
+        // defi_confirmed as our baseline, an unconfirmed change the server saw (its defi_alarm)
+        // surfaces in the app too — even if the change happened while the app was closed.
+        // (We only adopt downward/equal or when local is empty, so a locally-confirmed higher
+        // baseline isn't wiped — mirrors the ledger's conservative seeding.)
         var localDefiConfirmed=localStorage.getItem("defiConfirmedBurn");
-        if(typeof d.defi_confirmed!=="undefined"&&d.defi_confirmed>=0&&(localDefiConfirmed===null||localDefiConfirmed==="")){
-          localStorage.setItem("defiConfirmedBurn",d.defi_confirmed.toString());
+        if(typeof d.defi_confirmed!=="undefined"&&d.defi_confirmed>=0){
+          if(localDefiConfirmed===null||localDefiConfirmed===""){
+            localStorage.setItem("defiConfirmedBurn",d.defi_confirmed.toString());
+          }else if(d.defi_alarm===true){
+            // Server flags an open DeFi change → align our baseline to the server's confirmed
+            // value so renderWal() shows the same alarm (prev → current) instead of silence.
+            localStorage.setItem("defiConfirmedBurn",d.defi_confirmed.toString());
+          }
         }
         // ETH balance: take higher value (server vs local cache)
         if(d.eth>0&&typeof ptfAssets!=="undefined"){
@@ -1967,6 +1978,13 @@ async function scanLiqMap(){
                   lpOwners[lo2].usdcOut=Math.round(totalUsdc*100)/100;
                   lpOwners[lo2].burnOut=Math.round(totalBurn);
                   console.log("LMAP: #"+cTid+" collected: "+totalBurn.toFixed(0)+" BURN + $"+totalUsdc.toFixed(2)+" USDC");
+                  // Bridge to realized history: if this is MY closed position and the
+                  // lpPrevious-diff missed it (opened+closed between scans), book it now.
+                  try{
+                    if(lpOwners[lo2].isMe&&typeof reconcileClosedFromChain==="function"){
+                      reconcileClosedFromChain(cTid.toString(),lpOwners[lo2].lo,lpOwners[lo2].hi,totalBurn,totalUsdc);
+                    }
+                  }catch(eRec){}
                   break;
                 }
               }
@@ -3829,8 +3847,59 @@ function detectClosedLPs(newLPs){
   }
 }
 
-// Detect NEW LP Mints (in current LPs but not in lpPrevious) → Permuta-Event
-var lpMintSeen={};
+// ─── RECONCILE: catch closed LPs that detectClosedLPs MISSED ───
+// detectClosedLPs only sees a position close if it was in lpPrevious (i.e. a scan ran while
+// it was open). A position opened AND closed between two scans is never in lpPrevious, so its
+// realized USDC never enters the CL history — even though the on-chain Liquidity-Map (lpOwners)
+// reads it correctly with real Collect-event amounts. This bridges that gap: given a closed
+// NFT's real burnOut/usdcOut from the chain, add it to the CL history if not already there.
+// Matched by tokenId so we never double-count a position detectClosedLPs already handled.
+var clTokenIds={};
+try{var cti=localStorage.getItem("cl_token_ids");if(cti)clTokenIds=JSON.parse(cti);}catch(e){}
+function reconcileClosedFromChain(tokenId,lo,hi,burnOut,usdcOut){
+  try{
+    if(!tokenId)return false;
+    tokenId=tokenId.toString();
+    if(clTokenIds[tokenId])return false;            // already reconciled this NFT
+    if(!(usdcOut>0))return false;                    // no USDC realized → nothing to add (dry pull)
+    // Also skip if an existing CL entry already covers this range+usdc (detectClosedLPs path).
+    for(var i=0;i<CL.length;i++){
+      var c=CL[i];
+      if(c&&Math.abs((c.lo||0)-lo)<0.001&&Math.abs((c.hi||0)-hi)<0.001&&Math.abs((c.u||0)-usdcOut)<Math.max(2,usdcOut*0.03)){
+        clTokenIds[tokenId]=Date.now();              // mark seen so we don't re-check forever
+        try{localStorage.setItem("cl_token_ids",JSON.stringify(clTokenIds));}catch(e){}
+        return false;
+      }
+    }
+    // burnOut from Collect = BURN that came BACK (unsold remainder). We don't know the exact
+    // deposited amount here, so book the USDC as realized and record returned BURN for clarity.
+    var entry={
+      d:new Date().toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"}),
+      b:0, lo:lo, hi:hi,
+      u:Math.round(usdcOut*100)/100,
+      n:"🔄 $"+lo.toFixed(3)+"→$"+hi.toFixed(2)+" (exakt on-chain, #"+tokenId.slice(-6)+")",
+      left:Math.round(burnOut||0), pct:100, exact:true, fromChain:true
+    };
+    CL.push(entry);TR+=entry.u;
+    clTokenIds[tokenId]=Date.now();
+    try{
+      localStorage.setItem("cl_token_ids",JSON.stringify(clTokenIds));
+      localStorage.setItem("closed_lps",JSON.stringify(CL));
+      localStorage.setItem("cl_history",JSON.stringify(CL.filter(function(c){return c.n&&c.n.indexOf("🔄")===0;})));
+    }catch(e){}
+    console.log("RECONCILED missed close from chain: #"+tokenId+" $"+entry.u+" USDC ("+lo.toFixed(3)+"-"+hi.toFixed(2)+")");
+    if(typeof brAddPermuta==="function"){
+      try{
+        var dDate=new Date().toISOString().split("T")[0];
+        brAddPermuta("lp_fill","BURN",0,entry.u,"Auto-reconcile: LP "+lo.toFixed(3)+"-"+hi.toFixed(2)+" closed on-chain",dDate);
+      }catch(e){}
+    }
+    if(typeof renderWal==="function")try{renderWal();}catch(e){}
+    return true;
+  }catch(e){console.log("reconcileClosed err:",e.message);return false;}
+}
+
+
 try{var lms=localStorage.getItem("lp_mint_seen");if(lms)lpMintSeen=JSON.parse(lms);}catch(e){}
 
 function detectNewLPMints(currentLPs){
