@@ -91,7 +91,8 @@ var ADDR_BOOK={
   "0x1b5b969fcccc12ddcf3022bbf1c586b775ddfb42":"Elite DAO",
   "0xbb751e832d9da605eacebec153101afc3aadd154":"T-Free",
   "0x68bb36c5ec72868549a1cb4ab93eccfc39ca52d4":"Alex",
-  "0x8dbd81fd2fe6074bbdca0b6b2fce05c7d54263e6":"Luis"
+  "0x8dbd81fd2fe6074bbdca0b6b2fce05c7d54263e6":"Luis",
+  "0x193b5dbdc354d1917079ae437de8b5828f53f40c":"SelfMade / Andreas"
 };
 // Merge any user-added names from localStorage
 try{var abExtra=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");for(var abk in abExtra){if(abExtra.hasOwnProperty(abk))ADDR_BOOK[abk.toLowerCase()]=abExtra[abk];}}catch(e){}
