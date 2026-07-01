@@ -96,6 +96,29 @@ var ADDR_BOOK={
 };
 // Merge any user-added names from localStorage
 try{var abExtra=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");for(var abk in abExtra){if(abExtra.hasOwnProperty(abk))ADDR_BOOK[abk.toLowerCase()]=abExtra[abk];}}catch(e){}
+// Merge cached server addressbook (instant, works offline). Refreshed from server on start.
+try{var abServerCache=JSON.parse(localStorage.getItem("addr_book_server")||"{}");for(var abs in abServerCache){if(abServerCache.hasOwnProperty(abs))ADDR_BOOK[abs.toLowerCase()]=abServerCache[abs];}}catch(e){}
+// ─── SINGLE SOURCE OF TRUTH: fetch the addressbook from the server on start ───
+// The server (/root/addr_book.py) is the master list. The app pulls it so both stay in
+// sync automatically — add a name once on the server, the app picks it up next launch.
+// Server names win over the hardcoded defaults; the local cache covers the offline case.
+async function syncAddrBookFromServer(){
+  try{
+    var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},6000);
+    var r=await fetch("http://95.216.152.31:8082/addressbook",{signal:ac.signal});
+    clearTimeout(tm);
+    if(!r.ok)return;
+    var book=await r.json();
+    if(book&&typeof book==="object"){
+      var n=0;
+      for(var k in book){if(book.hasOwnProperty(k)&&k&&book[k]){ADDR_BOOK[k.toLowerCase()]=book[k];n++;}}
+      try{localStorage.setItem("addr_book_server",JSON.stringify(book));}catch(e){}
+      console.log("ADDR_BOOK: synced "+n+" names from server");
+      // Re-render trades so freshly-known names show immediately.
+      try{if(typeof renderTrades==="function")renderTrades();}catch(e){}
+    }
+  }catch(e){console.log("ADDR_BOOK sync skipped:",e.message);}
+}
 // Resolve an address to a display name (or shortened hex if unknown).
 function addrName(addr,opts){
   opts=opts||{};
@@ -1341,7 +1364,61 @@ function decodeSwap(log,latest){
   var secAgo=(latest-blk)*0.26,minAgo=Math.round(secAgo/60);
   var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
   return{isBuy:isBuy,burn:Math.abs(burn),usdc:Math.abs(usdc),price:Math.abs(burn)>0?Math.abs(usdc)/Math.abs(burn):0,
-    minAgo:minAgo,blk:blk,wallet:wallet};}
+    minAgo:minAgo,blk:blk,wallet:wallet,txHash:log.transactionHash||""};}
+
+// ─── SIGNER RESOLUTION (match the server) ───
+// The Swap event's recipient (topics[2]) is often a router/receiver wallet, not the person.
+// The SERVER resolves names from tx.from (who signed), so multi-wallet users like Dominic
+// are named correctly there but not in the app. This fetches tx.from for a txHash (cached),
+// so the app can show the same signer-based name. Called lazily for VISIBLE trades only.
+var signerCache={};
+try{var scStored=localStorage.getItem("signer_cache");if(scStored)signerCache=JSON.parse(scStored);}catch(e){}
+var signerPending={};
+async function resolveSigner(txHash){
+  if(!txHash)return null;
+  if(signerCache[txHash])return signerCache[txHash];
+  if(signerPending[txHash])return null; // already fetching
+  signerPending[txHash]=1;
+  for(var i=0;i<RPC_LIST.length;i++){
+    var idx=(rpcIdx+i)%RPC_LIST.length;
+    try{
+      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},5000);
+      var r=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",method:"eth_getTransactionByHash",params:[txHash],id:77}),signal:ac.signal});
+      clearTimeout(tm);var j=await r.json();
+      if(j.result&&j.result.from){
+        var from=j.result.from.toLowerCase();
+        signerCache[txHash]=from;
+        try{localStorage.setItem("signer_cache",JSON.stringify(signerCache));}catch(e){}
+        delete signerPending[txHash];
+        return from;
+      }
+    }catch(e){}
+  }
+  delete signerPending[txHash];
+  return null;
+}
+// Resolve signers for the currently visible trades, then re-render if any name was found.
+async function enrichTradeSigners(trades){
+  if(!trades||!trades.length)return;
+  var changed=false;
+  for(var i=0;i<trades.length;i++){
+    var t=trades[i];
+    if(!t.txHash||t.signerResolved)continue;
+    // Only bother if the recipient wallet is NOT already a known name (else no need).
+    var recipKnown=t.wallet&&ADDR_BOOK[(t.wallet+"").toLowerCase()];
+    if(recipKnown){t.signerResolved=true;continue;}
+    var signer=await resolveSigner(t.txHash);
+    t.signerResolved=true;
+    if(signer&&ADDR_BOOK[signer]){
+      t.signer=signer;           // store resolved signer
+      t.wallet=signer;           // use it as the display wallet → name shows
+      changed=true;
+    }
+    await new Promise(function(r){setTimeout(r,60);}); // gentle throttle
+  }
+  if(changed){try{renderTrades();}catch(e){}try{tradeCacheSave();}catch(e){}}
+}
 
 function tradeRow(t){
   var agoT=t.minAgo<1?"now":t.minAgo<60?t.minAgo+"m":t.minAgo<1440?Math.round(t.minAgo/60)+"h":Math.round(t.minAgo/1440)+"d";
@@ -1413,6 +1490,14 @@ function renderTrades(){
   $("tPgInfo").textContent=(tradePg_+1)+"/"+pages;
   $("tPrev").disabled=tradePg_<=0;$("tNext").disabled=tradePg_>=pages-1;
   try{renderCapitalFlow();}catch(e){}
+  // Resolve signer names (tx.from) for the visible trades only — matches the server's naming.
+  // Runs async in the background; re-renders if a name is found. Cached per txHash.
+  try{
+    var visible=[];
+    if(allTrades.length>0)visible.push(allTrades[0]);
+    for(var vj=start;vj<Math.min(start+TRADES_PP,list.length);vj++)visible.push(list[vj]);
+    if(typeof enrichTradeSigners==="function")enrichTradeSigners(visible);
+  }catch(e){}
 }
 function tradePg(d){tradePg_+=d;renderTrades();}
 
@@ -2064,6 +2149,14 @@ async function scanLiqMap(){
     if(L>0&&prev<MAX_TICK)ranges.push({tL:prev,tH:MAX_TICK,liq:L});
 
     // 6. Aggregate into price buckets
+    // Identify DAO full-range liquidity (owner position with hi>100000 = full range marker).
+    // Its liquidity L is constant across all ticks, so we compute its BURN share per bucket
+    // via the V3 formula and separate it from external concentrated LPs.
+    var daoLiq=0;
+    for(var doi2=0;doi2<lpOwners.length;doi2++){
+      var dp=lpOwners[doi2];
+      if(!dp.closed&&dp.hi>100000&&dp.liq>0)daoLiq+=dp.liq;
+    }
     var buckets=[];
     for(var bi=0;bi<LMAP_BUCKETS.length-1;bi++){
       var bLo=LMAP_BUCKETS[bi],bHi=LMAP_BUCKETS[bi+1];
@@ -2074,10 +2167,22 @@ async function scanLiqMap(){
         var oL=Math.max(rr.tL,bkTickLo),oH=Math.min(rr.tH,bkTickHi);
         if(oL>=oH)continue;
         burnD+=rr.liq*(Math.pow(1.0001,oH/2)-Math.pow(1.0001,oL/2))/1e18;}
+      // DAO's BURN in this bucket: same V3 formula, but only the DAO's constant liquidity.
+      var daoBurnD=0;
+      if(daoLiq>0){
+        var dcL=Math.max(bkTickLo,-887272),dcH=Math.min(bkTickHi,887272);
+        if(dcH>dcL){
+          var dv=daoLiq*(Math.pow(1.0001,dcH/2)-Math.pow(1.0001,dcL/2))/1e18;
+          if(isFinite(dv)&&dv>0)daoBurnD=dv;
+        }
+      }
+      if(daoBurnD>burnD)daoBurnD=burnD; // never more than total
+      var extBurnD=Math.max(0,burnD-daoBurnD);
       var owners=[];
       for(var oi=0;oi<lpOwners.length;oi++){if(lpOwners[oi].hi>bLo&&lpOwners[oi].lo<bHi)owners.push(lpOwners[oi]);}
       owners.sort(function(a,b2){return b2.liq-a.liq;});
-      buckets.push({lo:bLo,hi:bHi,burn:burnD,usdc:burnD*(bLo+bHi)/2,active:P>=bLo&&P<bHi,owners:owners});}
+      var midP=(bLo+bHi)/2;
+      buckets.push({lo:bLo,hi:bHi,burn:burnD,daoBurn:daoBurnD,extBurn:extBurnD,usdc:burnD*midP,extUsdc:extBurnD*midP,active:P>=bLo&&P<bHi,owners:owners});}
     // CALIBRATE BUCKETS to on-chain pool reserves — eliminates wtLiqToBurn() Full-Range overflow
     // Without this, DAO 6M BURN deposit pollutes every bucket via tick-overlap math.
     // Strategy: keep relative distribution across price ranges, scale absolute values to aB/aU truth.
@@ -2092,6 +2197,10 @@ async function scanLiqMap(){
           buckets[cbi].usdcRaw=buckets[cbi].usdc;
           buckets[cbi].burn*=calB;
           buckets[cbi].usdc*=calU;
+          // Keep the DAO/external split consistent with the calibrated totals.
+          if(buckets[cbi].daoBurn)buckets[cbi].daoBurn*=calB;
+          if(buckets[cbi].extBurn)buckets[cbi].extBurn*=calB;
+          if(buckets[cbi].extUsdc)buckets[cbi].extUsdc*=calU;
         }
         console.log("LMAP CALIBRATION: raw-sum="+F(sumBucketBurn,0)+" BURN → on-chain aB="+F(aB,0)+" (factor "+calB.toFixed(4)+") | usdc factor "+calU.toFixed(4));
       }
@@ -2187,6 +2296,82 @@ async function scanLiqMap(){
     $("lmapStatus").textContent="";}
 }
 
+// ═══ VISUAL DEPTH CHART: BURN distribution across price ranges ═══
+// Horizontal bars per price bucket — instantly shows WHERE (which price) HOW MUCH BURN sits.
+// Current price marked, own positions highlighted, DAO full-range shown separately.
+function renderDepthChart(buckets){
+  var box=$("depthChart");if(!box)return;
+  if(!buckets||!buckets.length){box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst die Pool Liquidity Map scannen lassen.</div>';return;}
+  // Sensible range around the current price — not to infinity. Show from a bit below the
+  // lowest external LP up to where real concentrated LPs sit (cap ~$1.00 by default).
+  var pxNow=(typeof P!=="undefined"&&P>0)?P:0.17;
+  // Find price band that actually contains external (non-DAO) liquidity.
+  var loBand=pxNow*0.5, hiBand=pxNow*3;
+  for(var s=0;s<buckets.length;s++){
+    if((buckets[s].extBurn||0)>1){
+      if(buckets[s].lo<loBand)loBand=buckets[s].lo;
+      if(buckets[s].hi>hiBand)hiBand=buckets[s].hi;
+    }
+  }
+  hiBand=Math.min(hiBand,1.0); // cap so a huge tail doesn't flatten the chart
+  loBand=Math.max(loBand,0.001);
+  var vis=buckets.filter(function(b){return b.lo>=loBand*0.999&&b.hi<=hiBand*1.001&&(b.burn>0);});
+  if(!vis.length)vis=buckets.filter(function(b){return b.burn>0;});
+  if(!vis.length){box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Keine BURN-Liquidität im Bereich.</div>';return;}
+  // Scale bars to the largest EXTERNAL burn so external LPs dominate the visual;
+  // the DAO portion is drawn as a faint segment on top (context, not the star).
+  var maxExt=0,sumExt=0,sumDao=0,sumUsdc=0;
+  for(var i=0;i<vis.length;i++){
+    var e=vis[i].extBurn||0;
+    if(e>maxExt)maxExt=e;
+    sumExt+=e;sumDao+=(vis[i].daoBurn||0);sumUsdc+=(vis[i].extUsdc||0);
+  }
+  if(maxExt<=0)maxExt=1;
+  function hasMe(b){if(!b.owners)return false;for(var k=0;k<b.owners.length;k++){if(b.owners[k].isMe&&!b.owners[k].closed)return true;}return false;}
+  var rows="";
+  for(var j=0;j<vis.length;j++){
+    var b=vis[j];
+    var ext=b.extBurn||0, dao=b.daoBurn||0;
+    var extPct=Math.min(100,ext/maxExt*100);
+    var daoPct=Math.min(100-extPct,dao/maxExt*100*0.5); // DAO shown at half-weight, capped
+    var mine=hasMe(b);
+    var isActive=b.active;
+    var extClr=isActive?"linear-gradient(90deg,#f59e0b,#fbbf24)":(mine?"linear-gradient(90deg,#22d3ee,#34d399)":"linear-gradient(90deg,#6366f1,#a78bfa)");
+    var labelClr=isActive?"var(--o)":(mine?"var(--cy)":"var(--tx)");
+    var extLabel=ext>=1000?(ext/1000).toFixed(1)+"k":F(ext,0);
+    var uLabel=(b.extUsdc>=1000)?"$"+(b.extUsdc/1000).toFixed(1)+"k":"$"+F(b.extUsdc||0,0);
+    rows+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">'+
+      '<span style="font-size:8.5px;color:'+labelClr+';width:64px;text-align:right;font-family:Geist Mono,monospace;flex-shrink:0">$'+b.lo.toFixed(b.lo<0.1?4:3)+(isActive?' ◀':'')+(mine?' ★':'')+'</span>'+
+      '<div style="flex:1;height:15px;background:rgba(8,12,22,.5);border-radius:3px;overflow:hidden;position:relative;display:flex">'+
+        '<div style="height:100%;width:'+extPct.toFixed(1)+'%;background:'+extClr+';border-radius:3px 0 0 3px'+(isActive?';box-shadow:0 0 8px rgba(245,158,11,.5)':'')+'"></div>'+
+        (daoPct>0.5?'<div style="height:100%;width:'+daoPct.toFixed(1)+'%;background:repeating-linear-gradient(90deg,rgba(148,163,184,.25),rgba(148,163,184,.25) 3px,rgba(148,163,184,.12) 3px,rgba(148,163,184,.12) 6px)" title="DAO Full-Range"></div>':'')+
+        '<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:8px;color:var(--tx);font-family:Geist Mono,monospace;text-shadow:0 0 3px #000">'+extLabel+'</span>'+
+      '</div>'+
+      '<span style="font-size:7.5px;color:var(--g);width:44px;text-align:right;flex-shrink:0;font-family:Geist Mono,monospace">'+uLabel+'</span>'+
+    '</div>';
+  }
+  box.innerHTML=
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">'+
+      '<span style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:.8px">Liquidität pro Preisbereich</span>'+
+      '<span style="font-size:8px;color:var(--dm)">$'+loBand.toFixed(2)+'–$'+hiBand.toFixed(2)+'</span>'+
+    '</div>'+
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:8px;color:var(--dm)"><span>Preis · Balken=BURN</span><span>USDC-Wert →</span></div>'+
+    rows+
+    '<div style="border-top:1px solid rgba(48,54,68,.4);margin-top:8px;padding-top:7px;display:flex;justify-content:space-between;font-size:8.5px">'+
+      '<span style="color:var(--tx)">Extern: <b style="color:var(--cy)">'+(sumExt>=1000?(sumExt/1000).toFixed(0)+"k":F(sumExt,0))+'</b> BURN · <b style="color:var(--g)">$'+(sumUsdc>=1000?(sumUsdc/1000).toFixed(1)+"k":F(sumUsdc,0))+'</b></span>'+
+      '<span style="color:var(--dm)">DAO: '+(sumDao>=1000?(sumDao/1000).toFixed(0)+"k":F(sumDao,0))+' BURN</span>'+
+    '</div>'+
+    '<div style="display:flex;gap:9px;margin-top:6px;font-size:7.5px;color:var(--dm);flex-wrap:wrap;justify-content:center;align-items:center">'+
+      '<span><span style="color:var(--o)">◀</span> Preis</span>'+
+      '<span><span style="color:var(--cy)">★</span> meine Pos</span>'+
+      '<span><span style="color:#a78bfa">▬</span> externe LP</span>'+
+      '<span><span style="color:#94a3b8">▨</span> DAO Full-Range</span>'+
+    '</div>';
+}
+function toggleDepthDAO(){
+  // kept for backward compat; DAO is now always shown as a faint overlay
+  try{if(lmapCache)renderDepthChart(lmapCache);}catch(e){}
+}
 function renderLmap(buckets){
   var lpOwners=window._lpOwners||[];
   var tB=0,tU=0,allOwn={},activeOwn={};
@@ -2267,10 +2452,15 @@ function renderLmap(buckets){
   for(var wi=0;wi<owners.length;wi++){
     var ow=owners[wi];
     var wS=ow.addr.slice(0,6)+"…"+ow.addr.slice(-4);
+    // Special labels for pool/vault wallets. NOTE: prefix matching is fragile — a short prefix
+    // like "0x988966" also matches Björn's 0x98896671… address. So we check the EXACT full-address
+    // ADDR_BOOK (now synced from the server) FIRST, and only fall back to prefix labels if unknown.
     var WALLET_LABELS={"0x72ade1":"DAO Vault","0x505042":"Noah (DeFi)","0x6e37cc":"Noah (Alt)","0x1b5b96":"Elite","0x0e7121":"Founder","0x6324b1":"Private","0x988966":"Private"};
-    var wLabel="";for(var wk in WALLET_LABELS){if(ow.addr.toLowerCase().indexOf(wk)===0){wLabel=WALLET_LABELS[wk];break;}}
-    // If no special label, fall back to Discord name from address book
-    if(!wLabel&&typeof ADDR_BOOK!=="undefined"){var abn=ADDR_BOOK[(ow.addr+"").toLowerCase()];if(abn)wLabel=abn.replace(" ⭐","");}
+    var wLabel="";
+    // 1. Exact full-address match wins (no prefix collisions).
+    if(typeof ADDR_BOOK!=="undefined"){var abnExact=ADDR_BOOK[(ow.addr+"").toLowerCase()];if(abnExact)wLabel=abnExact.replace(" ⭐","");}
+    // 2. Only if still unknown, use the prefix labels (DAO/Elite/Founder etc.).
+    if(!wLabel){for(var wk in WALLET_LABELS){if(ow.addr.toLowerCase().indexOf(wk)===0){wLabel=WALLET_LABELS[wk];break;}}}
     var wLink='<a href="https://arbiscan.io/address/'+ow.addr+'" target="_blank" style="color:'+(ow.isMe?"var(--cy)":ow.activeCount>0?"var(--g)":"var(--dm)")+'">'+(ow.isMe?"⭐ ":"")+wS+'</a>';
     var labelHtml=wLabel?' <span style="font-size:9px;color:var(--cy);margin-left:4px">'+wLabel+'</span>':'';
     var statusTxt=ow.activeCount>0?ow.activeCount+" active"+(ow.closedCount>0?", "+ow.closedCount+" closed":""):ow.closedCount+" closed";
@@ -2356,6 +2546,7 @@ function renderLmap(buckets){
   }
   $("lmapB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No data</td></tr>';
   $("lmapStatus").textContent=Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+lpOwners.length+" positions · "+new Date().toLocaleTimeString();
+  try{renderDepthChart(buckets);}catch(e){console.log("depthChart err:",e.message);}
 }
 
 // ═══ WALLET TRACKER (isolated module) ═══
@@ -5713,6 +5904,8 @@ brFetchPtax().then(function(rate){
 try{lmapTs=0;scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
+// Pull the master addressbook from the server on startup (single source of truth).
+setTimeout(function(){try{syncAddrBookFromServer();}catch(e){}},2500);
 // Auto-sync FCM token to Hetzner on startup (silent, only if token exists & changed since last sync)
 setTimeout(function(){
   try{
