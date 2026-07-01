@@ -980,15 +980,37 @@ function render(){
       //   Verteilt sich auf ALLE LPs (deine + DAO Full-Range + andere) → immer ≥ Metrik 1.
       //   Das ist nfBuy (buyflowEstimate), oben bereits berechnet + gegen DAO-Pollution gecappt.
       var nfPoolValid=(nfBuy>0&&isFinite(nfBuy));
+      // Is this position even ACTIVE yet? A single-sided BURN LP only starts filling once the
+      // price reaches its lower bound (lo). If price is still BELOW lo, it holds 100% BURN and
+      // is "waiting" — show how much buy-pressure is needed just to ACTIVATE it (reach lo).
+      var nfNotActive=(Pnf<LP[bestNf].lo);
+      var nfActBuy=0,nfActValid=false,nfActDist=0;
+      if(nfNotActive){
+        nfActDist=((LP[bestNf].lo-Pnf)/Pnf*100);
+        var nfActEst=buyflowEstimate(P,LP[bestNf].lo);
+        nfActBuy=nfActEst.usdc;
+        if(!isFinite(nfActBuy)||nfActBuy<0)nfActBuy=0;
+        if(nfActBuy>10000000)nfActBuy=0;
+        nfActValid=(nfActBuy>0&&isFinite(nfActBuy));
+      }
       nxtFill='<div style="line-height:1.7">'+
         '<div style="margin-bottom:6px">Next Fill: <b style="color:var(--o)">$'+LP[bestNf].hi.toFixed(3)+'</b> '+
           '<span style="color:var(--tx)">(↑'+nfDist.toFixed(0)+'%)</span> · '+
-          '<span style="color:'+(nfFillPct>=90?"var(--g)":"var(--cy)")+'">'+nfFillPct.toFixed(0)+'% gefüllt</span></div>'+
+          (nfNotActive
+            ?'<span style="color:var(--warn)">⏳ noch nicht aktiv</span>'
+            :'<span style="color:'+(nfFillPct>=90?"var(--g)":"var(--cy)")+'">'+nfFillPct.toFixed(0)+'% gefüllt</span>')+'</div>'+
+        // If not active yet: show the activation threshold (buy-pressure to reach lo) FIRST.
+        (nfNotActive?
+          '<div style="font-size:11px;margin-bottom:3px;background:rgba(251,191,36,.08);border-left:2px solid var(--warn);padding:3px 8px;border-radius:0 4px 4px 0">'+
+            '<span style="color:var(--warn)">➜ Aktiviert sich bei $'+LP[bestNf].lo.toFixed(3)+'</span> '+
+            '<span style="color:var(--tx)">(↑'+nfActDist.toFixed(1)+'%)</span>'+
+            (nfActValid?'<br><span style="color:var(--tx)">nötiger Kaufdruck bis dahin:</span> <b style="color:var(--warn)">$'+F(nfActBuy,0)+'</b>':'')+'</div>'
+          :'')+
         // Metrik 1 — meine Position
         '<div style="font-size:11px;margin-bottom:3px">'+
           '<span style="color:var(--tx)">➜ In meine Position:</span> '+
           '<b style="color:var(--cy)">$'+F(nfPosRemaining,0)+'</b> '+
-          '<span style="color:var(--dm)">('+F(nfBurnLeft,0)+' BURN bis voll)</span></div>'+
+          '<span style="color:var(--dm)">('+F(nfBurnLeft,0)+' BURN bis voll'+(nfNotActive?', ab Aktivierung':'')+')</span></div>'+
         // Metrik 2 — pool-weiter Kaufdruck
         (nfPoolValid?
           '<div style="font-size:11px;margin-bottom:3px">'+
