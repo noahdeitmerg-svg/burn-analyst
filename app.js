@@ -1398,24 +1398,61 @@ async function resolveSigner(txHash){
   delete signerPending[txHash];
   return null;
 }
+// Fallback for cached trades that have no txHash: fetch the block, find the Swap log in the
+// pool whose recipient matches, take its transactionHash, then resolve tx.from. Cached by block+recipient.
+async function resolveSignerByBlock(blk,recipient){
+  if(!blk||!recipient)return null;
+  var ckey="blk:"+blk+":"+recipient.toLowerCase();
+  if(signerCache[ckey])return signerCache[ckey];
+  if(signerPending[ckey])return null;
+  signerPending[ckey]=1;
+  var hexBlk="0x"+blk.toString(16);
+  for(var i=0;i<RPC_LIST.length;i++){
+    var idx=(rpcIdx+i)%RPC_LIST.length;
+    try{
+      var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},6000);
+      // Get all Swap logs from the pool in this block, match the one for our recipient.
+      var r=await fetch(RPC_LIST[idx],{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jsonrpc:"2.0",method:"eth_getLogs",params:[{address:POOL,topics:[SWAP_SIG],fromBlock:hexBlk,toBlock:hexBlk}],id:78}),signal:ac.signal});
+      clearTimeout(tm);var j=await r.json();
+      if(j.result&&j.result.length){
+        var rlow=recipient.toLowerCase(),txh="";
+        for(var L=0;L<j.result.length;L++){
+          var lg=j.result[L];
+          var recip=lg.topics&&lg.topics.length>2?("0x"+lg.topics[2].slice(26)).toLowerCase():"";
+          if(recip===rlow){txh=lg.transactionHash;break;}
+        }
+        if(txh){
+          var from=await resolveSigner(txh);
+          if(from){signerCache[ckey]=from;try{localStorage.setItem("signer_cache",JSON.stringify(signerCache));}catch(e){}delete signerPending[ckey];return from;}
+        }
+      }
+      break; // logs came back (maybe empty) — don't hammer other RPCs
+    }catch(e){}
+  }
+  delete signerPending[ckey];
+  return null;
+}
 // Resolve signers for the currently visible trades, then re-render if any name was found.
 async function enrichTradeSigners(trades){
   if(!trades||!trades.length)return;
   var changed=false;
   for(var i=0;i<trades.length;i++){
     var t=trades[i];
-    if(!t.txHash||t.signerResolved)continue;
+    if(t.signerResolved)continue;
     // Only bother if the recipient wallet is NOT already a known name (else no need).
     var recipKnown=t.wallet&&ADDR_BOOK[(t.wallet+"").toLowerCase()];
     if(recipKnown){t.signerResolved=true;continue;}
-    var signer=await resolveSigner(t.txHash);
+    var signer=null;
+    if(t.txHash){signer=await resolveSigner(t.txHash);}       // fast path (new trades)
+    else if(t.blk&&t.wallet){signer=await resolveSignerByBlock(t.blk,t.wallet);} // cached trades
     t.signerResolved=true;
     if(signer&&ADDR_BOOK[signer]){
       t.signer=signer;           // store resolved signer
       t.wallet=signer;           // use it as the display wallet → name shows
       changed=true;
     }
-    await new Promise(function(r){setTimeout(r,60);}); // gentle throttle
+    await new Promise(function(r){setTimeout(r,70);}); // gentle throttle
   }
   if(changed){try{renderTrades();}catch(e){}try{tradeCacheSave();}catch(e){}}
 }
