@@ -2358,8 +2358,25 @@ async function scanLiqMap(){
 // ═══ VISUAL DEPTH CHART: BURN distribution across price ranges ═══
 // Horizontal bars per price bucket — instantly shows WHERE (which price) HOW MUCH BURN sits.
 // Current price marked, own positions highlighted, DAO full-range shown separately.
-function renderDepthChart(buckets){
-  var box=$("depthChart");if(!box)return;
+// Standalone Depth-Chart card — renders BURN distribution from the live lmapCache into its own
+// card below the Liquidity Map. If nothing scanned yet, kicks off a scan first.
+function showDepthCard(){
+  var box=$("depthChartCard");if(!box)return;
+  if(lmapCache&&lmapCache.length){
+    renderDepthChart(lmapCache,"depthChartCard");
+  }else{
+    box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Scanne Pool Liquidity Map… <br>einen Moment, dann erscheint der Chart.</div>';
+    try{lmapTs=0;scanLiqMap();}catch(e){}
+    // Poll for the scan to finish, then render.
+    var tries=0;var iv=setInterval(function(){
+      tries++;
+      if(lmapCache&&lmapCache.length){clearInterval(iv);renderDepthChart(lmapCache,"depthChartCard");}
+      else if(tries>30){clearInterval(iv);box.innerHTML='<div style="color:var(--warn);font-size:10px;text-align:center;padding:16px">Scan hat zu lange gedauert. Bitte oben manuell „Scan Pool" drücken, dann hier erneut.</div>';}
+    },1000);
+  }
+}
+function renderDepthChart(buckets,targetId){
+  var box=$(targetId||"depthChart");if(!box)return;
   if(!buckets||!buckets.length){box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst die Pool Liquidity Map scannen lassen.</div>';return;}
   // Sensible range around the current price — not to infinity. Show from a bit below the
   // lowest external LP up to where real concentrated LPs sit (cap ~$1.00 by default).
@@ -2606,6 +2623,8 @@ function renderLmap(buckets){
   $("lmapB").innerHTML=rows||'<tr><td colspan="6" style="color:var(--dm)">No data</td></tr>';
   $("lmapStatus").textContent=Object.keys(activeOwn).length+" active / "+Object.keys(allOwn).length+" total LP providers · "+lpOwners.length+" positions · "+new Date().toLocaleTimeString();
   try{renderDepthChart(buckets);}catch(e){console.log("depthChart err:",e.message);}
+  // Keep the standalone Depth-Chart card in sync too (if it's been opened at least once).
+  try{if($("depthChartCard")&&$("depthChartCard").innerHTML.indexOf("Erst")<0)renderDepthChart(buckets,"depthChartCard");}catch(e){}
 }
 
 // ═══ WALLET TRACKER (isolated module) ═══

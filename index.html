@@ -600,8 +600,19 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
       <button class="btn" onclick="scanLiqMap()" style="font-size:10px">Scan Pool</button>
     </div>
     <div id="lmapSummary" class="mg" style="margin-bottom:10px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
+    <div id="depthChart" style="background:rgba(8,12,22,.5);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:11px 12px;margin-bottom:10px"><div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst die Pool Liquidity Map scannen lassen.</div></div>
     <div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet / Range</th><th>BURN In</th><th>BURN Left</th><th>USDC Now</th><th>If Filled</th><th>Fill</th></tr></thead><tbody id="lmapB"><tr><td colspan="6" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
     <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
+  </div>
+</div>
+
+<!-- ═══ COLLAPSIBLE: BURN Verteilungs-Chart (nutzt Liquidity-Map-Daten) ═══ -->
+<div class="c" style="border-left:3px solid #a78bfa">
+  <div class="col" onclick="tog(this,'sec-depth')">📊 BURN Verteilung (Depth-Chart)</div>
+  <div id="sec-depth" class="col-b">
+    <div style="font-size:10px;color:var(--dm);margin:4px 0 8px">Zeigt visuell, in welchen Preisbereichen wie viel BURN liegt. Nutzt die Daten der Pool Liquidity Map.</div>
+    <button class="btn" onclick="showDepthCard()" style="font-size:10px;margin-bottom:10px">Chart anzeigen / aktualisieren</button>
+    <div id="depthChartCard" style="background:rgba(8,12,22,.5);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:11px 12px"><div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst oben die Pool Liquidity Map scannen, dann hier auf „Chart anzeigen".</div></div>
   </div>
 </div>
 
