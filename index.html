@@ -1055,12 +1055,20 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=20260703c"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(function(reg){
     console.log('SW registered');
+    // Force the SW to check for a newer version on every load (defeats stale cache).
+    try{reg.update();}catch(e){}
+    // If a new SW takes control, reload once so the fresh app.js is used.
+    if(!window._swReloaded){
+      navigator.serviceWorker.addEventListener('controllerchange',function(){
+        if(window._swReloaded)return;window._swReloaded=true;location.reload();
+      });
+    }
     // Subscribe to push if not already
     reg.pushManager.getSubscription().then(function(sub){
       if(sub){console.log('Push already subscribed');window._pushSub=sub;return;}

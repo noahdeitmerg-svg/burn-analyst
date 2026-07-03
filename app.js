@@ -2308,6 +2308,8 @@ async function scanLiqMap(){
     // so the trade simulator can use exact V3 concentrated-liquidity math instead of
     // the coarse bucket approximation. Lb (BURN-unit liquidity) = L_raw / 1e12.
     window._lmapRanges=ranges;window._lmapCurTick=curTick;
+    // Pool reserves + price for the heatmap (BURN above price calibrates to aB, USDC below to aU).
+    try{window._poolAB=aB;window._poolAU=aU;window._lmapP=P;}catch(e){}
     // Cache closed LPs permanently (they never change)
     try{
       var closedLPs=[];
@@ -2443,115 +2445,132 @@ function showDepthCard(){
 // BELOW = support depth (USDC you'd receive selling down to each level). This matches how a
 // trader actually reads a BURN market: resistance above, realizable value below.
 function renderDepthChart(buckets,targetId){
+  // ═══ LIQUIDITY HEATMAP (orderbook-style, Bookmap-inspired) ═══
+  // Vertical price ladder in uniform 1-cent steps. ABOVE the current price only BURN sits
+  // (sell walls — the pool can only hold BURN there); BELOW the price only USDC sits (the
+  // BURN there is already bought; USDC waits as buy support). Bar intensity = amount (heatmap).
+  // Computed EXACTLY from the raw tick ranges (V3 math), calibrated to on-chain reserves.
   var box=$(targetId||"depthChart");if(!box)return;
-  var px=(typeof P!=="undefined"&&P>0)?P:0;
-  if(!px||!lmapCache||!lmapCache.length){
+  var ranges=window._lmapRanges,curTick=window._lmapCurTick;
+  var px=(typeof P!=="undefined"&&P>0)?P:(window._lmapP||0);
+  if(!ranges||!ranges.length||!curTick||!(px>0)){
     box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst die Pool Liquidity Map scannen lassen.</div>';return;}
-  var cents=function(p){return "$"+p.toFixed(3);};
-  // ── ABOVE: sell walls per price step (how much BURN sits in each range going up) ──
-  // Steps: current → +. Use rounded, human levels above the price.
-  var upLevels=[];
-  var step=px<0.2?0.005:(px<0.5?0.01:0.05); // sensible increments
-  var pUp=px;
-  for(var u=0;u<8;u++){
-    var nextUp=Math.round((pUp+step)/step)*step;
-    if(nextUp<=pUp)nextUp=pUp+step;
-    upLevels.push({lo:pUp,hi:nextUp});
-    pUp=nextUp;
-    if(pUp>=px*2.2||pUp>=1)break;
-  }
-  // BURN in each up-range = buyflow BURN between lo and hi (from pool liquidity)
-  function burnInRange(lo,hi){
-    if(!lmapCache)return 0;
-    var tHi=priceToTick(lo),tLo=priceToTick(hi); // higher price = lower tick
-    var burn=0;
-    for(var i=0;i<window._lmapRanges.length;i++){
-      var r=window._lmapRanges[i];if(r.liq<=0)continue;
-      var oL=Math.max(r.tL,tLo),oH=Math.min(r.tH,tHi);
-      if(oL>=oH)continue;
-      burn+=r.liq*(Math.pow(1.0001,oH/2)-Math.pow(1.0001,oL/2))/1e18;
+  function p2t(p){return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
+  // BURN (token1) in tick span [oL,oH]: L·(1.0001^(oH/2)−1.0001^(oL/2))/1e18
+  function burnIn(oL,oH){var s=0;for(var i=0;i<ranges.length;i++){var r=ranges[i];if(r.liq<=0)continue;
+    var a=Math.max(r.tL,oL),b=Math.min(r.tH,oH);if(a>=b)continue;
+    s+=r.liq*(Math.pow(1.0001,b/2)-Math.pow(1.0001,a/2))/1e18;}return s;}
+  // USDC (token0) in tick span [oL,oH]: L·(1.0001^(−oL/2)−1.0001^(−oH/2))/1e6
+  function usdcIn(oL,oH){var s=0;for(var i=0;i<ranges.length;i++){var r=ranges[i];if(r.liq<=0)continue;
+    var a=Math.max(r.tL,oL),b=Math.min(r.tH,oH);if(a>=b)continue;
+    s+=r.liq*(Math.pow(1.0001,-a/2)-Math.pow(1.0001,-b/2))/1e6;}return s;}
+  // ── Build uniform 1-cent price buckets around the price, coarser far above ──
+  var cent=0.01;
+  var loStart=Math.max(0.01,Math.floor((px-0.06)*100)/100);   // ~6 cents below
+  var edges=[];
+  for(var e=loStart;e<px;e+=cent)edges.push(Math.round(e*100)/100);
+  edges.push(px);                                              // exact price boundary
+  var upFine=Math.ceil(px*100)/100;
+  if(upFine-px<0.0005)upFine+=cent;
+  for(var e2=upFine;e2<=Math.min(px+0.14,0.30)+1e-9;e2+=cent)edges.push(Math.round(e2*100)/100);
+  [0.35,0.40,0.50,0.75,1.00].forEach(function(x){if(x>edges[edges.length-1])edges.push(x);});
+  // ── Compute rows: BURN above price, USDC below ──
+  var rowsUp=[],rowsDn=[],rawB=0,rawU=0;
+  for(var bi=0;bi<edges.length-1;bi++){
+    var pLo=edges[bi],pHi=edges[bi+1];
+    var tHi=p2t(pLo),tLo=p2t(pHi);      // higher price = lower tick
+    if(pLo>=px-1e-9){                    // fully ABOVE price → BURN only
+      var bAmt=burnIn(Math.max(tLo,-887272),Math.min(tHi,curTick));
+      if(bAmt>0.5){rowsUp.push({lo:pLo,hi:pHi,v:bAmt});rawB+=bAmt;}
+    }else if(pHi<=px+1e-9){              // fully BELOW price → USDC only
+      var uAmt=usdcIn(Math.max(tLo,curTick),Math.min(tHi,887272));
+      if(uAmt>0.5){rowsDn.push({lo:pLo,hi:pHi,v:uAmt});rawU+=uAmt;}
     }
-    return burn;
   }
-  var upRows=[];var maxUpBurn=0;
-  for(var u2=0;u2<upLevels.length;u2++){
-    var lv=upLevels[u2];
-    var b=burnInRange(lv.lo,lv.hi);
-    var usdcToBuy=buyflowEstimate(lv.lo,lv.hi).usdc;
-    upRows.push({lo:lv.lo,hi:lv.hi,burn:b,usdc:usdcToBuy});
-    if(b>maxUpBurn)maxUpBurn=b;
+  // ── Calibrate to on-chain reserves (all pool BURN sits above price, all USDC below) ──
+  var cB=(window._poolAB>0&&rawB>0)?window._poolAB/rawB:1;
+  var cU=(window._poolAU>0&&rawU>0)?window._poolAU/rawU:1;
+  var i2;for(i2=0;i2<rowsUp.length;i2++)rowsUp[i2].v*=cB;
+  for(i2=0;i2<rowsDn.length;i2++)rowsDn[i2].v*=cU;
+  var sumB=0,sumU=0,maxB=0,maxU=0;
+  for(i2=0;i2<rowsUp.length;i2++){sumB+=rowsUp[i2].v;if(rowsUp[i2].v>maxB)maxB=rowsUp[i2].v;}
+  for(i2=0;i2<rowsDn.length;i2++){sumU+=rowsDn[i2].v;if(rowsDn[i2].v>maxU)maxU=rowsDn[i2].v;}
+  if(maxB<=0)maxB=1;if(maxU<=0)maxU=1;
+  // My positions (stars on rows that overlap my active LPs)
+  function myRow(lo,hi){try{for(var m=0;m<LP.length;m++){if(!LP[m].closed&&LP[m].hi>lo&&LP[m].lo<hi)return true;}}catch(e){}return false;}
+  function fmtAmt(v,isU){if(isU)return v>=1000?"$"+(v/1000).toFixed(1)+"k":"$"+F(v,0);return v>=1000?(v/1000).toFixed(1)+"k":F(v,0);}
+  function priceLbl(lo,hi){var d=(lo<0.1||hi<0.1)?3:(hi-lo<0.011?(lo===Math.round(lo*100)/100?2:3):2);
+    return "$"+lo.toFixed(hi-lo<0.011&&Math.abs(lo*100-Math.round(lo*100))>0.001?4:2)+"–"+hi.toFixed(Math.abs(hi*100-Math.round(hi*100))>0.001?4:2);}
+  // ── Render: premium orderbook heatmap v2 — framed panel, section headers, 3D bars ──
+  var mono="font-family:'Geist Mono',ui-monospace,monospace";
+  if(!document.getElementById("hmStyle")){
+    var st=document.createElement("style");st.id="hmStyle";
+    st.textContent="@keyframes hmPulse{0%,100%{box-shadow:0 0 4px rgba(249,115,22,.8),0 0 10px rgba(249,115,22,.35)}50%{box-shadow:0 0 7px rgba(249,115,22,1),0 0 18px rgba(249,115,22,.55)}}@media(prefers-reduced-motion:reduce){.hmDot{animation:none!important}}";
+    document.head.appendChild(st);
   }
-  // ── BELOW: support depth (USDC received selling down to each level) ──
-  var downLevels=[];
-  var pDn=px;
-  for(var d=0;d<8;d++){
-    var nextDn=Math.floor((pDn-step)/step)*step;
-    if(nextDn>=pDn)nextDn=pDn-step;
-    if(nextDn<=0)break;
-    downLevels.push({hi:pDn,lo:nextDn});
-    pDn=nextDn;
-    if(pDn<=px*0.5)break;
-  }
-  var downRows=[];var maxDnUsdc=0;var prevUsdc=0;
-  for(var d2=0;d2<downLevels.length;d2++){
-    var lv2=downLevels[d2];
-    var cum=sellDownToPrice(lv2.lo); // USDC selling from current down to lv2.lo
-    var stepUsdc=Math.max(0,cum.usdc-prevUsdc);
-    var stepBurn=cum.burn; // cumulative burn to reach here
-    downRows.push({lo:lv2.lo,hi:lv2.hi,usdc:stepUsdc,cumUsdc:cum.usdc,cumBurn:cum.burn});
-    prevUsdc=cum.usdc;
-    if(stepUsdc>maxDnUsdc)maxDnUsdc=stepUsdc;
-  }
-  if(maxUpBurn<=0)maxUpBurn=1;if(maxDnUsdc<=0)maxDnUsdc=1;
-
-  // ── RENDER ──
-  var html='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Marktstruktur um den aktuellen Preis</div>';
-  // ABOVE (reverse so highest price on top)
-  html+='<div style="font-size:8px;color:var(--dm);margin-bottom:3px;display:flex;justify-content:space-between"><span>▲ WIDERSTAND (Verkaufswände) — BURN das gekauft werden muss</span></div>';
-  for(var ur=upRows.length-1;ur>=0;ur--){
-    var r=upRows[ur];
-    var pct=Math.max(1.5,r.burn/maxUpBurn*100);
-    var bstr=r.burn>=1000?(r.burn/1000).toFixed(1)+"k":F(r.burn,0);
-    var ustr=r.usdc>=1000?"$"+(r.usdc/1000).toFixed(1)+"k":"$"+F(r.usdc,0);
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'+
-      '<span style="font-size:8px;color:var(--tx);width:88px;text-align:right;font-family:Geist Mono,monospace;flex-shrink:0">'+cents(r.lo)+'–'+cents(r.hi)+'</span>'+
-      '<div style="flex:1;height:14px;background:rgba(8,12,22,.5);border-radius:3px;overflow:hidden;position:relative">'+
-        '<div style="height:100%;width:'+pct.toFixed(1)+'%;background:linear-gradient(90deg,#34d399,#22d3ee);border-radius:3px"></div>'+
-        '<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:7.5px;color:var(--tx);font-family:Geist Mono,monospace;text-shadow:0 0 3px #000">'+bstr+' BURN</span>'+
+  // A single ladder row: price label | 3D bar | amount. Bar has gradient body, top edge
+  // highlight (depth), and glow scaled to weight — the walls literally light up.
+  function row(lbl,star,rel,amtHtml,cR,cG,cB,shareTxt){
+    var pct=Math.max(3,Math.min(100,Math.sqrt(rel)*100));
+    var a=0.32+0.68*Math.sqrt(rel);
+    var glow=rel>0.55?("box-shadow:0 0 "+(6+10*rel).toFixed(0)+"px rgba("+cR+","+cG+","+cB+","+(0.25+0.3*rel).toFixed(2)+");"):"";
+    return '<div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">'+
+      '<span style="font-size:8.5px;color:var(--tx);width:74px;text-align:right;'+mono+';flex-shrink:0;letter-spacing:-.2px">'+lbl+star+'</span>'+
+      '<div style="flex:1;height:16px;background:rgba(5,8,16,.7);border-radius:3px;overflow:hidden;border:1px solid rgba(48,54,68,.45);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)">'+
+        '<div style="height:100%;width:'+pct.toFixed(1)+'%;border-radius:2px;'+glow+
+          'background:linear-gradient(180deg,rgba('+cR+','+cG+','+cB+','+Math.min(1,a+0.15).toFixed(2)+') 0%,rgba('+cR+','+cG+','+cB+','+(a*0.55).toFixed(2)+') 100%);position:relative">'+
+          '<div style="position:absolute;top:0;left:0;right:0;height:1px;background:rgba(255,255,255,.25)"></div>'+
+        '</div>'+
       '</div>'+
-      '<span style="font-size:7.5px;color:#a78bfa;width:44px;text-align:right;flex-shrink:0;font-family:Geist Mono,monospace">'+ustr+'</span>'+
+      '<span style="font-size:8.5px;width:76px;text-align:right;'+mono+';flex-shrink:0">'+amtHtml+
+        (shareTxt?'<br><span style="font-size:6.5px;color:var(--dm)">'+shareTxt+'</span>':'')+'</span>'+
     '</div>';
   }
-  // CURRENT PRICE divider
-  html+='<div style="display:flex;align-items:center;gap:8px;margin:7px 0;padding:4px 8px;background:linear-gradient(90deg,rgba(245,158,11,.15),rgba(245,158,11,.05));border:1px solid rgba(245,158,11,.4);border-radius:6px">'+
-    '<span style="font-size:11px;color:var(--o)">●</span>'+
-    '<span style="font-size:11px;color:var(--o);font-weight:700;font-family:Geist Mono,monospace">'+cents(px)+'</span>'+
-    '<span style="font-size:8.5px;color:var(--tx)">AKTUELLER PREIS</span>'+
-  '</div>';
-  // BELOW
-  html+='<div style="font-size:8px;color:var(--dm);margin-bottom:3px">▼ SUPPORT-TIEFE — USDC-Erlös wenn du bis hier runter verkaufst</div>';
-  for(var dr=0;dr<downRows.length;dr++){
-    var r2=downRows[dr];
-    var pct2=Math.max(1.5,r2.usdc/maxDnUsdc*100);
-    var ustr2=r2.usdc>=1000?"$"+(r2.usdc/1000).toFixed(1)+"k":"$"+F(r2.usdc,0);
-    var cumStr=r2.cumUsdc>=1000?"$"+(r2.cumUsdc/1000).toFixed(1)+"k":"$"+F(r2.cumUsdc,0);
-    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">'+
-      '<span style="font-size:8px;color:var(--tx);width:88px;text-align:right;font-family:Geist Mono,monospace;flex-shrink:0">'+cents(r2.hi)+'–'+cents(r2.lo)+'</span>'+
-      '<div style="flex:1;height:14px;background:rgba(8,12,22,.5);border-radius:3px;overflow:hidden;position:relative">'+
-        '<div style="height:100%;width:'+pct2.toFixed(1)+'%;background:linear-gradient(90deg,#f59e0b,#ef4444);border-radius:3px"></div>'+
-        '<span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:7.5px;color:var(--tx);font-family:Geist Mono,monospace;text-shadow:0 0 3px #000">'+ustr2+'</span>'+
-      '</div>'+
-      '<span style="font-size:7.5px;color:var(--g);width:52px;text-align:right;flex-shrink:0;font-family:Geist Mono,monospace" title="kumuliert">Σ'+cumStr+'</span>'+
-    '</div>';
+  function secHead(txt,color){
+    return '<div style="display:flex;align-items:center;gap:7px;margin:7px 0 5px">'+
+      '<span style="font-size:7.5px;color:'+color+';text-transform:uppercase;letter-spacing:1.4px;font-weight:700">'+txt+'</span>'+
+      '<div style="flex:1;height:1px;background:linear-gradient(90deg,'+color+'33,transparent)"></div></div>';
   }
-  // Summary
-  var totalDown=downRows.length?downRows[downRows.length-1].cumUsdc:0;
-  var totalUpBurn=0;for(var s3=0;s3<upRows.length;s3++)totalUpBurn+=upRows[s3].burn;
-  html+='<div style="border-top:1px solid rgba(48,54,68,.4);margin-top:8px;padding-top:7px;display:flex;justify-content:space-between;font-size:8.5px">'+
-    '<span style="color:var(--tx)">▲ bis '+cents(upRows.length?upRows[upRows.length-1].hi:px)+': <b style="color:var(--cy)">'+(totalUpBurn>=1000?(totalUpBurn/1000).toFixed(0)+"k":F(totalUpBurn,0))+'</b> BURN Wand</span>'+
-    '<span style="color:var(--tx)">▼ Support: <b style="color:var(--g)">'+(totalDown>=1000?"$"+(totalDown/1000).toFixed(1)+"k":"$"+F(totalDown,0))+'</b></span>'+
-  '</div>';
-  html+='<div style="font-size:7.5px;color:var(--dm);margin-top:6px;text-align:center;line-height:1.5">Oben: BURN-Menge die abverkauft werden muss, damit der Preis steigt (grün) + nötiger Kaufdruck (lila).<br>Unten: USDC das du bekämst, wenn du bis zu diesem Preis runter verkaufst (Σ = kumuliert).</div>';
+  var html='<div style="background:linear-gradient(180deg,rgba(15,20,34,.4),rgba(8,12,22,.15));border:1px solid rgba(48,54,68,.5);border-radius:10px;padding:11px 12px 10px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">'+
+      '<span style="font-size:10px;color:#e2e8f0;text-transform:uppercase;letter-spacing:1.4px;font-weight:700">Liquidity Heatmap</span>'+
+      '<span style="font-size:7px;color:var(--dm);'+mono+'">on-chain · kalibriert</span></div>'+
+    '<div style="font-size:7.5px;color:var(--dm);margin-bottom:2px">Intensit\u00e4t = Menge \u00b7 <span style="color:var(--cy)">\u2605 meine Range</span></div>';
+  html+=secHead("\u25b2 Widerstand \u2014 BURN-Verkaufsw\u00e4nde","#fb923c");
+  var up=rowsUp.slice().reverse();
+  for(i2=0;i2<up.length;i2++){
+    var r=up[i2],rel=r.v/maxB;
+    var star=myRow(r.lo,r.hi)?' <span style="color:var(--cy)">\u2605</span>':'';
+    var amt='<span style="color:#fdba74">'+fmtAmt(r.v,false)+'</span><span style="color:var(--dm);font-size:7px"> B</span>';
+    var share=sumB>0?((r.v/sumB*100).toFixed(0)+"%"):"";
+    html+=row(priceLbl(r.lo,r.hi),star,rel,amt,249,115,22,share);
+  }
+  // Live price hub — pulsing dot + glowing badge (echoes the gauge rings)
+  html+='<div style="display:flex;align-items:center;gap:9px;margin:9px 0">'+
+    '<div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(249,115,22,.7))"></div>'+
+    '<div style="display:flex;align-items:center;gap:6px;padding:3px 11px;border:1px solid rgba(249,115,22,.55);border-radius:999px;background:rgba(12,10,8,.9);box-shadow:0 0 16px rgba(249,115,22,.2),inset 0 0 8px rgba(249,115,22,.07)">'+
+      '<span class="hmDot" style="width:6px;height:6px;border-radius:50%;background:#f97316;animation:hmPulse 2s ease-in-out infinite"></span>'+
+      '<span style="font-size:11px;color:#fdba74;font-weight:700;'+mono+'">$'+px.toFixed(4)+'</span>'+
+      '<span style="font-size:7px;color:var(--dm);text-transform:uppercase;letter-spacing:.8px">Spot</span>'+
+    '</div>'+
+    '<div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(249,115,22,.7),transparent)"></div></div>';
+  html+=secHead("\u25bc Support \u2014 USDC-Kauftiefe","#34d399");
+  var dn=rowsDn.slice().reverse();
+  for(i2=0;i2<dn.length;i2++){
+    var r2=dn[i2],rel2=r2.v/maxU;
+    var star2=myRow(r2.lo,r2.hi)?' <span style="color:var(--cy)">\u2605</span>':'';
+    var amt2='<span style="color:#6ee7b7">'+fmtAmt(r2.v,true)+'</span>';
+    var share2=sumU>0?((r2.v/sumU*100).toFixed(0)+"%"):"";
+    html+=row(priceLbl(r2.lo,r2.hi),star2,rel2,amt2,52,211,153,share2);
+  }
+  html+='<div style="display:flex;gap:8px;margin-top:10px">'+
+    '<div style="flex:1;text-align:center;padding:5px 4px;border:1px solid rgba(249,115,22,.35);border-radius:7px;background:rgba(249,115,22,.06)">'+
+      '<div style="font-size:11px;color:#fdba74;font-weight:700;'+mono+'">'+(sumB>=1000?(sumB/1000).toFixed(0)+"k":F(sumB,0))+'</div>'+
+      '<div style="font-size:6.5px;color:var(--dm);text-transform:uppercase;letter-spacing:.7px">BURN \u00fcber Preis</div></div>'+
+    '<div style="flex:1;text-align:center;padding:5px 4px;border:1px solid rgba(52,211,153,.35);border-radius:7px;background:rgba(52,211,153,.06)">'+
+      '<div style="font-size:11px;color:#6ee7b7;font-weight:700;'+mono+'">$'+(sumU>=1000?(sumU/1000).toFixed(1)+"k":F(sumU,0))+'</div>'+
+      '<div style="font-size:6.5px;color:var(--dm);text-transform:uppercase;letter-spacing:.7px">USDC Support</div></div>'+
+  '</div></div>';
   box.innerHTML=html;
 }
 function renderDepthChart_OLD(buckets,targetId){
