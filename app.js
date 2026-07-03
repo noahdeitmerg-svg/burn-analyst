@@ -6047,6 +6047,69 @@ function updateSysStatus(){
 loadOffline();
 if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
 ptfLoad();
+// ── ONE-TIME ETH COST-BASIS FIX (v3 — verified against full timeline) ──
+// Reconstruction (verified to 4 decimals): app amount 1.401147 = code-default 0.856702 (which
+// ALREADY includes the May-3 buy) + the 4 ledger-tracked June buys (0.5112) + the small Jun-29
+// buy 0.0333 that entered the AMOUNT but never got its cost booked. So exactly ONE buy's cost
+// is missing: $58.21. Correct total = $2888.21 → avgEntry ≈ $2061 (down from the old $2344 —
+// the cheap June buys DID pull the average down; the app's $2020 was slightly TOO low).
+try{
+  if(localStorage.getItem("eth_cost_fix_v4")!=="1"){
+    for(var _ei=0;_ei<ptfAssets.length;_ei++){
+      if(ptfAssets[_ei].id==="eth"){
+        var _e=ptfAssets[_ei];
+        // DYNAMIC rebuild from the ledger (robust against any prior wrong fix and against new
+        // buys booked meanwhile): verified pre-June base $2008.50 (0.856702 ETH @ ~$2344, incl.
+        // the May-3 buy) + every ETH buy booked in the cost-basis ledger + the ONE un-booked
+        // Jun-29 buy ($58.21 — its amount was absorbed on-chain but its cost never was).
+        var _ledgerSum=0;
+        try{for(var _li=0;_li<ptfLedger.length;_li++){var _le=ptfLedger[_li];
+          if(_le&&(_le.asset+"").toLowerCase()==="eth"&&_le.total>0)_ledgerSum+=_le.total;}}catch(e){}
+        _e.totalCost=2008.50+_ledgerSum+58.21;
+        if(_e.amount>0)_e.avgEntry=_e.totalCost/_e.amount;
+        console.log("ETH fix v4: ledgerSum=$"+_ledgerSum.toFixed(2)+" → totalCost=$"+_e.totalCost.toFixed(2)+", avgEntry=$"+_e.avgEntry.toFixed(2));
+        break;
+      }
+    }
+    localStorage.setItem("eth_cost_fix_v4","1");
+    // Neutralize all earlier fix flags so none can apply on any device state.
+    try{localStorage.setItem("eth_cost_fix_20260703","1");}catch(e){}
+    try{localStorage.setItem("eth_cost_rebuild_v2","1");}catch(e){}
+    try{localStorage.setItem("eth_cost_fix_v3","1");}catch(e){}
+    try{ptfSave();}catch(e){}
+  }
+}catch(e){console.log("eth cost fix v4 err:",e.message);}
+// ── ONE-TIME SNAPSHOT SPIKE CLEANUP ──
+// The value timeline had spikes from the ETH amount flapping between the stored (0.857) and
+// on-chain (1.401) reading — single snapshots ~$940 above the baseline, then back. Those are
+// artifacts, not real value moves. Remove SINGLE-POINT outliers: a point that deviates >15%
+// from BOTH neighbors while the neighbors agree with each other (<10% apart). A genuine level
+// change (like the final, correct jump to $4.4k) keeps its new level across many points and is
+// therefore NOT removed. Runs once.
+try{
+  if(localStorage.getItem("snap_spike_clean_v1")!=="1"&&ptfSnapshots&&ptfSnapshots.length>4){
+    var _cleaned=[],_removed=0;
+    for(var _si=0;_si<ptfSnapshots.length;_si++){
+      var _cur=ptfSnapshots[_si];
+      var _cv=Array.isArray(_cur)?_cur[1]:_cur.v;
+      var _pv=null,_nv=null;
+      if(_si>0){var _p=ptfSnapshots[_si-1];_pv=Array.isArray(_p)?_p[1]:_p.v;}
+      if(_si<ptfSnapshots.length-1){var _n=ptfSnapshots[_si+1];_nv=Array.isArray(_n)?_n[1]:_n.v;}
+      var _isSpike=false;
+      if(_pv&&_nv&&_pv>0&&_nv>0){
+        var _dP=Math.abs(_cv-_pv)/_pv, _dN=Math.abs(_cv-_nv)/_nv, _dPN=Math.abs(_pv-_nv)/_pv;
+        if(_dP>0.15&&_dN>0.15&&_dPN<0.10)_isSpike=true;
+      }
+      if(_isSpike){_removed++;}else{_cleaned.push(_cur);}
+    }
+    if(_removed>0){
+      ptfSnapshots=_cleaned;
+      try{localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));}catch(e){}
+      console.log("Snapshot cleanup: removed "+_removed+" spike artifacts");
+    }
+    localStorage.setItem("snap_spike_clean_v1","1");
+  }
+}catch(e){console.log("snap cleanup err:",e.message);}
 // One-time BTC migration v4: HARD RESET — recreates BTC asset if missing, clears all BTC ledger entries, sets clean state
 try{
   var migrated=localStorage.getItem("btc_migration_v4");
