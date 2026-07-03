@@ -983,10 +983,17 @@ function render(){
       // Is this position even ACTIVE yet? A single-sided BURN LP only starts filling once the
       // price reaches its lower bound (lo). If price is still BELOW lo, it holds 100% BURN and
       // is "waiting" — show how much buy-pressure is needed just to ACTIVATE it (reach lo).
-      var nfNotActive=(Pnf<LP[bestNf].lo);
+      // "Not active" = price still below the position's lower bound. Use a tiny tolerance so a
+      // sub-tick rounding difference (e.g. price 0.17640 vs lo 0.17642) doesn't flip it to
+      // "not active" when it's effectively at the boundary.
+      // "Not active" = price still below the position's lower bound. Use the MORE CURRENT price:
+      // Pnf (pool-derived) can be stale when offline, while P (spot from DexScreener) may be fresher.
+      // Take the higher of the two so a position that's actually active isn't shown as "waiting".
+      var pActive=Math.max(Pnf,P);
+      var nfNotActive=(pActive < LP[bestNf].lo*0.999);
       var nfActBuy=0,nfActValid=false,nfActDist=0;
       if(nfNotActive){
-        nfActDist=((LP[bestNf].lo-Pnf)/Pnf*100);
+        nfActDist=((LP[bestNf].lo-pActive)/pActive*100);
         var nfActEst=buyflowEstimate(P,LP[bestNf].lo);
         nfActBuy=nfActEst.usdc;
         if(!isFinite(nfActBuy)||nfActBuy<0)nfActBuy=0;
@@ -1002,7 +1009,7 @@ function render(){
         // If not active yet: show the activation threshold (buy-pressure to reach lo) FIRST.
         (nfNotActive?
           '<div style="font-size:11px;margin-bottom:3px;background:rgba(251,191,36,.08);border-left:2px solid var(--warn);padding:3px 8px;border-radius:0 4px 4px 0">'+
-            '<span style="color:var(--warn)">➜ Aktiviert sich bei $'+LP[bestNf].lo.toFixed(3)+'</span> '+
+            '<span style="color:var(--warn)">➜ Aktiviert sich bei $'+LP[bestNf].lo.toFixed(4)+'</span> '+
             '<span style="color:var(--tx)">(↑'+nfActDist.toFixed(1)+'%)</span>'+
             (nfActValid?'<br><span style="color:var(--tx)">nötiger Kaufdruck bis dahin:</span> <b style="color:var(--warn)">$'+F(nfActBuy,0)+'</b>':'')+'</div>'
           :'')+
@@ -1328,6 +1335,7 @@ function tradeCacheLoad(){
     if(!c||!c.trades||!Array.isArray(c.trades)||c.trades.length===0)return false;
     allTrades=c.trades;
     tradeOldestFetched=c.oldestBlock||0;
+    dedupeTrades(); // clean any duplicates that got saved by older buggy merge logic
     console.log("TRADE CACHE: hydrated "+allTrades.length+" trades, oldest block "+tradeOldestFetched);
     return true;
   }catch(e){console.log("trade cache load err:",e.message);return false;}
@@ -1376,6 +1384,22 @@ async function tradeAutoBackfill(){
   tradeBackfillRunning=false;
 }
 
+// Unique key for a trade — txHash+logIndex is globally unique on-chain (one swap event = one key).
+// Falls back to block+amounts for legacy cached trades that predate txHash storage.
+function tradeKey(t){
+  if(t.txHash)return t.txHash+":"+(t.logIdx||"0");
+  return t.blk+":"+Math.round(t.burn)+":"+Math.round(t.usdc*100);
+}
+// Remove duplicate trades in-place, keeping the first occurrence (newest, since list is desc).
+function dedupeTrades(){
+  var seen={},out=[];
+  for(var i=0;i<allTrades.length;i++){
+    var k=tradeKey(allTrades[i]);
+    if(seen[k])continue;
+    seen[k]=1;out.push(allTrades[i]);
+  }
+  if(out.length!==allTrades.length)allTrades=out;
+}
 function decodeSwap(log,latest){
   var data=log.data||"";if(data.length<258)return null;
   var a0=BigInt("0x"+data.slice(2,66)),a1=BigInt("0x"+data.slice(66,130));
@@ -1386,7 +1410,7 @@ function decodeSwap(log,latest){
   var secAgo=(latest-blk)*0.26,minAgo=Math.round(secAgo/60);
   var wallet=log.topics&&log.topics.length>2?"0x"+log.topics[2].slice(26):"";
   return{isBuy:isBuy,burn:Math.abs(burn),usdc:Math.abs(usdc),price:Math.abs(burn)>0?Math.abs(usdc)/Math.abs(burn):0,
-    minAgo:minAgo,blk:blk,wallet:wallet,txHash:log.transactionHash||""};}
+    minAgo:minAgo,blk:blk,wallet:wallet,txHash:log.transactionHash||"",logIdx:log.logIndex||"0"};}
 
 // ─── SIGNER RESOLUTION (match the server) ───
 // The Swap event's recipient (topics[2]) is often a router/receiver wallet, not the person.
@@ -1606,6 +1630,7 @@ async function fetchTrades(){
       // First-ever load (no cache hydrated)
       allTrades=[];
       for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
+      dedupeTrades();
       renderTrades();
       whaleFirstLoad=false;
       var initDays=Math.round(BLOCK_CHUNK*0.26/86400);
@@ -1614,9 +1639,13 @@ async function fetchTrades(){
       // Kick off backfill to reach target depth
       setTimeout(function(){tradeAutoBackfill();},3000);
     }else{
-      // Merge new trades at front, dedupe by block
+      // Merge new trades at front, dedupe by unique key (txHash+logIndex, not just block —
+      // several swaps can share a block, and overlapping fetches re-return the same logs).
       var added=0;
-      for(var i2=0;i2<logs.length;i2++){var t2=decodeSwap(logs[i2],tradeLatest);if(t2&&t2.blk>topBlk){allTrades.unshift(t2);added++;}}
+      var existingKeys={};
+      for(var ek=0;ek<allTrades.length;ek++)existingKeys[tradeKey(allTrades[ek])]=1;
+      for(var i2=0;i2<logs.length;i2++){var t2=decodeSwap(logs[i2],tradeLatest);if(t2&&!existingKeys[tradeKey(t2)]){allTrades.unshift(t2);existingKeys[tradeKey(t2)]=1;added++;}}
+      dedupeTrades();
       // Update time estimates
       for(var u=0;u<allTrades.length;u++){allTrades[u].minAgo=Math.round((tradeLatest-allTrades[u].blk)*0.26/60);}
       var top1="";if(allTrades.length>0)top1=tradeRow(allTrades[0]);
@@ -1650,6 +1679,7 @@ async function fetchTradesOlder(){
     tradeOldestFetched=from;
     logs.reverse();
     for(var i=0;i<logs.length;i++){var t=decodeSwap(logs[i],tradeLatest);if(t)allTrades.push(t);}
+    dedupeTrades();
     renderTrades();
     tradeCacheSave();
     var days=Math.round((tradeLatest-from)*0.26/86400);
@@ -1911,6 +1941,13 @@ function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math
 async function scanLiqMap(){
   // Cache lifetime: 4 min (shorter than 5-min auto-scan interval)
   if(lmapCache&&lmapTs>Date.now()-240000){renderLmap(lmapCache);return;}
+  // Concurrency guard: never run two scans at once (auto-scan + manual could collide → slow/duplicate work).
+  if(window._lmapScanning){console.log("scanLiqMap: already running, skipped");return;}
+  window._lmapScanning=true;
+  // Safety net: if a scan hangs (RPC timeout), auto-release the guard after 90s so future
+  // scans aren't blocked forever.
+  try{clearTimeout(window._lmapGuardTimer);}catch(e){}
+  window._lmapGuardTimer=setTimeout(function(){window._lmapScanning=false;},90000);
   var hasCached=window._lpOwners&&window._lpOwners.length>0;
   if(!hasCached){
     $("lmapB").innerHTML='<tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr><tr><td colspan="6"><span class="skel" style="width:100%;height:14px"></span></td></tr>';
@@ -2353,6 +2390,8 @@ async function scanLiqMap(){
       $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
     }
     $("lmapStatus").textContent="";}
+  window._lmapScanning=false;
+  try{clearTimeout(window._lmapGuardTimer);}catch(e){}
 }
 
 // ═══ VISUAL DEPTH CHART: BURN distribution across price ranges ═══
@@ -4741,6 +4780,10 @@ function loadOffline(){try{var c=JSON.parse(localStorage.getItem("burn_cache"));
   $("main").classList.remove("hid");render();
   var ago=Math.round((Date.now()-(c.ts||0))/60000);
   $("astat").innerHTML='<span style="color:var(--mt)">Offline · last data '+ago+'m ago</span>';
+  // Also flip the LIVE badge — it must NOT show green "✓ LIVE" while we're on stale cached data.
+  try{$("dSrc").innerHTML=TG("◇ Offline","#fb923c");}catch(e){}
+  // The chart's "LIVE" pill (in HTML) is stale too; grey it out if it exists.
+  try{var lp=$("sparkLive");if(lp)lp.innerHTML='<span style="color:var(--mt)">◇ Cache</span>';}catch(e){}
   return true;}catch(e){return false;}}
 
 // ═══ PULL-TO-REFRESH ═══
@@ -4762,6 +4805,76 @@ function ptfSave(){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAsset
 //   grows but cost stays flat → fake gains. Instead avgEntry is recomputed from the new amount
 //   ONLY if no dialog mechanism exists, by holding totalCost constant (conservative).
 // Returns true if the asset was modified.
+// ─── PENDING BUY-PRICE QUEUE ───
+// When a ledger balance increases (a deposit/buy) but we don't know the buy price, we queue it and
+// keep prompting — on detection AND on every app start — until the user enters a price. This stops
+// silent un-priced buys from messing up avgEntry / gains.
+var pendingPrices=[];
+try{pendingPrices=JSON.parse(localStorage.getItem("pending_prices")||"[]");}catch(e){pendingPrices=[];}
+function savePendingPrices(){try{localStorage.setItem("pending_prices",JSON.stringify(pendingPrices));}catch(e){}}
+function queuePendingPrice(symbol,addedAmount,contract){
+  // Merge into an existing pending entry for the same symbol (multiple small deposits → one prompt).
+  for(var i=0;i<pendingPrices.length;i++){
+    if(pendingPrices[i].symbol===symbol){pendingPrices[i].amount+=addedAmount;savePendingPrices();return;}
+  }
+  pendingPrices.push({symbol:symbol,amount:addedAmount,contract:contract||"",ts:Date.now()});
+  savePendingPrices();
+}
+var _processingPending=false;
+// Manually log a missed ETH buy (e.g. an ETH transfer the auto-detection didn't catch).
+// Asks for amount + price and books it into the cost basis. Callable anytime.
+function ethKaufNachtragen(){
+  var eth=null;for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="eth"){eth=ptfAssets[i];break;}}
+  if(!eth){alert("Kein ETH-Asset gefunden.");return;}
+  var curP=eth.price>0?eth.price:0;
+  var amtIn=prompt("💰 ETH-Kauf nachtragen\n\nWie viel ETH hast du gekauft/erhalten?\n\n(Aktuelle Gesamtmenge: "+F(eth.amount,6)+" ETH)","");
+  if(amtIn===null)return;
+  var amt=parseFloat((amtIn||"").replace(",","."));
+  if(!(amt>0)){alert("Ungültige Menge.");return;}
+  var prIn=prompt("Zu welchem Preis (USD pro ETH)?"+(curP>0?"\n\nAktueller Kurs: $"+curP.toFixed(2):""),curP>0?curP.toFixed(2):"");
+  if(prIn===null)return;
+  var pr=parseFloat((prIn||"").replace(",","."));
+  if(!(pr>0)){alert("Ungültiger Preis.");return;}
+  eth.totalCost=(eth.totalCost||0)+amt*pr;
+  if(eth.amount>0)eth.avgEntry=eth.totalCost/eth.amount;
+  try{ptfSave();ptfRenderTable();}catch(e){}
+  alert("✓ Eingetragen: "+F(amt,6)+" ETH @ $"+pr.toFixed(2)+"\nNeuer Ø-Einstieg: $"+eth.avgEntry.toFixed(2));
+}
+function processPendingPrices(){
+  if(_processingPending)return;
+  if(!pendingPrices.length)return;
+  _processingPending=true;
+  // Ask for the oldest pending entry.
+  var p=pendingPrices[0];
+  var asset=null;
+  for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].symbol===p.symbol){asset=ptfAssets[i];break;}}
+  var curPrice=asset&&asset.price>0?asset.price:0;
+  var hint=curPrice>0?("\n\nAktueller Kurs: $"+curPrice.toFixed(2)):"";
+  var msg="💰 Einkaufspreis eintragen\n\nDu hast "+F(p.amount,p.amount<10?4:2)+" "+p.symbol+" erhalten.\nZu welchem Preis (USD pro "+p.symbol+") hast du gekauft?"+hint+"\n\n(Leer lassen = später fragen)";
+  var input=prompt(msg,curPrice>0?curPrice.toFixed(2):"");
+  _processingPending=false;
+  if(input===null||input.trim()===""){
+    // User dismissed — keep it in the queue, ask again next start.
+    return;
+  }
+  var price=parseFloat(input.replace(",","."));
+  if(!(price>0)){
+    // Invalid → keep in queue, try again.
+    alert("Ungültiger Preis — ich frage später nochmal.");
+    return;
+  }
+  // Apply the buy price properly (average it in).
+  if(asset){
+    var bought=p.amount;
+    var addCost=bought*price;
+    asset.totalCost=(asset.totalCost||0)+addCost;
+    if(asset.amount>0)asset.avgEntry=asset.totalCost/asset.amount;
+    try{ptfSave();ptfRenderTable();}catch(e){}
+  }
+  // Remove this entry, then continue with the next pending one.
+  pendingPrices.shift();savePendingPrices();
+  if(pendingPrices.length){setTimeout(processPendingPrices,400);}
+}
 function ptfSafeSetAmount(asset,newAmount,opts){
   opts=opts||{};
   if(!asset||!(newAmount>0))return false;
@@ -4896,6 +5009,8 @@ function ptfDetectBalances(){
               // Safe update: on decrease scale cost down; on increase hold cost (avgEntry recomputed).
               // Prevents fake gains from un-priced buys. Real buy price comes via DCA dialog.
               ptfSafeSetAmount(a,bal,{amountOnly:true});
+              // If this was an INCREASE (deposit/buy), queue a price prompt so we ask for the buy price.
+              if(bal>oldA){queuePendingPrice(a.symbol,bal-oldA,a.contract);}
               console.log("PTF balance: "+a.symbol+" "+oldA+" → "+bal+" (cost basis preserved: $"+(a.totalCost||0).toFixed(2)+")");
               changed=true;updates++;
             }
@@ -4976,6 +5091,12 @@ function ptfDetectLedgerBalances(){
         if(ptfLastBalances.eth===0&&ptfLastBalances.btc===0){
           var ea=null,ba=null;
           for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="eth")ea=ptfAssets[i];if(ptfAssets[i].id==="btc")ba=ptfAssets[i];}
+          // If the on-chain ETH balance is HIGHER than the stored amount, that's an un-priced buy/
+          // deposit that happened while the app wasn't tracking (e.g. an ETH transfer in). Queue a
+          // price prompt for the difference instead of silently swallowing it into the baseline.
+          if(ea&&newEth>0&&(ea.amount||0)>0&&newEth>ea.amount*1.0001){
+            queuePendingPrice("ETH",newEth-ea.amount,"");
+          }
           ptfLastBalances.eth=ea?ea.amount:0;
           ptfLastBalances.btc=ba?ba.amount:0;
           try{localStorage.setItem("ptf_last_balances",JSON.stringify(ptfLastBalances));}catch(e){}
@@ -4985,6 +5106,8 @@ function ptfDetectLedgerBalances(){
           if(ea&&newEth>0)ptfSafeSetAmount(ea,newEth,{amountOnly:true});
           if(ba&&newBtc>0)ptfSafeSetAmount(ba,newBtc,{amountOnly:true});
           ptfSave();ptfRenderTable();
+          // If we queued an un-priced ETH buy, ask right away.
+          try{if(pendingPrices&&pendingPrices.length)setTimeout(processPendingPrices,1500);}catch(e){}
           console.log("PTF detect: calibrated (first run) — cost basis preserved");
           return;
         }
@@ -4995,6 +5118,8 @@ function ptfDetectLedgerBalances(){
         if(newEth>0&&Math.abs(ethDelta)>0.001){
           ptfShowDetection("ETH",ethDelta,newEth);
           ethDialogShown=true;
+          // Also queue it persistently so a restart / dismiss doesn't lose the un-priced buy.
+          if(ethDelta>0.001){queuePendingPrice("ETH",ethDelta,"");}
         }
         // BTC detection DISABLED — managed via manual "+ BTC Kauf" Banner (Ledger uses rotating addresses)
         // Update ETH amount ONLY when:
@@ -5148,10 +5273,18 @@ function ptfConfirmDetection(){
   }
   ptfSave();ptfRenderTable();ptfRenderLedger();
   console.log("PTF: "+d.symbol+" "+(d.isBuy?"purchase":"sell")+" recorded: "+d.delta+" @ $"+price+" (mode:"+ptfDetectMode+")");
+  // Banner handled it → clear any matching persistent pending-price entry so we don't double-ask.
+  try{
+    var sym=(d.symbol||"").toUpperCase();
+    pendingPrices=pendingPrices.filter(function(p){return p.symbol!==sym;});
+    savePendingPrices();
+  }catch(e){}
   ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
 }
 
 function ptfDismissDetection(){
+  // Only hide the banner — the persistent pending-price entry STAYS, so we ask again on next start
+  // until a price is actually entered. (User asked: keep asking until it's filled in.)
   ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";
 }
 
@@ -6124,6 +6257,25 @@ setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
 // Pull the master addressbook from the server on startup (single source of truth).
 setTimeout(function(){try{syncAddrBookFromServer();}catch(e){}},2500);
+// Ask for any un-priced buys (deposits detected earlier) — keeps asking each start until filled in.
+setTimeout(function(){try{if(pendingPrices&&pendingPrices.length)processPendingPrices();}catch(e){}},8000);
+// One-time ETH cost-basis reconcile: if the on-chain ETH amount exceeds the amount we actually
+// have a purchase price for (totalCost/avgEntry), there's an un-priced deposit (e.g. a transfer in
+// that the live detection missed). Queue it so the app asks for the price — and keeps asking.
+setTimeout(function(){try{
+  if(localStorage.getItem("eth_reconcile_done")==="1")return;
+  var eth=null;for(var i=0;i<ptfAssets.length;i++){if(ptfAssets[i].id==="eth"){eth=ptfAssets[i];break;}}
+  if(!eth||!(eth.amount>0))return;
+  var pricedAmount=(eth.avgEntry>0)?(eth.totalCost/eth.avgEntry):0;
+  var unpriced=eth.amount-pricedAmount;
+  // Only if there's a meaningful un-priced chunk (>0.5% and >0.001 ETH).
+  if(unpriced>0.001&&unpriced>eth.amount*0.005){
+    var already=false;for(var j=0;j<pendingPrices.length;j++){if(pendingPrices[j].symbol==="ETH")already=true;}
+    if(!already){queuePendingPrice("ETH",unpriced,"");console.log("ETH reconcile: queued "+unpriced.toFixed(6)+" un-priced ETH");}
+    setTimeout(function(){try{processPendingPrices();}catch(e){}},2000);
+  }
+  localStorage.setItem("eth_reconcile_done","1");
+}catch(e){console.log("eth reconcile err:",e.message);}},11000);
 // Auto-sync FCM token to Hetzner on startup (silent, only if token exists & changed since last sync)
 setTimeout(function(){
   try{
