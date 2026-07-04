@@ -2016,6 +2016,66 @@ function renderLpEvents(){
   box.innerHTML=rows;
   var st=$("lpEvStatus");if(st)st.textContent=ev.length+" Events · Open-Zeiten on-chain · Close-Zeiten ab Log-Start live";
 }
+// Fetch REAL close times on-chain: the NFT manager emits DecreaseLiquidity(tokenId indexed,...)
+// so we can query logs filtered to exactly our closed tokenIds. Scans BACKWARDS from head
+// (closes are usually recent → early exit) in 2M chunks. The LAST (highest-block) event per
+// tokenId = the final close. Updates lp_events with real timestamps, then re-sorts + re-renders.
+async function lpBackfillCloseTimes(lpOwners,headBlk){
+  try{
+    if(!headBlk)return;
+    var ev=[];try{ev=JSON.parse(localStorage.getItem("lp_events")||"[]");}catch(e){}
+    var needIds=[],minMint=headBlk;
+    for(var i=0;i<lpOwners.length;i++){
+      var o=lpOwners[i];if(!o.closed||!o.tokenId)continue;
+      var hasTs=false;
+      for(var j=0;j<ev.length;j++){if(ev[j].tokenId===o.tokenId&&ev[j].type==="close"&&ev[j].ts){hasTs=true;break;}}
+      if(!hasTs){
+        needIds.push("0x"+BigInt(o.tokenId).toString(16).padStart(64,"0"));
+        if(o.mintBlk>0&&o.mintBlk<minMint)minMint=o.mintBlk;
+      }
+    }
+    if(!needIds.length)return;
+    if(minMint>=headBlk)minMint=100000000;
+    var DEC_SIG="0x26f6a048ee9138f2c0ce266f322cb99228e8d619ae2bff30c67f8dcf9d2377b4";
+    var found={},foundCount=0;
+    $("lmapStatus").textContent="Hole Close-Zeiten ("+needIds.length+" Positionen)...";
+    for(var to=headBlk;to>minMint&&foundCount<needIds.length;to-=2000000){
+      var from=Math.max(minMint,to-2000000);
+      try{
+        var r=await batchRpc([{jsonrpc:"2.0",method:"eth_getLogs",params:[{
+          address:WT_NFT,topics:[DEC_SIG,needIds],
+          fromBlock:"0x"+from.toString(16),toBlock:"0x"+to.toString(16)}],id:0}]);
+        if(r&&r[0]&&Array.isArray(r[0].result)){
+          for(var L=0;L<r[0].result.length;L++){
+            var lg=r[0].result[L];
+            var tid=BigInt(lg.topics[1]).toString();
+            var blk=parseInt(lg.blockNumber,16);
+            if(!found[tid]||blk>found[tid]){if(!found[tid])foundCount++;found[tid]=blk;}
+          }
+        }
+      }catch(e){}
+      await new Promise(function(rs){setTimeout(rs,120);});
+    }
+    var updated=0;
+    for(var tid2 in found){
+      var cts=Date.now()-(headBlk-found[tid2])*260;
+      var got=false;
+      for(var k=0;k<ev.length;k++){
+        if(ev[k].tokenId===tid2&&ev[k].type==="close"){ev[k].ts=cts;got=true;updated++;break;}
+      }
+      if(!got){ // close event not yet logged (edge case) — find owner/range from lpOwners
+        for(var m=0;m<lpOwners.length;m++){if(lpOwners[m].tokenId===tid2){
+          ev.push({ts:cts,type:"close",tokenId:tid2,owner:lpOwners[m].owner,lo:lpOwners[m].lo,hi:lpOwners[m].hi,burn:null});updated++;break;}}
+      }
+    }
+    if(updated>0){
+      ev.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+      try{localStorage.setItem("lp_events",JSON.stringify(ev));}catch(e){}
+      console.log("LP-LOG: "+updated+" Close-Zeiten on-chain nachgetragen");
+      try{renderLpEvents();}catch(e){}
+    }
+  }catch(e){console.log("lpBackfillCloseTimes err:",e.message);}
+}
 function forceScanLiqMap(){
   lmapTs=0;
   window._lmapScanning=false;
@@ -2413,6 +2473,7 @@ async function scanLiqMap(){
       }catch(e4){}
       window._lpOwners=lpOwners;
       try{lpLogEvents(lpOwners,headBlk);}catch(e){console.log("lp-log err:",e.message);}
+      try{await lpBackfillCloseTimes(lpOwners,headBlk);}catch(e){console.log("close-times err:",e.message);}
       console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs + "+buckets.length+" buckets");
     }catch(e){}
     // Update DAO Full Range LP with real on-chain data
