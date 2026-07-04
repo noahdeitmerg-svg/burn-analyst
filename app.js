@@ -1940,6 +1940,82 @@ function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math
 
 // Manual "Scan Pool" button: ALWAYS force a fresh scan — invalidate the cache and release the
 // concurrency guard (the user explicitly asked; auto-scan politeness rules don't apply here).
+// ═══ LP ACTIVITY LOG — who opened/closed which position, when ═══
+// Backfill: every known position gets an "open" event with its real mint-block time (works for
+// the entire pool history). Closes discovered before the log existed get ts=null ("vor Log-Start");
+// closes detected live (position was active on the previous scan, now closed/gone) get the
+// detection timestamp. Persisted in localStorage "lp_events", deduped per tokenId+type.
+function lpWalletName(addr){
+  var a=(addr||"").toLowerCase();
+  if(typeof ADDR_BOOK!=="undefined"&&ADDR_BOOK[a])return ADDR_BOOK[a].replace(" ⭐","");
+  var PFX={"0x72ade1":"DAO Vault","0x505042":"Noah (DeFi)","0x6e37cc":"Noah (Alt)","0x1b5b96":"Elite","0x0e7121":"Founder","0x6324b1":"Private","0x988966":"Private","0x9ffa19":"Noah"};
+  for(var k in PFX){if(a.indexOf(k)===0)return PFX[k];}
+  return a.slice(0,6)+"…"+a.slice(-4);
+}
+function lpLogEvents(lpOwners,headBlk){
+  try{
+    var ev=[];try{ev=JSON.parse(localStorage.getItem("lp_events")||"[]");}catch(e){}
+    var have={};for(var i=0;i<ev.length;i++)have[ev[i].tokenId+":"+ev[i].type]=ev[i];
+    var firstRun=(localStorage.getItem("lp_events_backfilled")!=="1");
+    var added=0;
+    for(var p=0;p<lpOwners.length;p++){
+      var o=lpOwners[p];if(!o.tokenId)continue;
+      // OPEN event — real time from the mint block (Arbitrum ~0.26 s/block).
+      if(!have[o.tokenId+":open"]){
+        var ots=(o.mintBlk>0&&headBlk>0)?(Date.now()-(headBlk-o.mintBlk)*260):null;
+        var burnAmt=null;
+        try{if(!o.closed&&o.liq>0)burnAmt=wtLiqToBurn(o.liq,o.tL,o.tU);}catch(e){}
+        var e1={ts:ots,type:"open",tokenId:o.tokenId,owner:o.owner,lo:o.lo,hi:o.hi,burn:burnAmt};
+        ev.push(e1);have[o.tokenId+":open"]=e1;added++;
+      }else if(have[o.tokenId+":open"]&&have[o.tokenId+":open"].burn==null&&!o.closed&&o.liq>0){
+        try{have[o.tokenId+":open"].burn=wtLiqToBurn(o.liq,o.tL,o.tU);}catch(e){}
+      }
+      // CLOSE event
+      if(o.closed&&!have[o.tokenId+":close"]){
+        var cts=firstRun?null:Date.now(); // pre-log closes have no reliable time; live ones do
+        var openEv=have[o.tokenId+":open"];
+        var e2={ts:cts,type:"close",tokenId:o.tokenId,owner:o.owner,lo:o.lo,hi:o.hi,burn:openEv?openEv.burn:null};
+        ev.push(e2);have[o.tokenId+":close"]=e2;added++;
+      }
+    }
+    if(added>0||firstRun){
+      // newest first (null-ts events sink to the bottom)
+      ev.sort(function(a,b){return (b.ts||0)-(a.ts||0);});
+      if(ev.length>500)ev=ev.slice(0,500);
+      try{localStorage.setItem("lp_events",JSON.stringify(ev));}catch(e){}
+      localStorage.setItem("lp_events_backfilled","1");
+      console.log("LP-LOG: "+added+" neue Events, gesamt "+ev.length);
+    }
+    try{renderLpEvents();}catch(e){}
+  }catch(e){console.log("lpLogEvents err:",e.message);}
+}
+function renderLpEvents(){
+  var box=$("lpEvB");if(!box)return;
+  var ev=[];try{ev=JSON.parse(localStorage.getItem("lp_events")||"[]");}catch(e){}
+  if(!ev.length){box.innerHTML='<tr><td colspan="5" style="color:var(--mt);text-align:center;font-size:10px;padding:10px">Noch keine Events — einmal die Liquidity Map scannen.</td></tr>';return;}
+  var rows="",shown=0;
+  for(var i=0;i<ev.length&&shown<80;i++){
+    var e=ev[i];shown++;
+    var d=e.ts?new Date(e.ts):null;
+    var when=d?(d.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit",year:"2-digit"})+"<br><span style='color:var(--dm)'>"+d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"})+"</span>"):'<span style="color:var(--dm)">vor Log-Start</span>';
+    var badge=e.type==="open"
+      ?'<span style="color:#34d399;font-weight:700">➕ OPEN</span>'
+      :'<span style="color:#f87171;font-weight:700">➖ CLOSE</span>';
+    var name=lpWalletName(e.owner);
+    var isMe=(e.owner||"").indexOf("0x9ffa19")===0||(e.owner||"").indexOf("0x505042")===0||(e.owner||"").indexOf("0x6e37cc")===0;
+    var rangeTxt=(e.hi>9999)?"Full-Range":("$"+(+e.lo).toFixed(3)+"–"+(+e.hi).toFixed(3));
+    var burnTxt=e.burn?(e.burn>=1000?(e.burn/1000).toFixed(1)+"k":Math.round(e.burn)):"—";
+    rows+='<tr>'+
+      '<td style="font-size:8.5px;line-height:1.3">'+when+'</td>'+
+      '<td style="font-size:8.5px">'+badge+'</td>'+
+      '<td style="font-size:9px;color:'+(isMe?"var(--cy)":"var(--tx)")+'">'+(isMe?"⭐ ":"")+name+'</td>'+
+      '<td style="font-size:8.5px;font-family:Geist Mono,monospace">'+rangeTxt+'</td>'+
+      '<td style="font-size:8.5px;text-align:right;color:#fdba74;font-family:Geist Mono,monospace">'+burnTxt+'</td>'+
+    '</tr>';
+  }
+  box.innerHTML=rows;
+  var st=$("lpEvStatus");if(st)st.textContent=ev.length+" Events · Open-Zeiten on-chain · Close-Zeiten ab Log-Start live";
+}
 function forceScanLiqMap(){
   lmapTs=0;
   window._lmapScanning=false;
@@ -2048,8 +2124,9 @@ async function scanLiqMap(){
       $("lmapStatus").textContent=mintLogs.length+" liquidity additions found...";
 
       // STEP 2: Get receipts → extract NFT token IDs
-      var txSet={};
-      for(var ml=0;ml<mintLogs.length;ml++){if(mintLogs[ml].transactionHash)txSet[mintLogs[ml].transactionHash]=1;}
+      var txSet={},txBlk={};
+      for(var ml=0;ml<mintLogs.length;ml++){if(mintLogs[ml].transactionHash){txSet[mintLogs[ml].transactionHash]=1;
+        try{txBlk[mintLogs[ml].transactionHash]=parseInt(mintLogs[ml].blockNumber,16);}catch(e){}}}
       var txList=Object.keys(txSet);
       console.log("LMAP: "+txList.length+" unique Mint transactions");
       var allTokenIds=[];
@@ -2077,7 +2154,7 @@ async function scanLiqMap(){
               if(from3==="0x0000000000000000000000000000000000000000"){
                 var minter="0x"+rl.topics[2].slice(26).toLowerCase();
                 var tokenId=BigInt(rl.topics[3]);
-                allTokenIds.push({id:tokenId,minter:minter,tx:txList[ti].slice(0,10)});
+                allTokenIds.push({id:tokenId,minter:minter,tx:txList[ti].slice(0,10),mintBlk:txBlk[txList[ti]]||0});
               }
             }
           }
@@ -2127,7 +2204,7 @@ async function scanLiqMap(){
           if(!isClosed)nftActive++;
           uniqueOwners[owner]=1;
           if(!isClosed)console.log("LMAP: ✅ #"+tid+" owner="+owner.slice(0,8)+"..."+owner.slice(-4)+" "+(isFullRange?"FULL RANGE":"$"+ppLo.toFixed(3)+"→$"+ppHi.toFixed(2))+" liq="+pLiq+(isMe?" ⭐":""));
-          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString(),tL:ptL,tU:ptU,burnOut:0,usdcOut:0});
+          lpOwners.push({lo:ppLo,hi:ppHi,owner:owner,isMe:isMe,liq:Number(pLiq),closed:isClosed,tokenId:tid.toString(),tL:ptL,tU:ptU,burnOut:0,usdcOut:0,mintBlk:allTokenIds[ni2].mintBlk||0});
         }catch(e5){continue;}
         if(ni2%5===0){
           $("lmapStatus").textContent="NFT "+(ni2+1)+"/"+allTokenIds.length+" ("+nftActive+" active)";
@@ -2335,6 +2412,7 @@ async function scanLiqMap(){
         localStorage.setItem("lmap_ranges",JSON.stringify({ranges:slimRanges,curTick:curTick,ts:Date.now()}));
       }catch(e4){}
       window._lpOwners=lpOwners;
+      try{lpLogEvents(lpOwners,headBlk);}catch(e){console.log("lp-log err:",e.message);}
       console.log("LMAP: cached "+closedLPs.length+" closed + "+lpOwners.length+" total LPs + "+buckets.length+" buckets");
     }catch(e){}
     // Update DAO Full Range LP with real on-chain data
@@ -6344,6 +6422,7 @@ brFetchPtax().then(function(rate){
 }).catch(function(e){console.log("brFetchPtax err:",e.message);});
 // Auto-scan LP Map immediately at startup (force fresh, ignore cache age)
 try{lmapTs=0;scanLiqMap();}catch(e){console.log("init scanLiqMap err:",e.message);}
+try{renderLpEvents();}catch(e){}
 setTimeout(function(){try{syncPortfolioToServer();}catch(e){}},15000);
 setTimeout(function(){try{fetchServerWalletState();}catch(e){}},5000);
 // Pull the master addressbook from the server on startup (single source of truth).
