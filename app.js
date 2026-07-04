@@ -1938,6 +1938,15 @@ async function batchRpc(calls){
 function encI256(v){if(v>=0)return BigInt(v).toString(16).padStart(64,"0");return(2n**256n+BigInt(v)).toString(16);}
 function priceToTick(p){if(p<=0)return 0;return Math.round(Math.log(1e12/p)/Math.log(1.0001));}
 
+// Manual "Scan Pool" button: ALWAYS force a fresh scan — invalidate the cache and release the
+// concurrency guard (the user explicitly asked; auto-scan politeness rules don't apply here).
+function forceScanLiqMap(){
+  lmapTs=0;
+  window._lmapScanning=false;
+  try{clearTimeout(window._lmapGuardTimer);}catch(e){}
+  try{$("lmapStatus").textContent="Scanning ticks...";}catch(e){}
+  scanLiqMap();
+}
 async function scanLiqMap(){
   // Cache lifetime: 4 min (shorter than 5-min auto-scan interval)
   if(lmapCache&&lmapTs>Date.now()-240000){renderLmap(lmapCache);return;}
@@ -2386,7 +2395,7 @@ async function scanLiqMap(){
     }
     var cachedOwn=window._lpOwners||[];
     if(cachedOwn.length>0){
-      $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions <button class="btn" onclick="lmapCache=null;lmapTs=0;scanLiqMap()">retry</button></td></tr>';
+      $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--warn);text-align:center;font-size:10px">Live scan failed — showing '+cachedOwn.length+' cached positions <button class="btn" onclick="lmapCache=null;forceScanLiqMap()">retry</button></td></tr>';
       renderLmap([]);
     }else{
       $("lmapB").innerHTML='<tr><td colspan="6" style="color:var(--r);text-align:center">Liquidity scan unavailable — <button class="btn" onclick="scanLiqMap()">retry</button></td></tr>';
@@ -2432,7 +2441,7 @@ function showDepthCard(){
     renderDepthChart(lmapCache,"depthChartCard");
   }else{
     box.innerHTML='<div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Scanne Pool Liquidity Map… <br>einen Moment, dann erscheint der Chart.</div>';
-    try{lmapTs=0;scanLiqMap();}catch(e){}
+    try{forceScanLiqMap();}catch(e){}
     var tries=0;var iv=setInterval(function(){
       tries++;
       if(lmapCache&&lmapCache.length){clearInterval(iv);renderDepthChart(lmapCache,"depthChartCard");}

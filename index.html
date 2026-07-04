@@ -597,11 +597,11 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <div style="margin-bottom:8px;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
       <div style="flex:1;min-width:200px"><div style="font-size:8px;color:var(--dm)">EXTRA WALLETS TO SCAN (one per line or comma-separated)</div>
         <textarea class="inp" id="lmapExtra" rows="2" placeholder="0xa1c962c04c8dce9121b321ca1e97fee414aaf57c" style="width:100%;font-size:9px;resize:vertical"></textarea></div>
-      <button class="btn" onclick="scanLiqMap()" style="font-size:10px">Scan Pool</button>
+      <button class="btn" onclick="forceScanLiqMap()" style="font-size:10px">Scan Pool</button>
     </div>
     <div id="lmapSummary" class="mg" style="margin-bottom:10px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
     <div id="depthChart" style="background:rgba(8,12,22,.5);border:1px solid rgba(48,54,68,.4);border-radius:10px;padding:11px 12px;margin-bottom:10px"><div style="color:var(--mt);font-size:10px;text-align:center;padding:16px">Erst die Pool Liquidity Map scannen lassen.</div></div>
-    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet / Range</th><th>BURN In</th><th>BURN Left</th><th>USDC Now</th><th>If Filled</th><th>Fill</th></tr></thead><tbody id="lmapB"><tr><td colspan="6" style="text-align:center"><button class="btn" onclick="scanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
+    <div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet / Range</th><th>BURN In</th><th>BURN Left</th><th>USDC Now</th><th>If Filled</th><th>Fill</th></tr></thead><tbody id="lmapB"><tr><td colspan="6" style="text-align:center"><button class="btn" onclick="forceScanLiqMap()">Scan Pool Ticks</button></td></tr></tbody></table></div>
     <div id="lmapStatus" style="font-size:9px;color:var(--dm);margin-top:6px;text-align:center"></div>
   </div>
 </div>
@@ -1055,7 +1055,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260703c"></script>
+<script src="app.js?v=20260703d"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){
