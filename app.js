@@ -476,9 +476,10 @@ function renderWal(){
   var lpBurnLeft=0,lpBurnDeposited=0,lpBurnSold=0,lpUsdcValue=0,lpCount=0;
   try{
     if(typeof LP!=="undefined"&&typeof v3==="function"&&typeof P!=="undefined"&&P>0){
+      var Pw=pxUnified(); // COHERENCE: same price as P&L card & LP table
       for(var lpi=0;lpi<LP.length;lpi++){
         if(LP[lpi].fr)continue; // skip DAO full range
-        var lpv=v3(LP[lpi].b,LP[lpi].lo,LP[lpi].hi,P);
+        var lpv=v3(LP[lpi].b,LP[lpi].lo,LP[lpi].hi,Pw);
         lpBurnLeft+=lpv.left;
         lpBurnDeposited+=LP[lpi].b;
         lpBurnSold+=Math.max(0,LP[lpi].b-lpv.left);
@@ -955,7 +956,7 @@ function render(){
   // NEXT FILL — show LP with lowest hi above current price (next to be fully filled)
   var nxtFill="";
   if(P>0){
-    var Pnf=poolPriceExact(); // exact pool price for position fill; spot (P) still drives pool buyflow
+    var Pnf=pxUnified(); // COHERENCE: exact pool price (fresh) for fill; spot (P) still drives pool buyflow
     var bestNf=null,bestHi=Infinity;
     for(var nf=0;nf<LP.length;nf++){if(LP[nf].fr)continue;
       // LP's hi must be above current pool price (not yet filled). Pick lowest hi.
@@ -1034,8 +1035,9 @@ function render(){
   $("nextFill").innerHTML=nxtFill||'<span style="color:var(--g)">All active positions filled ✓</span>';
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
-  var pD=0,pL=0,pU=0,maxU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,P);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;var pf=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,LP[pi].hi);maxU+=pf.usdc;}
-  var lpV=pL*P+pU,hdV=pD*P,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
+  var Pux=pxUnified(); // COHERENCE: same price as LP table & renderLpPnl (was: spot P)
+  var pD=0,pL=0,pU=0,maxU=0;for(var pi=0;pi<LP.length;pi++){if(LP[pi].fr)continue;var pv=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,Pux);pD+=LP[pi].b;pL+=pv.left;pU+=pv.usdc;var pf=v3(LP[pi].b,LP[pi].lo,LP[pi].hi,LP[pi].hi);maxU+=pf.usdc;}
+  var lpV=pL*Pux+pU,hdV=pD*Pux,il=lpV-hdV,ilP=hdV>0?(il/hdV*100):0;
   var outU=maxU-pU,fillPct=maxU>0?(pU/maxU*100):0;
 
   // PORTFOLIO (unified) — TOTAL_BURN_EQUIVALENT is the single source of truth
@@ -1126,7 +1128,7 @@ function render(){
 
   // LP TABLE — use EXACT pool price (from on-chain tick) for fill math, not DexScreener spot.
   // For positions near a range edge, the rounded/laggy spot distorts "BURN left" (277 vs 540).
-  var Pp=poolPriceExact();
+  var Pp=pxUnified(); // COHERENCE: falls back to spot P if tick >5min stale
   var cS=0,cU=0;for(var li=0;li<LP.length;li++){if(LP[li].fr)continue;var cv=v3(LP[li].b,LP[li].lo,LP[li].hi,Pp);cS+=(LP[li].b-cv.left);cU+=cv.usdc;}
   function ring(p,cl,tx){p=Math.max(0,Math.min(100,p||0));return'<div style="width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:conic-gradient('+cl+' '+p+'%,#1a2235 '+p+'% 100%)"><div style="width:34px;height:34px;border-radius:50%;background:#0c1220;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+cl+'">'+tx+'</div></div>';}
   var lpR="",tBI=0,tBL=0,tU2=0;
@@ -2988,6 +2990,37 @@ function poolPriceExact(){
   if(typeof t==="number"&&isFinite(t)){var pp=1e12/Math.pow(1.0001,t);if(pp>0&&isFinite(pp))return pp;}
   return P;
 }
+// ═══ PRICE COHERENCE FIX (v=20260705a) ═══
+// Problem: P&L card, LP table, renderLpPnl, wallet detail & tracker each read a
+// DIFFERENT price (DexScreener spot P vs. stale scan tick) → same-minute views
+// disagreed by ~$300 ($1.73K vs $1.41K). In a 0.1-cent range, 6 ticks ≈ 11pp fill.
+// Fix: ONE price for all fill math. refreshPoolTick() fetches slot0 every 60s and,
+// if the tick changed, re-renders all P&L views together with the same price.
+function pxUnified(){
+  var ts=window._lmapTickTs||0;
+  if(Date.now()-ts<300000)return poolPriceExact(); // tick fresh (<5min) → exact pool price
+  return P; // stale/cold start → DexScreener spot
+}
+var _ptkBusy=false;
+async function refreshPoolTick(){
+  if(_ptkBusy)return;_ptkBusy=true;
+  try{
+    var s0=await rpcCall(POOL,"0x3850c7bd");
+    if(!s0||s0.length<130)throw"slot0 fail";
+    var tB=BigInt("0x"+s0.slice(66,130));
+    if(tB>=2n**255n)tB-=2n**256n;
+    var t=Number(tB);
+    if(!isFinite(t))throw"bad tick";
+    var changed=(window._lmapCurTick!==t);
+    window._lmapCurTick=t;window._lmapTickTs=Date.now();
+    if(changed){
+      console.log("TICK refresh: "+t+" → $"+poolPriceExact().toFixed(6)+" (re-render)");
+      try{if(P>0)render();}catch(e){}
+      try{renderWal();}catch(e){}
+    }
+  }catch(e){console.log("refreshPoolTick err:",e&&e.message||e);}
+  _ptkBusy=false;
+}
 function wtLiqToBurn(liq,tL,tU){var sL=Math.pow(1.0001,tL/2),sU=Math.pow(1.0001,tU/2);return liq*(sU-sL)/1e18;}
 
 // Dedicated RPC for WT — no "0x" filter, longer timeout, tries each endpoint
@@ -3062,14 +3095,14 @@ async function wtLoad(){
         var bDep=wtLiqToBurn(Number(liq),tL,tU);
         console.log("WT NFT["+i+"] BURN deposited:",bDep.toFixed(0));
         if(bDep<=0)continue;
-        var cv=v3(bDep,pLo,pHi,P);
+        var cv=v3(bDep,pLo,pHi,pxUnified()); // COHERENCE: same price as main LP views
         lps.push({lo:pLo,hi:pHi,burn:bDep,left:cv.left,usdc:cv.usdc,pct:cv.pct,id:tId.toString(),closed:false});
       }catch(e2){console.log("WT NFT["+i+"] err:",e2);continue;}
     }
     console.log("WT found",lps.length,"BURN/USDC LPs");
     var bEq2=wBurn+wSt*stR,lpB=0,lpU=0;
     for(var j=0;j<lps.length;j++){lpB+=lps[j].left;lpU+=lps[j].usdc;}
-    var tEq=bEq2+lpB,tVal=tEq*P+lpU;
+    var tEq=bEq2+lpB,tVal=tEq*pxUnified()+lpU;
     var res={addr:addr,burn:wBurn,stBurn:wSt,lps:lps,bEq:bEq2,lpBurn:lpB,lpUsdc:lpU,totalEq:tEq,totalVal:tVal};
     wtCache=res;wtCacheTs=Date.now();
     wtRender(res);
@@ -3105,21 +3138,22 @@ function wtRender(d){
 function renderLpPnl(){
   try{
     if(!$("lpPnlB")||P<=0)return;
+    var Pl=pxUnified(); // COHERENCE: same price as P&L card & LP table
     var rows="",tVN=0,tHV=0,tIL=0,tSold=0,tUsdc=0;
     // Active LPs
     for(var i=0;i<LP.length;i++){
       if(LP[i].fr)continue;
       if(LP[i].lo<=0||LP[i].hi<=0)continue;
-      var cv=v3(LP[i].b,LP[i].lo,LP[i].hi,P);
+      var cv=v3(LP[i].b,LP[i].lo,LP[i].hi,Pl);
       var sold=LP[i].b-cv.left;
       var avgSell=sold>0?cv.usdc/sold:0;
-      var valueNow=cv.left*P+cv.usdc;
-      var hodlValue=LP[i].b*P;
+      var valueNow=cv.left*Pl+cv.usdc;
+      var hodlValue=LP[i].b*Pl;
       var il=valueNow-hodlValue;
       var ilPct=hodlValue>0?(il/hodlValue*100):0;
       var ff=v3(LP[i].b,LP[i].lo,LP[i].hi,LP[i].hi);
       var rng="$"+LP[i].lo.toFixed(LP[i].lo<1?3:2)+" → $"+LP[i].hi.toFixed(2);
-      var avgClr=avgSell>P?"var(--g)":avgSell>0?"var(--r)":"var(--dm)";
+      var avgClr=avgSell>Pl?"var(--g)":avgSell>0?"var(--r)":"var(--dm)";
       var ilClr=il>=0?"var(--g)":"var(--r)";
       tVN+=valueNow;tHV+=hodlValue;tIL+=il;tSold+=sold;tUsdc+=cv.usdc;
       rows+='<tr><td class="bld">'+rng+' <span style="font-size:8px;color:var(--g)">ACTIVE</span></td><td style="color:var(--o)">'+F(sold,0)+'</td>';
@@ -3134,11 +3168,11 @@ function renderLpPnl(){
     for(var ci2=0;ci2<CL.length;ci2++){
       var c=CL[ci2];
       var cAvg=c.b>0?c.u/c.b:0;
-      var cHodl=c.b*P;
+      var cHodl=c.b*Pl;
       var cIl=c.u-cHodl;
       var cIlPct=cHodl>0?(cIl/cHodl*100):0;
       var cRng=(c.lo>0&&c.hi>0)?"$"+c.lo.toFixed(c.lo<1?3:2)+"→$"+c.hi.toFixed(2):"Ø $"+(c.u/c.b).toFixed(4);
-      var cAvgClr=cAvg>P?"var(--g)":"var(--r)";
+      var cAvgClr=cAvg>Pl?"var(--g)":"var(--r)";
       var cIlClr=cIl>=0?"var(--g)":"var(--r)";
       tVN+=c.u;tHV+=cHodl;tIL+=cIl;tSold+=c.b;tUsdc+=c.u;
       rows+='<tr style="opacity:.7"><td class="bld" style="font-size:10px">'+cRng+' <span style="font-size:8px;color:var(--dm)">'+c.d+'</span></td><td style="color:var(--o)">'+F(c.b,0)+'</td>';
@@ -3153,7 +3187,7 @@ function renderLpPnl(){
     for(var mi2=0;mi2<MS.length;mi2++){
       var m=MS[mi2];
       var mAvg=m.b>0?m.u/m.b:0;
-      var mHodl=m.b*P;
+      var mHodl=m.b*Pl;
       var mIl=m.u-mHodl;
       var mIlClr=mIl>=0?"var(--g)":"var(--r)";
       tVN+=m.u;tHV+=mHodl;tIL+=mIl;tSold+=m.b;tUsdc+=m.u;
@@ -6525,4 +6559,7 @@ setTimeout(function(){
   }catch(e){}
 },8000);
 startRefresh();
-document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();}});
+// COHERENCE: keep the pool tick fresh so ALL P&L views compute with the same exact price.
+setTimeout(function(){try{refreshPoolTick();}catch(e){}},4000);
+setInterval(function(){if(!document.hidden){try{refreshPoolTick();}catch(e){}}},60000);
+document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();try{refreshPoolTick();}catch(e){}}});
