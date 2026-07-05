@@ -2798,6 +2798,7 @@ function toggleDepthDAO(){
 }
 function renderLmap(buckets){
   var lpOwners=window._lpOwners||[];
+  var Pm=pxUnified(); // COHERENCE v2: owner table uses same live price as P&L card & LP table
   var tB=0,tU=0,allOwn={},activeOwn={};
   for(var i=0;i<buckets.length;i++){tB+=buckets[i].burn;tU+=buckets[i].usdc;}
   // Group lpOwners by wallet
@@ -2824,9 +2825,9 @@ function renderLmap(buckets){
   // calculated correctly without depending on POOL_LIQ (which only reflects active-tick liq).
   function lpToBurnUsdc(dl){
     var bn=0,uc=0;
-    if(!dl||!dl.liq||dl.liq<=0||P<=0)return{b:bn,u:uc};
+    if(!dl||!dl.liq||dl.liq<=0||Pm<=0)return{b:bn,u:uc};
     try{
-      var sqP=Math.sqrt(1e12/P);
+      var sqP=Math.sqrt(1e12/Pm);
       var sL=Math.pow(1.0001,(dl.tL!==undefined?dl.tL:-887272)/2);
       var sU=Math.pow(1.0001,(dl.tU!==undefined?dl.tU:887272)/2);
       if(sqP<=sL){
@@ -2928,10 +2929,10 @@ function renderLmap(buckets){
               burnDep=(poolLiq>0&&aB>0)?aB*(lp.liq/poolLiq):0;
             }
           }
-          if(isFullRange&&P>0){
+          if(isFullRange&&Pm>0){
             // Exact V3: compute amounts from liquidity + sqrtPrices
-            // Raw sqrtPrice = sqrt(1e12/P) to match tick-based sqrtPL/sqrtPU
-            var sqrtP2=Math.sqrt(1e12/P);
+            // Raw sqrtPrice = sqrt(1e12/Pm) to match tick-based sqrtPL/sqrtPU
+            var sqrtP2=Math.sqrt(1e12/Pm);
             var sqrtPL2=Math.pow(1.0001,lp.tL/2);
             var sqrtPU2=Math.pow(1.0001,lp.tU/2);
             if(sqrtP2<=sqrtPL2){
@@ -2944,8 +2945,8 @@ function renderLmap(buckets){
             }
             if(lpLeft<0)lpLeft=0;if(lpUsdc<0)lpUsdc=0;
             lpPct=burnDep>0?Math.max(0,((burnDep-lpLeft)/burnDep)*100):0;
-          } else if(burnDep>0&&P>0&&!isFullRange){
-            var cv=v3(burnDep,lp.lo,lp.hi,P);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
+          } else if(burnDep>0&&Pm>0&&!isFullRange){
+            var cv=v3(burnDep,lp.lo,lp.hi,Pm);lpLeft=cv.left;lpUsdc=cv.usdc;lpPct=cv.pct;
           }
         }catch(e){}
         // Calculate projected USDC when fully filled
@@ -2954,9 +2955,9 @@ function renderLmap(buckets){
           var avgSell=(lp.lo+lp.hi)/2;
           ifFilled=burnDep*avgSell;
         }else if(isFullRange){
-          ifFilled=lpLeft*P+lpUsdc; // Current total value
+          ifFilled=lpLeft*Pm+lpUsdc; // Current total value
         }
-        var isInRange=P>=lp.lo&&P<lp.hi;
+        var isInRange=Pm>=lp.lo&&Pm<lp.hi;
         // Fill bar as percentage
         var fillClr=lpPct>=90?"var(--r)":lpPct>=50?"var(--warn)":lpPct>0?"var(--g)":"var(--dm)";
         rows+='<tr style="'+(isInRange?"background:rgba(251,146,60,.04);":"")+'"><td style="padding-left:20px;font-weight:600;font-size:10px;color:var(--g)">'+(isInRange?"► ":"")+rng+'</td>';
@@ -3017,6 +3018,7 @@ async function refreshPoolTick(){
       console.log("TICK refresh: "+t+" → $"+poolPriceExact().toFixed(6)+" (re-render)");
       try{if(P>0)render();}catch(e){}
       try{renderWal();}catch(e){}
+      try{if(typeof lmapCache!=="undefined"&&lmapCache&&lmapCache.length)renderLmap(lmapCache);}catch(e){}
     }
   }catch(e){console.log("refreshPoolTick err:",e&&e.message||e);}
   _ptkBusy=false;
