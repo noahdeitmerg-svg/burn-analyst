@@ -853,7 +853,7 @@ async function fetchLPs(){
         if(pLo<=0||pHi<=pLo)continue;
         var bDep=wtLiqToBurn(Number(liq),tL,tU);
         if(bDep<=0)continue;
-        newLP.push({b:Math.round(bDep),lo:Math.round(pLo*10000)/10000,hi:Math.round(pHi*10000)/10000,label:"Sell"});
+        newLP.push({b:Math.round(bDep),lo:Math.round(pLo*1000000)/1000000,hi:Math.round(pHi*1000000)/1000000,label:"Sell"}); // COHERENCE v3: tick-exact bounds (4-dec rounding shifted fill by up to 5% in 0.1-cent ranges)
       }catch(e2){continue;}
     }
     if(newLP.length>0){
@@ -2508,7 +2508,7 @@ async function scanLiqMap(){
         var burnIn=0;
         try{burnIn=wtLiqToBurn(lo3.liq,lo3.tL,lo3.tU);}catch(e){}
         if(!(burnIn>0))continue;
-        myLPs.push({b:Math.round(burnIn),lo:Math.round(lo3.lo*10000)/10000,hi:Math.round(lo3.hi*10000)/10000,label:"Sell"});
+        myLPs.push({b:Math.round(burnIn),lo:Math.round(lo3.lo*1000000)/1000000,hi:Math.round(lo3.hi*1000000)/1000000,label:"Sell"}); // COHERENCE v3: tick-exact bounds
       }
       if(myLPs.length>0){
         myLPs.sort(function(a,b){return a.lo-b.lo;});
