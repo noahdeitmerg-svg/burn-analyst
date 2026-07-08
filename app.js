@@ -5046,6 +5046,11 @@ function ethKaufNachtragen(){
 function processPendingPrices(){
   if(_processingPending)return;
   if(!pendingPrices.length)return;
+  // DOUBLE-BOOK GUARD: if a detection banner for the same symbol is active, the banner owns the
+  // booking (its confirm clears this queue). Prompting in parallel double-booked ETH cost once
+  // (banner +$226.50 AND prompt +$223.75 for the same 08.07. deposit).
+  var p0=pendingPrices[0];
+  if(ptfPendingDetection&&ptfPendingDetection.symbol===(p0.symbol||"").toLowerCase())return;
   _processingPending=true;
   // Ask for the oldest pending entry.
   var p=pendingPrices[0];
@@ -5076,6 +5081,9 @@ function processPendingPrices(){
   }
   // Remove this entry, then continue with the next pending one.
   pendingPrices.shift();savePendingPrices();
+  // DOUBLE-BOOK GUARD (reverse direction): the prompt booked it → kill any matching banner so
+  // its confirm can't add the same cost again.
+  try{if(ptfPendingDetection&&ptfPendingDetection.symbol===(p.symbol||"").toLowerCase()){ptfPendingDetection=null;$("ptfDetectDiv").innerHTML="";}}catch(e){}
   if(pendingPrices.length){setTimeout(processPendingPrices,400);}
 }
 function ptfSafeSetAmount(asset,newAmount,opts){
@@ -6355,6 +6363,23 @@ try{
     localStorage.setItem("btc_migration_v4","done");
   }
 }catch(e){console.log("BTC migration error:",e);}
+// One-time ETH double-book fix (08.07.2026): the detection banner AND the pending-price prompt
+// both booked the same ~0.13-ETH deposit @ $1740 (banner $226.50 + prompt $223.75 = observed +$450
+// cost jump for +0.1302 ETH). Remove the prompt's duplicate $223.75; the banner booking stays.
+// Guard: only fires while cost still carries the duplicate (>$3,200). NEVER touches ptfLedger.
+try{
+  if(localStorage.getItem("eth_double_book_fix_v1")!=="1"){
+    var _edf=null;for(var _ei=0;_ei<ptfAssets.length;_ei++){if(ptfAssets[_ei].id==="eth"){_edf=ptfAssets[_ei];break;}}
+    if(_edf&&_edf.totalCost>3200&&_edf.amount>1.4){
+      var _old=_edf.totalCost;
+      _edf.totalCost=_edf.totalCost-223.75;
+      if(_edf.amount>0)_edf.avgEntry=_edf.totalCost/_edf.amount;
+      ptfSave();
+      console.log("ETH double-book fix v1: cost $"+_old.toFixed(2)+" → $"+_edf.totalCost.toFixed(2)+", avg $"+_edf.avgEntry.toFixed(2));
+    }
+    localStorage.setItem("eth_double_book_fix_v1","1");
+  }
+}catch(e){console.log("eth double-book fix err:",e);}
 // One-time BTC migration v5: fix amount that was overwritten by ptfDetectBalances after v4
 try{
   var migratedV5=localStorage.getItem("btc_migration_v5");
