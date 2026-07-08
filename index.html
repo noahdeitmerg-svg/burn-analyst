@@ -398,11 +398,16 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
       <div class="orb-val" id="dRatio" style="color:var(--cy)"><span class="skel" style="width:80px;height:18px"></span></div>
       <div class="orb-sub">Ratio</div>
     </div>
+    <div class="orb" style="border-color:var(--g)">
+      <div class="orb-val" id="hdPrice" style="color:var(--g);font-size:13px"><span class="skel" style="width:80px;height:18px"></span></div>
+      <div class="orb-sub" id="hdPriceSub">Robinhood</div>
+    </div>
   </div>
-  <div style="display:flex;justify-content:center;gap:0;margin:-4px 0 8px;font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dm)">
+  <div style="display:flex;justify-content:center;gap:0;margin:-4px 0 8px;font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dm);flex-wrap:wrap">
     <div style="width:130px;text-align:center">stBURN</div>
     <div style="width:155px;text-align:center;color:var(--o)">BURN Spot</div>
     <div style="width:130px;text-align:center">st / BURN</div>
+    <div style="width:130px;text-align:center;color:var(--g)">HOODIE</div>
   </div>
   <div id="spark" style="margin-bottom:10px"></div>
   <div class="hero-row">
@@ -413,6 +418,12 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <!-- ═══ NEXT FILL TARGET ═══ -->
 <div class="c" style="border-left:3px solid #fb923c;padding:14px">
   <div id="nextFill"><span class="skel" style="width:200px;height:14px;margin:0 auto"></span></div>
+</div>
+
+<!-- ═══ HOODIE (Robinhood Chain) ═══ -->
+<div class="c c-slim" style="border-left:3px solid #34d399">
+  <div class="lb">🧥 HOODIE · Robinhood Chain</div>
+  <div id="hdBody"><span class="skel" style="width:100%;height:34px"></span></div>
 </div>
 
 <!-- ═══ TRADES ═══ -->
@@ -1065,7 +1076,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260705c"></script>
+<script src="app.js?v=20260708b"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

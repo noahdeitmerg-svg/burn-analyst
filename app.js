@@ -6560,8 +6560,77 @@ setTimeout(function(){
     }).catch(function(e){console.log("FCM auto-sync skipped:",e.message);});
   }catch(e){}
 },8000);
+// ═══ HOODIE (Robinhood Chain, Uniswap V4) ═══
+// Verified 08.07.2026: chainId 4663, decimals 18, CORS ok (RPC + GT API).
+var RH_RPC="https://rpc.mainnet.chain.robinhood.com";
+var HOODIE_TK="0x91b7304099f0be58029fb4269ad6aa0bf601e666";
+var HOODIE_GT="https://api.geckoterminal.com/api/v2/networks/robinhood/pools/0x9286edc5798ca4e2279297d27bf5edfc9b639c94c772303b0d62e434785cba19";
+var HOODIE_CHART="https://www.geckoterminal.com/robinhood/pools/0x9286edc5798ca4e2279297d27bf5edfc9b639c94c772303b0d62e434785cba19";
+var W_HOODIE="0x6E37Cc7D415466909db6102b6Dc34473AC1bb500"; // Noah Alt (…b500)
+var _hd={px:0,chg:0,vol:0,bal:0,ts:0};
+try{var _hdc=JSON.parse(localStorage.getItem("hd_cache")||"null");if(_hdc&&_hdc.px>0)_hd=_hdc;}catch(e){}
+function hdFmtPx(p){if(!(p>0))return"—";return p<0.001?"$"+p.toPrecision(4):"$"+p.toFixed(4);}
+// Kostenbasis (on-chain, 08.07.2026): Kauf 426.512.167 HD für 0,1699 ETH, Verkauf 106.628.042 HD für +0,1286 ETH,
+// 150M versendet (Airdrop-Verteilung). Netto 0,0413 ETH ≈ $72 @ ~$1.750 für den Restbestand.
+var HD_COST_USD=72;
+function renderHoodie(){
+  try{
+    var o=$("hdPrice");
+    if(o)o.innerHTML=_hd.px>0?hdFmtPx(_hd.px):'<span class="skel" style="width:80px;height:18px"></span>';
+    var s=$("hdPriceSub");
+    if(s){var c=_hd.chg;
+      s.innerHTML=(_hd.px>0&&isFinite(c)&&c!==0)?('<span style="color:'+(c>=0?"var(--g)":"var(--r)")+'">'+(c>=0?"+":"")+(Math.abs(c)>=1000?F(c,0):c.toFixed(1))+'% 24h</span>'):"Robinhood";}
+    var b=$("hdBody");
+    if(b&&(_hd.px>0||_hd.bal>0)){
+      var val=_hd.bal*_hd.px;
+      var pnl=val-HD_COST_USD,mult=HD_COST_USD>0?val/HD_COST_USD:0;
+      var entry=_hd.bal>0?HD_COST_USD/_hd.bal:0;
+      b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'
+        +MB("Bestand (Noah Alt)",_hd.bal>0?F(_hd.bal,0):"—","var(--g)")
+        +MB("Wert",val>0?"$"+F(val,0):"—","var(--g)")
+        +MB("Preis",hdFmtPx(_hd.px),"var(--cy)")
+        +MB("P&L",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
+        +MB("Einstand",entry>0?"$"+entry.toPrecision(2):"—","var(--dm)")
+        +MB("24h Vol",_hd.vol>0?"$"+F(_hd.vol,0):"—","var(--dm)")
+        +'</div>'
+        +'<div style="font-size:9px;color:var(--dm);margin-top:8px">Netto-Einsatz ~$'+HD_COST_USD+' (0,0413 ETH) · HOODIE/WETH 0,3% · Uniswap V4 · <a href="'+HOODIE_CHART+'" target="_blank" style="color:var(--cy)">Chart auf GeckoTerminal</a>'
+        +(_hd.ts?' · Stand '+new Date(_hd.ts).toLocaleTimeString().slice(0,5):'')+'</div>';
+    }
+  }catch(e){console.log("renderHoodie err:",e&&e.message);}
+}
+var _hdBusy=false;
+async function fetchHoodie(){
+  if(_hdBusy)return;_hdBusy=true;
+  try{
+    try{
+      var r=await fetch(HOODIE_GT,{headers:{"Accept":"application/json"}});
+      var j=await r.json();
+      var at=j&&j.data&&j.data.attributes;
+      if(at){
+        var px=parseFloat(at.base_token_price_usd);
+        if(px>0)_hd.px=px;
+        _hd.chg=parseFloat((at.price_change_percentage||{}).h24)||0;
+        _hd.vol=parseFloat((at.volume_usd||{}).h24)||0;
+      }
+    }catch(e){console.log("HD GT err:",e&&e.message);}
+    try{
+      var body={jsonrpc:"2.0",id:1,method:"eth_call",params:[{to:HOODIE_TK,data:"0x70a08231"+W_HOODIE.slice(2).toLowerCase().padStart(64,"0")},"latest"]};
+      var r2=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      var j2=await r2.json();
+      if(j2&&j2.result&&j2.result!=="0x"){var bal=Number(BigInt(j2.result))/1e18;if(isFinite(bal)&&bal>=0)_hd.bal=bal;}
+    }catch(e){console.log("HD RPC err:",e&&e.message);}
+    _hd.ts=Date.now();
+    try{localStorage.setItem("hd_cache",JSON.stringify(_hd));}catch(e){}
+    renderHoodie();
+  }catch(e){console.log("fetchHoodie err:",e&&e.message);}
+  _hdBusy=false;
+}
 startRefresh();
+// HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
+try{renderHoodie();}catch(e){}
+setTimeout(function(){try{fetchHoodie();}catch(e){}},2500);
+setInterval(function(){if(!document.hidden){try{fetchHoodie();}catch(e){}}},90000);
 // COHERENCE: keep the pool tick fresh so ALL P&L views compute with the same exact price.
 setTimeout(function(){try{refreshPoolTick();}catch(e){}},4000);
 setInterval(function(){if(!document.hidden){try{refreshPoolTick();}catch(e){}}},60000);
-document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();try{refreshPoolTick();}catch(e){}}});
+document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();try{refreshPoolTick();}catch(e){}try{fetchHoodie();}catch(e){}}});
