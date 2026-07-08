@@ -424,6 +424,10 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div class="c c-slim" style="border-left:3px solid #34d399">
   <div class="lb">🧥 HOODIE · Robinhood Chain</div>
   <div id="hdBody"><span class="skel" style="width:100%;height:34px"></span></div>
+  <div class="col" onclick="tog(this,'sec-hdana');hdOpenAna()" style="margin-top:10px">📊 HOODIE Analyse (Trades & LP-Map)</div>
+  <div id="sec-hdana" class="col-b">
+    <div id="hdAnaBody"><div id="hdAnaStatus" style="font-size:10px;color:var(--dm)">Öffnen startet den On-Chain-Scan…</div></div>
+  </div>
 </div>
 
 <!-- ═══ TRADES ═══ -->
@@ -1076,7 +1080,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260708d"></script>
+<script src="app.js?v=20260708f"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

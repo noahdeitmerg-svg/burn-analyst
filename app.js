@@ -6610,15 +6610,22 @@ function renderHoodie(){
       var val=_hd.bal*_hd.px;
       var pnl=val-HD_COST_USD,mult=HD_COST_USD>0?val/HD_COST_USD:0;
       var entry=_hd.bal>0?HD_COST_USD/_hd.bal:0;
+      // REALER WERT: Buchwert ist Kurs×Menge — entnehmbar ist nur die ETH-Seite des Pools.
+      // Exit-Erlös bei "alles in den Pool verkaufen" (constant product): ethSide × bal/(bal+poolHd).
+      var poolHd=_hd.pool||0;
+      var ethSideUsd=Math.max(0,(_hd.resUsd||0)-poolHd*_hd.px);
+      var realExit=(poolHd>0&&_hd.bal>0&&ethSideUsd>0)?ethSideUsd*_hd.bal/(_hd.bal+poolHd):0;
       b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'
         +MB("Bestand (Noah Alt)",_hd.bal>0?F(_hd.bal,0):"—","var(--g)")
-        +MB("Wert",val>0?"$"+F(val,0):"—","var(--g)")
+        +MB("Buchwert",val>0?"$"+F(val,0):"—","var(--g)")
+        +MB("Realer Exit (alles)",realExit>0?"~$"+F(realExit,0):"—","var(--warn)")
+        +MB("Pool-ETH-Seite",ethSideUsd>0?"$"+F(ethSideUsd,0):"—","var(--cy)")
         +MB("Preis",hdFmtPx(_hd.px),"var(--cy)")
-        +MB("P&L",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
+        +MB("P&L (Buch)",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
         +MB("Einstand",entry>0?"$"+entry.toPrecision(2):"—","var(--dm)")
         +MB("24h Vol",_hd.vol>0?"$"+F(_hd.vol,0):"—","var(--dm)")
         +'</div>'
-        +'<div style="font-size:9px;color:var(--dm);margin-top:8px">Netto-Einsatz ~$'+HD_COST_USD+' (0,0413 ETH) · HOODIE/WETH 0,3% · Uniswap V4 · <a href="'+HOODIE_CHART+'" target="_blank" style="color:var(--cy)">Chart auf GeckoTerminal</a>'
+        +'<div style="font-size:9px;color:var(--dm);margin-top:8px">Netto-Einsatz ~$'+HD_COST_USD+' (0,0413 ETH) · Pool gesamt $'+F(_hd.resUsd||0,0)+' · HOODIE/WETH 0,3% · Uniswap V4 · <a href="'+HOODIE_CHART+'" target="_blank" style="color:var(--cy)">Chart auf GeckoTerminal</a>'
         +(_hd.ts?' · Stand '+new Date(_hd.ts).toLocaleTimeString().slice(0,5):'')+'</div>';
     }
   }catch(e){console.log("renderHoodie err:",e&&e.message);}
@@ -6636,20 +6643,149 @@ async function fetchHoodie(){
         if(px>0)_hd.px=px;
         _hd.chg=parseFloat((at.price_change_percentage||{}).h24)||0;
         _hd.vol=parseFloat((at.volume_usd||{}).h24)||0;
+        _hd.resUsd=parseFloat(at.reserve_in_usd)||_hd.resUsd||0;
+        var ep=parseFloat(at.quote_token_price_usd);if(ep>0)_hd.ethUsd=ep;
       }
     }catch(e){console.log("HD GT err:",e&&e.message);}
     try{
-      var body={jsonrpc:"2.0",id:1,method:"eth_call",params:[{to:HOODIE_TK,data:"0x70a08231"+W_HOODIE.slice(2).toLowerCase().padStart(64,"0")},"latest"]};
-      var r2=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-      var j2=await r2.json();
-      if(j2&&j2.result&&j2.result!=="0x"){var bal=Number(BigInt(j2.result))/1e18;if(isFinite(bal)&&bal>=0)_hd.bal=bal;}
+      var bal=await hdCall(HOODIE_TK,"0x70a08231"+W_HOODIE.slice(2).toLowerCase().padStart(64,"0"));
+      if(bal!==null)_hd.bal=bal;
+      var pool=await hdCall(HOODIE_TK,"0x70a08231"+HD_PM.slice(2).toLowerCase().padStart(64,"0"));
+      if(pool!==null)_hd.pool=pool;
     }catch(e){console.log("HD RPC err:",e&&e.message);}
     _hd.ts=Date.now();
     try{localStorage.setItem("hd_cache",JSON.stringify(_hd));}catch(e){}
     renderHoodie();
+    // Incremental scan keeps Trades/LP feed fresh once the first full scan ran.
+    try{if(_hdScan.lastBlk>0)hdScan();}catch(e){}
   }catch(e){console.log("fetchHoodie err:",e&&e.message);}
   _hdBusy=false;
 }
+// ═══ HOODIE ANALYSE: Trades + LP-Map via Uniswap-V4-Event-Replay ═══
+// Pool ist jung (Initialize Block 4268344) → komplette Historie per getLogs rekonstruierbar.
+// Sigs aus echten Txs verifiziert (08.07.2026). ModifyLiquidity-Sender ist der PositionManager,
+// echter Owner = tx.from (gleiche Situation wie bei BURN-V3-NFTs).
+var HD_PM="0x8366a39CC670B4001A1121B8F6A443A643e40951";
+var HD_POOLID="0x9286edc5798ca4e2279297d27bf5edfc9b639c94c772303b0d62e434785cba19";
+var HD_SWAP_SIG="0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f";
+var HD_MODLIQ_SIG="0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec";
+var HD_INIT_BLK=4268344;
+var _hdScan={lastBlk:0,trades:[],lps:[]};
+try{var _hds=JSON.parse(localStorage.getItem("hd_scan")||"null");if(_hds&&_hds.lastBlk>0)_hdScan=_hds;}catch(e){}
+var _hdTxFrom={},_hdBlkTs={};
+async function hdRpc(method,params){
+  var r=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params})});
+  var j=await r.json();
+  if(j&&j.error)throw new Error(j.error.message||"rpc err");
+  return j?j.result:null;
+}
+async function hdCall(to,data){
+  var res=await hdRpc("eth_call",[{to:to,data:data},"latest"]);
+  if(!res||res==="0x")return null;
+  var v=Number(BigInt(res))/1e18;
+  return isFinite(v)&&v>=0?v:null;
+}
+function hdI(hexWord){var v=BigInt("0x"+hexWord);if(v>=(2n**255n))v-=(2n**256n);return v;}
+var _hdScanBusy=false;
+async function hdScan(){
+  if(_hdScanBusy)return;_hdScanBusy=true;
+  try{
+    var st=$("hdAnaStatus");
+    var bn=await hdRpc("eth_blockNumber",[]);
+    var head=parseInt(bn,16);
+    var from=_hdScan.lastBlk>0?_hdScan.lastBlk+1:HD_INIT_BLK;
+    if(head<from){_hdScanBusy=false;return;}
+    var CH=400000,logs=[];
+    for(var lo=from;lo<=head;lo+=CH){
+      var hi=Math.min(lo+CH-1,head);
+      if(st)st.textContent="Scanne Blöcke "+lo+"–"+hi+"…";
+      var part=await hdRpc("eth_getLogs",[{address:HD_PM,fromBlock:"0x"+lo.toString(16),toBlock:"0x"+hi.toString(16),topics:[[HD_SWAP_SIG,HD_MODLIQ_SIG],HD_POOLID]}]);
+      if(part&&part.length)logs=logs.concat(part);
+    }
+    for(var i=0;i<logs.length;i++){
+      var l=logs[i],d=(l.data||"0x").slice(2),t0=l.topics[0],blk=parseInt(l.blockNumber,16);
+      var txh=l.transactionHash;
+      // IDEMPOTENZ: jedes Event exakt einmal verarbeiten — ein abgebrochener Scan (lastBlk nicht
+      // fortgeschrieben) darf beim Retry keine LP-Liquidity doppelt aufaddieren.
+      var evk=txh+":"+(l.logIndex||"");
+      if(!_hdScan.seen)_hdScan.seen={};
+      if(_hdScan.seen[evk])continue;
+      _hdScan.seen[evk]=1;
+      // tx.from (Owner/Trader) + Block-Zeit, beides gecacht
+      var frm=_hdTxFrom[txh];
+      if(!frm){try{var tx=await hdRpc("eth_getTransactionByHash",[txh]);frm=((tx||{}).from||"").toLowerCase();_hdTxFrom[txh]=frm;}catch(e){frm="";}}
+      var ts=_hdBlkTs[blk];
+      if(!ts){try{var bo=await hdRpc("eth_getBlockByNumber",["0x"+blk.toString(16),false]);ts=parseInt((bo||{}).timestamp||"0x0",16)*1000;_hdBlkTs[blk]=ts;}catch(e){ts=0;}}
+      if(t0===HD_SWAP_SIG&&d.length>=128){
+        var a0=Number(hdI(d.slice(0,64)))/1e18,a1=Number(hdI(d.slice(64,128)))/1e18;
+        if(Math.abs(a1)<1)continue;
+        _hdScan.trades.push({k:evk,b:blk,t:ts,ty:a1>0?"BUY":"SELL",hd:Math.abs(a1),e:Math.abs(a0),w:frm});
+      }else if(t0===HD_MODLIQ_SIG&&d.length>=192){
+        var tL=Number(hdI(d.slice(0,64))),tU=Number(hdI(d.slice(64,128))),dL=Number(hdI(d.slice(128,192)));
+        var salt=d.slice(192,256)||"";
+        var pk=frm+":"+tL+":"+tU+":"+salt,found=null;
+        for(var p2=0;p2<_hdScan.lps.length;p2++){if(_hdScan.lps[p2].pk===pk){found=_hdScan.lps[p2];break;}}
+        if(!found){found={pk:pk,w:frm,tL:tL,tU:tU,liq:0,t:ts};_hdScan.lps.push(found);}
+        found.liq+=dL;if(ts)found.t=ts;
+      }
+    }
+    if(_hdScan.trades.length>300)_hdScan.trades=_hdScan.trades.slice(-300);
+    _hdScan.trades.sort(function(a,b){return b.b-a.b;});
+    _hdScan.lastBlk=head;
+    // seen NICHT persistieren: nach erfolgreichem Save schützt lastBlk vor Rescans; seen deckt nur
+    // den Retry eines fehlgeschlagenen Scans innerhalb der Session ab. Hält den localStorage klein.
+    try{localStorage.setItem("hd_scan",JSON.stringify({lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps}));}catch(e){}
+    renderHdAna();
+  }catch(e){console.log("hdScan err:",e&&e.message);var st2=$("hdAnaStatus");if(st2)st2.textContent="Scan-Fehler: "+(e&&e.message||e)+" — nochmal öffnen für Retry";}
+  _hdScanBusy=false;
+}
+function hdTick(){ // aktueller V4-Tick aus USD-Preisen (price = token1/token0 = HOODIE pro ETH)
+  if(!(_hd.px>0&&_hd.ethUsd>0))return null;
+  return Math.log(_hd.ethUsd/_hd.px)/Math.log(1.0001);
+}
+function renderHdAna(){
+  var b=$("hdAnaBody");if(!b)return;
+  var eUsd=_hd.ethUsd||0,rows="";
+  var tick=hdTick();
+  // LP-Zusammensetzung (V3/V4-Mathe, beide Token 18 dec, token0=ETH, token1=HOODIE)
+  var lpRows="",sumHd=0,sumEthU=0;
+  var act=_hdScan.lps.filter(function(x){return x.liq>1;});
+  for(var i=0;i<act.length;i++){
+    var p=act[i];
+    var full=(p.tL<=-887200&&p.tU>=887200);
+    var eth=0,hd=0;
+    if(tick!==null){ // ohne Preis keine Zerlegung — sp=spL würde bei Full Range absurde ETH-Werte liefern
+      var spL=Math.pow(1.0001,p.tL/2),spU=Math.pow(1.0001,p.tU/2);
+      var sp=Math.pow(1.0001,Math.min(Math.max(tick,p.tL),p.tU)/2);
+      eth=p.liq*(1/sp-1/spU)/1e18;hd=p.liq*(sp-spL)/1e18;
+      if(eth<0||!isFinite(eth))eth=0;if(hd<0||!isFinite(hd))hd=0;
+    }
+    sumHd+=hd;sumEthU+=eth*eUsd;
+    var pLo=eUsd>0?eUsd/Math.pow(1.0001,p.tU):0,pHi=eUsd>0?eUsd/Math.pow(1.0001,p.tL):0;
+    var rng=full?"Full Range":"$"+pLo.toPrecision(3)+"–$"+pHi.toPrecision(3);
+    lpRows+='<tr><td>'+addrName(p.w)+'</td><td style="font-size:10px">'+rng+'</td><td style="color:var(--g)">'+F(hd,0)+'</td><td style="color:var(--cy)">$'+F(eth*eUsd,0)+'</td></tr>';
+  }
+  // Trades (neueste 30)
+  var tr="";
+  var shown=_hdScan.trades.slice(0,30);
+  for(var j2=0;j2<shown.length;j2++){
+    var t=shown[j2],usd=t.e*eUsd,pxT=t.hd>0?usd/t.hd:0;
+    var tm=t.t?new Date(t.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
+    tr+='<tr><td style="font-size:10px">'+tm+'</td><td style="color:'+(t.ty==="BUY"?"var(--g)":"var(--r)")+';font-weight:600">'+t.ty+'</td><td>'+F(t.hd,0)+'</td><td>$'+F(usd,0)+'</td><td style="font-size:10px">$'+(pxT>0?pxT.toPrecision(3):"—")+'</td><td style="font-size:10px">'+addrName(t.w)+'</td></tr>';
+  }
+  b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+    +MB("HOODIE im Pool",F(sumHd,0),"var(--g)")
+    +MB("ETH-Support",sumEthU>0?"$"+F(sumEthU,0):"—","var(--cy)")
+    +MB("LP-Positionen",String(act.length),"var(--dm)")
+    +MB("Trades gesamt",String(_hdScan.trades.length),"var(--dm)")
+    +'</div>'
+    +'<div class="lb" style="margin-top:6px">LP-Positionen</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Range</th><th>HOODIE</th><th>ETH ($)</th></tr></thead><tbody>'+(lpRows||'<tr><td colspan="4" style="color:var(--dm)">keine aktiven Positionen</td></tr>')+'</tbody></table></div>'
+    +'<div class="lb" style="margin-top:10px">Trades (neueste 30)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Zeit</th><th>Typ</th><th>HOODIE</th><th>$</th><th>Preis</th><th>Wallet</th></tr></thead><tbody>'+(tr||'<tr><td colspan="6" style="color:var(--dm)">noch keine Trades gescannt</td></tr>')+'</tbody></table></div>'
+    +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px">Stand Block '+_hdScan.lastBlk+' · Auto-Update alle 90s</div>';
+}
+function hdOpenAna(){try{renderHdAna();hdScan();}catch(e){console.log("hdOpenAna err:",e);}}
 startRefresh();
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
