@@ -5133,7 +5133,7 @@ function ptfSyncServer(){
       assets.push({symbol:a.symbol,geckoId:a.geckoId,amount:a.amount,totalCost:a.totalCost||0,avgEntry:a.avgEntry||0});
     }
     var data={assets:assets,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
-    fetch("http://95.216.152.31:8081",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)}).then(function(r){
+    fetch("http://95.216.152.31:8082/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
       if(r.ok)console.log("PTF synced to server");
     }).catch(function(){});
   }catch(e){}
@@ -6791,6 +6791,10 @@ startRefresh();
 try{renderHoodie();}catch(e){}
 setTimeout(function(){try{fetchHoodie();}catch(e){}},2500);
 setInterval(function(){if(!document.hidden){try{fetchHoodie();}catch(e){}}},90000);
+// PTF-Server-Sync auch periodisch (nicht nur bei ptfSave): haelt portfolio-data.json auf dem VPS
+// frisch, damit der Push-Monitor die echten Bestaende liest statt des app.js-Fallbacks.
+setInterval(function(){if(!document.hidden){try{_ptfLastSync=0;ptfSyncServer();}catch(e){}}},300000);
+setTimeout(function(){try{_ptfLastSync=0;ptfSyncServer();}catch(e){}},6000);
 // COHERENCE: keep the pool tick fresh so ALL P&L views compute with the same exact price.
 setTimeout(function(){try{refreshPoolTick();}catch(e){}},4000);
 setInterval(function(){if(!document.hidden){try{refreshPoolTick();}catch(e){}}},60000);
