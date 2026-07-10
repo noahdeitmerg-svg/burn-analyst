@@ -6620,13 +6620,15 @@ function renderHoodie(){
       var poolHd=_hd.pool||0;
       var ethSideUsd=Math.max(0,(_hd.resUsd||0)-poolHd*_hd.px);
       var realExit=(poolHd>0&&_hd.bal>0&&ethSideUsd>0)?ethSideUsd*_hd.bal/(_hd.bal+poolHd):0;
+      var realPnl=realExit-HD_COST_USD,realMult=(HD_COST_USD>0&&realExit>0)?realExit/HD_COST_USD:0;
       b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'
         +MB("Bestand (Noah Alt)",_hd.bal>0?F(_hd.bal,0):"—","var(--g)")
         +MB("Buchwert",val>0?"$"+F(val,0):"—","var(--g)")
         +MB("Realer Exit (alles)",realExit>0?"~$"+F(realExit,0):"—","var(--warn)")
+        +MB("P&L real",realExit>0?((realPnl>=0?"+":"−")+"$"+F(Math.abs(realPnl),0)+" ("+F(realMult,0)+"×)"):"—",realPnl>=0?"var(--warn)":"var(--r)")
         +MB("Pool-ETH-Seite",ethSideUsd>0?"$"+F(ethSideUsd,0):"—","var(--cy)")
         +MB("Preis",hdFmtPx(_hd.px),"var(--cy)")
-        +MB("P&L (Buch)",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
+        +MB("P&L Buch",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
         +MB("Einstand",entry>0?"$"+entry.toPrecision(2):"—","var(--dm)")
         +MB("24h Vol",_hd.vol>0?"$"+F(_hd.vol,0):"—","var(--dm)")
         +'</div>'
@@ -6758,44 +6760,137 @@ function hdPoolXY(){
   var y=yUsd/eU,x=poolHd;
   return {x:x,y:y,k:x*y,eU:eU,px:px};
 }
+// ─── Tick-exakte Band-Mathe (V4, token0=ETH, token1=HOODIE, USD-Preis = eU/1.0001^tick) ───
+function hdSp(t){return Math.pow(1.0001,t/2);}
+function hdTickOfUsd(p){var eU=_hd.ethUsd||0;if(!(eU>0&&p>0))return null;return Math.log(eU/p)/Math.log(1.0001);}
+function hdActivePos(){
+  var out=[],a=_hdScan.lps||[];
+  for(var i=0;i<a.length;i++){if(a[i].liq>1)out.push({tL:a[i].tL,tU:a[i].tU,L:a[i].liq});}
+  return out;
+}
+// Kaufdruck: Preis steigt => tick faellt => Pool gibt HOODIE aus Band [tickZiel, tickJetzt] ab.
+function hdPressure(tickTarget){
+  var tn=hdTick();if(tn===null)return null;
+  var pos=hdActivePos();if(!pos.length)return null;
+  var hd=0,eth=0;
+  for(var i=0;i<pos.length;i++){
+    var lo=Math.max(pos[i].tL,tickTarget),hi=Math.min(pos[i].tU,tn);
+    if(lo<hi){hd+=pos[i].L*(hdSp(hi)-hdSp(lo))/1e18;eth+=pos[i].L*(1/hdSp(lo)-1/hdSp(hi))/1e18;}
+  }
+  return {hd:hd,eth:eth};
+}
+// Verkauf: Preis faellt => tick steigt => Pool nimmt HOODIE auf, gibt ETH aus Band [tickJetzt, tickZiel].
+function hdAbsorb(tickTarget){
+  var tn=hdTick();if(tn===null)return null;
+  var pos=hdActivePos();if(!pos.length)return null;
+  var hd=0,eth=0;
+  for(var i=0;i<pos.length;i++){
+    var lo=Math.max(pos[i].tL,tn),hi=Math.min(pos[i].tU,tickTarget);
+    if(lo<hi){hd+=pos[i].L*(hdSp(hi)-hdSp(lo))/1e18;eth+=pos[i].L*(1/hdSp(lo)-1/hdSp(hi))/1e18;}
+  }
+  return {hd:hd,eth:eth};
+}
 function hdRenderTargets(){
   var el=$("hdAnaTargets");if(!el)return;
-  var pl=hdPoolXY();
-  if(!pl){el.innerHTML='<div style="color:var(--dm);font-size:10px">Preisdaten laden…</div>';return;}
-  var pNow=pl.y/pl.x*pl.eU; // Preis aus Reserven (kann minimal vom GT-Preis abweichen)
-  var rows="";
-  var ms=[2,3,5,10,20];
-  for(var i=0;i<ms.length;i++){
-    var m=ms[i],p1=pNow*m/pl.eU;
-    var y1=Math.sqrt(pl.k*p1),dy=y1-pl.y;
-    var abs=pl.x-pl.k/y1;
-    rows+='<tr><td style="color:var(--g);font-weight:600">'+m+'× ($'+(pNow*m).toPrecision(3)+')</td><td style="color:var(--cy)">$'+F(dy*pl.eU,0)+'</td><td>'+F(abs,0)+'</td></tr>';
+  var eU=_hd.ethUsd||0,px=_hd.px||0,tn=hdTick();
+  var pos=hdActivePos();
+  if(!(eU>0&&px>0&&tn!==null)||!pos.length){
+    // Fallback constant product (kein Scan / keine Preise)
+    var pl=hdPoolXY();
+    if(!pl){el.innerHTML='<div style="color:var(--dm);font-size:10px">Erst LP-Scan/Preise laden…</div>';return;}
+    var pNow=pl.y/pl.x*pl.eU,rows0="";
+    [2,3,5,10,20].forEach(function(m){var p1=pNow*m/pl.eU,y1=Math.sqrt(pl.k*p1),dy=y1-pl.y,ab=pl.x-pl.k/y1;
+      rows0+='<tr><td style="color:var(--g);font-weight:600">'+m+'× ($'+(pNow*m).toPrecision(3)+')</td><td style="color:var(--cy)">$'+F(dy*pl.eU,0)+'</td><td>'+F(ab,0)+'</td></tr>';});
+    el.innerHTML='<div class="lb" style="margin-top:10px">🎯 Kaufdruck bis Preisziel (constant product)</div><div class="ov"><table class="mkt-tbl"><thead><tr><th>Ziel</th><th>$ Kaufdruck nötig</th><th>Pool gibt ab (HD)</th></tr></thead><tbody>'+rows0+'</tbody></table></div>';
+    return;
   }
-  el.innerHTML='<div class="lb" style="margin-top:10px">🎯 Kaufdruck bis Preisziel (constant product)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Ziel</th><th>$ Kaufdruck nötig</th><th>Pool gibt ab (HD)</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
-    +'<div style="font-size:9px;color:var(--dm);margin-top:4px">Basis: aktuelle Pool-Reserven ('+F(pl.x,0)+' HD + $'+F(pl.y*pl.eU,0)+' ETH) · rechnerischer Pool-Preis $'+pNow.toPrecision(4)+'</div>';
+  var rows="";
+  [1.25,1.5,2,3,5,10,20].forEach(function(m){
+    var tT=hdTickOfUsd(px*m);if(tT===null)return;
+    var r=hdPressure(tT);if(!r)return;
+    rows+='<tr><td style="color:var(--g);font-weight:600">'+m+'× ($'+(px*m).toPrecision(3)+')</td><td style="color:var(--cy)">$'+F(r.eth*eU,0)+'</td><td>'+F(r.hd,0)+'</td></tr>';
+  });
+  el.innerHTML='<div class="lb" style="margin-top:10px">🎯 Kaufdruck bis Preisziel (tick-exakt, '+pos.length+' LPs)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Ziel</th><th>$ Kaufdruck nötig</th><th>Pool gibt ab (HD)</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  hdRenderHeatmap();
+}
+// ─── Heatmap: HOODIE-Widerstand ueber Preis / ETH-Support unter Preis (Bookmap-Stil wie BURN) ───
+function hdRenderHeatmap(){
+  var el=$("hdAnaHeat");if(!el)return;
+  var eU=_hd.ethUsd||0,px=_hd.px||0,tn=hdTick();
+  var pos=hdActivePos();
+  if(!(eU>0&&px>0&&tn!==null)||!pos.length){el.innerHTML="";return;}
+  var upB=[1,1.25,1.5,2,3,5,10,20],dnB=[1,0.8,0.6,0.4,0.2];
+  var up=[],dn=[],maxUp=0,maxDn=0,totHd=0,totEth=0;
+  for(var i=0;i<upB.length-1;i++){
+    var a=hdPressure(hdTickOfUsd(px*upB[i])),b2=hdPressure(hdTickOfUsd(px*upB[i+1]));
+    if(!a||!b2)continue;
+    var v=Math.max(0,b2.hd-a.hd);totHd+=v;if(v>maxUp)maxUp=v;
+    up.push({lab:"$"+(px*upB[i]).toPrecision(3)+"–"+(px*upB[i+1]).toPrecision(3),v:v});
+  }
+  for(var j=0;j<dnB.length-1;j++){
+    var c=hdAbsorb(hdTickOfUsd(px*dnB[j])),d2=hdAbsorb(hdTickOfUsd(px*dnB[j+1]));
+    if(!c||!d2)continue;
+    var w=Math.max(0,(d2.eth-c.eth))*eU;totEth+=w;if(w>maxDn)maxDn=w;
+    dn.push({lab:"$"+(px*dnB[j+1]).toPrecision(3)+"–"+(px*dnB[j]).toPrecision(3),v:w});
+  }
+  function bar(x,mx,col){var rel=mx>0?x/mx:0;
+    return '<div style="height:12px;border-radius:6px;background:linear-gradient(90deg,'+col+'cc,'+col+'55);width:'+Math.max(3,rel*100)+'%;box-shadow:'+(rel>0.55?'0 0 8px '+col+'66':'none')+'"></div>';}
+  var h='<div class="lb" style="margin-top:10px">📊 HOODIE Verteilung (Heatmap)</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:6px">'
+    +MB("▲ Widerstand",F(totHd,0)+" HD","var(--o)")+MB("▼ Support","$"+F(totEth,0),"var(--g)")+'</div>'
+    +'<div style="font-size:9px;color:var(--o);letter-spacing:1px;margin:4px 0">▲ HOODIE-WÄNDE ÜBER PREIS</div>';
+  for(var k=up.length-1;k>=0;k--){var u=up[k];
+    h+='<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><div style="width:150px;font-size:9px;color:var(--dm)">'+u.lab+'</div><div style="flex:1">'+bar(u.v,maxUp,"#fb923c")+'</div><div style="width:60px;text-align:right;font-size:9px;color:var(--o)">'+F(u.v,0)+'</div></div>';}
+  h+='<div style="display:flex;align-items:center;gap:6px;margin:6px 0;padding:5px 0;border-top:1px dashed rgba(255,255,255,.15);border-bottom:1px dashed rgba(255,255,255,.15)"><div style="width:150px;font-size:10px;color:var(--tx);font-weight:700">➤ $'+px.toPrecision(4)+'</div><div style="flex:1;text-align:center;font-size:9px;color:var(--dm)">AKTUELLER PREIS</div><div style="width:60px"></div></div>'
+    +'<div style="font-size:9px;color:var(--g);letter-spacing:1px;margin:4px 0">▼ ETH-SUPPORT UNTER PREIS</div>';
+  for(var k2=0;k2<dn.length;k2++){var dd=dn[k2];
+    h+='<div style="display:flex;align-items:center;gap:6px;margin:3px 0"><div style="width:150px;font-size:9px;color:var(--dm)">'+dd.lab+'</div><div style="flex:1">'+bar(dd.v,maxDn,"#34d399")+'</div><div style="width:60px;text-align:right;font-size:9px;color:var(--g)">$'+F(dd.v,0)+'</div></div>';}
+  el.innerHTML=h;
 }
 function hdImpact(buy){
   var el=$("hdImpRes"),inp=$("hdImpAmt");if(!el||!inp)return;
   var usd=parseFloat((inp.value||"").replace(",","."));
   if(!(usd>0)){el.innerHTML='<span style="color:var(--r)">Betrag in $ eingeben</span>';return;}
+  var eU=_hd.ethUsd||0,px=_hd.px||0,tn=hdTick();
+  var pos=hdActivePos();
+  if((eU>0&&px>0&&tn!==null)&&pos.length){
+    // Tick-exakt per Binaersuche ueber den Ziel-Tick
+    if(buy){
+      var lo=tn-400000,hi=tn; // Preis rauf = tick runter
+      for(var it=0;it<48;it++){var mid=(lo+hi)/2;var r=hdPressure(mid);if(r&&r.eth*eU<usd)hi=mid;else lo=mid;}
+      var res=hdPressure(hi)||{hd:0,eth:0};
+      var p1=eU/Math.pow(1.0001,hi);
+      if(res.eth*eU<usd*0.98&&hi<=tn-399999){el.innerHTML='<span style="color:var(--warn)">Betrag übersteigt gesamte Pool-Liquidität</span>';return;}
+      el.innerHTML='<b style="color:var(--g)">KAUF $'+F(usd,0)+'</b>: erhält <b>'+F(res.hd,0)+' HOODIE</b>'+(res.hd>0?' (Ø $'+(usd/res.hd).toPrecision(3)+')':'')+' · Preis danach <b>$'+p1.toPrecision(4)+'</b> (<span style="color:var(--g)">+'+((p1/px-1)*100).toFixed(1)+'%</span>) · tick-exakt';
+    }else{
+      var tok=usd/px;
+      var lo2=tn,hi2=tn+400000; // Preis runter = tick rauf
+      for(var it2=0;it2<48;it2++){var mid2=(lo2+hi2)/2;var r2=hdAbsorb(mid2);if(r2&&r2.hd<tok)lo2=mid2;else hi2=mid2;}
+      var res2=hdAbsorb(hi2)||{hd:0,eth:0};
+      var p2=eU/Math.pow(1.0001,hi2);
+      var proc=res2.eth*eU,slip=(1-proc/usd)*100;
+      el.innerHTML='<b style="color:var(--r)">VERKAUF '+F(tok,0)+' HD</b> (Buchwert $'+F(usd,0)+'): Erlös <b>$'+F(proc,0)+'</b> (Slippage '+slip.toFixed(0)+'%) · Preis danach <b>$'+p2.toPrecision(4)+'</b> (<span style="color:var(--r)">'+((p2/px-1)*100).toFixed(1)+'%</span>) · tick-exakt';
+    }
+    return;
+  }
+  // Fallback constant product
   var pl=hdPoolXY();
   if(!pl){el.innerHTML='<span style="color:var(--dm)">Preisdaten laden…</span>';return;}
   var pNow=pl.y/pl.x*pl.eU;
   if(buy){
-    var dy=usd/pl.eU,x1=pl.k/(pl.y+dy),out=pl.x-x1,p1=(pl.y+dy)/x1*pl.eU;
-    el.innerHTML='<b style="color:var(--g)">KAUF $'+F(usd,0)+'</b>: erhält <b>'+F(out,0)+' HOODIE</b> (Ø $'+(usd/out).toPrecision(3)+') · Preis danach <b>$'+p1.toPrecision(4)+'</b> (<span style="color:var(--g)">+'+((p1/pNow-1)*100).toFixed(1)+'%</span>)';
+    var dy=usd/pl.eU,x1=pl.k/(pl.y+dy),out=pl.x-x1,pb=(pl.y+dy)/x1*pl.eU;
+    el.innerHTML='<b style="color:var(--g)">KAUF $'+F(usd,0)+'</b>: erhält <b>'+F(out,0)+' HOODIE</b> · Preis danach <b>$'+pb.toPrecision(4)+'</b> (+'+((pb/pNow-1)*100).toFixed(1)+'%)';
   }else{
-    var tok=usd/pNow,x1=pl.x+tok,y1=pl.k/x1,proc=(pl.y-y1)*pl.eU,p1=y1/x1*pl.eU;
-    var slip=(1-proc/usd)*100;
-    el.innerHTML='<b style="color:var(--r)">VERKAUF '+F(tok,0)+' HD</b> (Buchwert $'+F(usd,0)+'): Erlös <b>$'+F(proc,0)+'</b> (Slippage '+slip.toFixed(0)+'%) · Preis danach <b>$'+p1.toPrecision(4)+'</b> (<span style="color:var(--r)">'+((p1/pNow-1)*100).toFixed(1)+'%</span>)';
+    var tk=usd/pNow,x2=pl.x+tk,y2=pl.k/x2,pr=(pl.y-y2)*pl.eU,ps=y2/x2*pl.eU;
+    el.innerHTML='<b style="color:var(--r)">VERKAUF '+F(tk,0)+' HD</b>: Erlös <b>$'+F(pr,0)+'</b> · Preis danach <b>$'+ps.toPrecision(4)+'</b> ('+((ps/pNow-1)*100).toFixed(1)+'%)';
   }
 }
 function renderHdAna(){
   var b=$("hdAnaBody");if(!b)return;
   // Statisches Skelett nur EINMAL bauen — der Impact-Rechner (Eingabefeld) darf Re-Renders überleben.
   if(!$("hdAnaSum")){
-    b.innerHTML='<div id="hdAnaSum"></div><div id="hdAnaTargets"></div>'
+    b.innerHTML='<div id="hdAnaSum"></div><div id="hdAnaTargets"></div><div id="hdAnaHeat"></div>'
       +'<div class="lb" style="margin-top:10px">⚖️ Impact-Rechner</div>'
       +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
       +'<input id="hdImpAmt" type="number" inputmode="decimal" placeholder="$ Betrag" style="width:110px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:var(--tx);padding:8px 10px;font-family:inherit;font-size:12px">'
