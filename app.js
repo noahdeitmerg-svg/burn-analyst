@@ -5134,8 +5134,13 @@ function ptfSyncServer(){
     }
     var data={assets:assets,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
     fetch("http://95.216.152.31:8082/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
-      if(r.ok)console.log("PTF synced to server");
-    }).catch(function(){});
+      var el=$("syncStat");
+      if(r.ok){console.log("PTF synced to server");if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--g)">✓ '+new Date().toLocaleTimeString().slice(0,5)+"</span>";}
+      else{if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--r)">✗ HTTP '+r.status+"</span>";}
+    }).catch(function(e){
+      var el=$("syncStat");if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--r)">✗ '+((e&&e.message)||"blockiert")+"</span>";
+      console.log("PTF sync failed:",e&&e.message);
+    });
   }catch(e){}
 }
 function ptfLoad(){try{
@@ -6743,9 +6748,64 @@ function hdTick(){ // aktueller V4-Tick aus USD-Preisen (price = token1/token0 =
   if(!(_hd.px>0&&_hd.ethUsd>0))return null;
   return Math.log(_hd.ethUsd/_hd.px)/Math.log(1.0001);
 }
+// Pool-Reserven (x=HOODIE, y=ETH) aus Live-Daten — Basis für alle Markt-Rechnungen.
+// Exakt, solange die Liquidität Full-Range ist (aktuell: 1 Position); sonst gute Näherung.
+function hdPoolXY(){
+  var eU=_hd.ethUsd||0,px=_hd.px||0,poolHd=_hd.pool||0;
+  if(!(eU>0&&px>0&&poolHd>0&&_hd.resUsd>0))return null;
+  var yUsd=Math.max(0,_hd.resUsd-poolHd*px);
+  if(yUsd<=0)return null;
+  var y=yUsd/eU,x=poolHd;
+  return {x:x,y:y,k:x*y,eU:eU,px:px};
+}
+function hdRenderTargets(){
+  var el=$("hdAnaTargets");if(!el)return;
+  var pl=hdPoolXY();
+  if(!pl){el.innerHTML='<div style="color:var(--dm);font-size:10px">Preisdaten laden…</div>';return;}
+  var pNow=pl.y/pl.x*pl.eU; // Preis aus Reserven (kann minimal vom GT-Preis abweichen)
+  var rows="";
+  var ms=[2,3,5,10,20];
+  for(var i=0;i<ms.length;i++){
+    var m=ms[i],p1=pNow*m/pl.eU;
+    var y1=Math.sqrt(pl.k*p1),dy=y1-pl.y;
+    var abs=pl.x-pl.k/y1;
+    rows+='<tr><td style="color:var(--g);font-weight:600">'+m+'× ($'+(pNow*m).toPrecision(3)+')</td><td style="color:var(--cy)">$'+F(dy*pl.eU,0)+'</td><td>'+F(abs,0)+'</td></tr>';
+  }
+  el.innerHTML='<div class="lb" style="margin-top:10px">🎯 Kaufdruck bis Preisziel (constant product)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Ziel</th><th>$ Kaufdruck nötig</th><th>Pool gibt ab (HD)</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+    +'<div style="font-size:9px;color:var(--dm);margin-top:4px">Basis: aktuelle Pool-Reserven ('+F(pl.x,0)+' HD + $'+F(pl.y*pl.eU,0)+' ETH) · rechnerischer Pool-Preis $'+pNow.toPrecision(4)+'</div>';
+}
+function hdImpact(buy){
+  var el=$("hdImpRes"),inp=$("hdImpAmt");if(!el||!inp)return;
+  var usd=parseFloat((inp.value||"").replace(",","."));
+  if(!(usd>0)){el.innerHTML='<span style="color:var(--r)">Betrag in $ eingeben</span>';return;}
+  var pl=hdPoolXY();
+  if(!pl){el.innerHTML='<span style="color:var(--dm)">Preisdaten laden…</span>';return;}
+  var pNow=pl.y/pl.x*pl.eU;
+  if(buy){
+    var dy=usd/pl.eU,x1=pl.k/(pl.y+dy),out=pl.x-x1,p1=(pl.y+dy)/x1*pl.eU;
+    el.innerHTML='<b style="color:var(--g)">KAUF $'+F(usd,0)+'</b>: erhält <b>'+F(out,0)+' HOODIE</b> (Ø $'+(usd/out).toPrecision(3)+') · Preis danach <b>$'+p1.toPrecision(4)+'</b> (<span style="color:var(--g)">+'+((p1/pNow-1)*100).toFixed(1)+'%</span>)';
+  }else{
+    var tok=usd/pNow,x1=pl.x+tok,y1=pl.k/x1,proc=(pl.y-y1)*pl.eU,p1=y1/x1*pl.eU;
+    var slip=(1-proc/usd)*100;
+    el.innerHTML='<b style="color:var(--r)">VERKAUF '+F(tok,0)+' HD</b> (Buchwert $'+F(usd,0)+'): Erlös <b>$'+F(proc,0)+'</b> (Slippage '+slip.toFixed(0)+'%) · Preis danach <b>$'+p1.toPrecision(4)+'</b> (<span style="color:var(--r)">'+((p1/pNow-1)*100).toFixed(1)+'%</span>)';
+  }
+}
 function renderHdAna(){
   var b=$("hdAnaBody");if(!b)return;
-  var eUsd=_hd.ethUsd||0,rows="";
+  // Statisches Skelett nur EINMAL bauen — der Impact-Rechner (Eingabefeld) darf Re-Renders überleben.
+  if(!$("hdAnaSum")){
+    b.innerHTML='<div id="hdAnaSum"></div><div id="hdAnaTargets"></div>'
+      +'<div class="lb" style="margin-top:10px">⚖️ Impact-Rechner</div>'
+      +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'
+      +'<input id="hdImpAmt" type="number" inputmode="decimal" placeholder="$ Betrag" style="width:110px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:var(--tx);padding:8px 10px;font-family:inherit;font-size:12px">'
+      +'<button onclick="hdImpact(true)" style="background:rgba(52,211,153,.15);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">KAUF</button>'
+      +'<button onclick="hdImpact(false)" style="background:rgba(248,113,113,.15);border:1px solid var(--r);color:var(--r);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">VERKAUF</button>'
+      +'</div><div id="hdImpRes" style="font-size:11px;margin-top:8px;line-height:1.5;color:var(--tx)"></div>'
+      +'<div id="hdAnaLps"></div><div id="hdAnaTrades"></div>'
+      +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>';
+  }
+  var eUsd=_hd.ethUsd||0;
   var tick=hdTick();
   // LP-Zusammensetzung (V3/V4-Mathe, beide Token 18 dec, token0=ETH, token1=HOODIE)
   var lpRows="",sumHd=0,sumEthU=0;
@@ -6754,7 +6814,7 @@ function renderHdAna(){
     var p=act[i];
     var full=(p.tL<=-887200&&p.tU>=887200);
     var eth=0,hd=0;
-    if(tick!==null){ // ohne Preis keine Zerlegung — sp=spL würde bei Full Range absurde ETH-Werte liefern
+    if(tick!==null){
       var spL=Math.pow(1.0001,p.tL/2),spU=Math.pow(1.0001,p.tU/2);
       var sp=Math.pow(1.0001,Math.min(Math.max(tick,p.tL),p.tU)/2);
       eth=p.liq*(1/sp-1/spU)/1e18;hd=p.liq*(sp-spL)/1e18;
@@ -6765,7 +6825,17 @@ function renderHdAna(){
     var rng=full?"Full Range":"$"+pLo.toPrecision(3)+"–$"+pHi.toPrecision(3);
     lpRows+='<tr><td>'+addrName(p.w)+'</td><td style="font-size:10px">'+rng+'</td><td style="color:var(--g)">'+F(hd,0)+'</td><td style="color:var(--cy)">$'+F(eth*eUsd,0)+'</td></tr>';
   }
-  // Trades (neueste 30)
+  var sum=$("hdAnaSum");
+  if(sum)sum.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+    +MB("HOODIE im Pool",F(sumHd,0),"var(--g)")
+    +MB("ETH-Support",sumEthU>0?"$"+F(sumEthU,0):"—","var(--cy)")
+    +MB("LP-Positionen",String(act.length),"var(--dm)")
+    +MB("Trades gesamt",String(_hdScan.trades.length),"var(--dm)")
+    +'</div>';
+  hdRenderTargets();
+  var lp=$("hdAnaLps");
+  if(lp)lp.innerHTML='<div class="lb" style="margin-top:10px">LP-Positionen</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Range</th><th>HOODIE</th><th>ETH ($)</th></tr></thead><tbody>'+(lpRows||'<tr><td colspan="4" style="color:var(--dm)">keine aktiven Positionen</td></tr>')+'</tbody></table></div>';
   var tr="";
   var shown=_hdScan.trades.slice(0,30);
   for(var j2=0;j2<shown.length;j2++){
@@ -6773,20 +6843,16 @@ function renderHdAna(){
     var tm=t.t?new Date(t.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
     tr+='<tr><td style="font-size:10px">'+tm+'</td><td style="color:'+(t.ty==="BUY"?"var(--g)":"var(--r)")+';font-weight:600">'+t.ty+'</td><td>'+F(t.hd,0)+'</td><td>$'+F(usd,0)+'</td><td style="font-size:10px">$'+(pxT>0?pxT.toPrecision(3):"—")+'</td><td style="font-size:10px">'+addrName(t.w)+'</td></tr>';
   }
-  b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-    +MB("HOODIE im Pool",F(sumHd,0),"var(--g)")
-    +MB("ETH-Support",sumEthU>0?"$"+F(sumEthU,0):"—","var(--cy)")
-    +MB("LP-Positionen",String(act.length),"var(--dm)")
-    +MB("Trades gesamt",String(_hdScan.trades.length),"var(--dm)")
-    +'</div>'
-    +'<div class="lb" style="margin-top:6px">LP-Positionen</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Range</th><th>HOODIE</th><th>ETH ($)</th></tr></thead><tbody>'+(lpRows||'<tr><td colspan="4" style="color:var(--dm)">keine aktiven Positionen</td></tr>')+'</tbody></table></div>'
-    +'<div class="lb" style="margin-top:10px">Trades (neueste 30)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Zeit</th><th>Typ</th><th>HOODIE</th><th>$</th><th>Preis</th><th>Wallet</th></tr></thead><tbody>'+(tr||'<tr><td colspan="6" style="color:var(--dm)">noch keine Trades gescannt</td></tr>')+'</tbody></table></div>'
-    +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px">Stand Block '+_hdScan.lastBlk+' · Auto-Update alle 90s</div>';
+  var td=$("hdAnaTrades");
+  if(td)td.innerHTML='<div class="lb" style="margin-top:10px">Trades (neueste 30)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Zeit</th><th>Typ</th><th>HOODIE</th><th>$</th><th>Preis</th><th>Wallet</th></tr></thead><tbody>'+(tr||'<tr><td colspan="6" style="color:var(--dm)">noch keine Trades gescannt</td></tr>')+'</tbody></table></div>';
+  var st=$("hdAnaStatus");
+  if(st)st.textContent="Stand Block "+_hdScan.lastBlk+" · Auto-Update alle 90s";
 }
 function hdOpenAna(){try{renderHdAna();hdScan();}catch(e){console.log("hdOpenAna err:",e);}}
 startRefresh();
+var APP_V="20260708i"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
 setTimeout(function(){try{fetchHoodie();}catch(e){}},2500);
