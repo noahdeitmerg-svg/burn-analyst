@@ -6678,7 +6678,7 @@ var HD_SWAP_SIG="0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad71
 var HD_MODLIQ_SIG="0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec";
 var HD_INIT_BLK=4268344;
 var _hdScan={lastBlk:0,trades:[],lps:[]};
-try{var _hds=JSON.parse(localStorage.getItem("hd_scan")||"null");if(_hds&&_hds.lastBlk>0)_hdScan=_hds;}catch(e){}
+try{var _hds=JSON.parse(localStorage.getItem("hd_scan")||"null");if(_hds&&_hds.lastBlk>0&&_hds.v===2)_hdScan=_hds;}catch(e){} // v2: mit LP-Event-Log; aeltere Caches -> Rescan ab Pool-Geburt (billig, Pool ist jung)
 var _hdTxFrom={},_hdBlkTs={};
 async function hdRpc(method,params){
   var r=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params})});
@@ -6734,6 +6734,10 @@ async function hdScan(){
         for(var p2=0;p2<_hdScan.lps.length;p2++){if(_hdScan.lps[p2].pk===pk){found=_hdScan.lps[p2];break;}}
         if(!found){found={pk:pk,w:frm,tL:tL,tU:tU,liq:0,t:ts};_hdScan.lps.push(found);}
         found.liq+=dL;if(ts)found.t=ts;
+        // LP-Aktivitaets-Log (wie beim BURN): jedes Open/Close als Ereignis mit Zeit
+        if(!_hdScan.ev)_hdScan.ev=[];
+        _hdScan.ev.push({k:evk,b:blk,t:ts,ty:dL>0?"MINT":"CLOSE",w:frm,tL:tL,tU:tU,dL:Math.abs(dL)});
+        if(_hdScan.ev.length>200)_hdScan.ev=_hdScan.ev.slice(-200);
       }
     }
     if(_hdScan.trades.length>300)_hdScan.trades=_hdScan.trades.slice(-300);
@@ -6741,7 +6745,7 @@ async function hdScan(){
     _hdScan.lastBlk=head;
     // seen NICHT persistieren: nach erfolgreichem Save schützt lastBlk vor Rescans; seen deckt nur
     // den Retry eines fehlgeschlagenen Scans innerhalb der Session ab. Hält den localStorage klein.
-    try{localStorage.setItem("hd_scan",JSON.stringify({lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps}));}catch(e){}
+    try{localStorage.setItem("hd_scan",JSON.stringify({v:2,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]}));}catch(e){}
     renderHdAna();
   }catch(e){console.log("hdScan err:",e&&e.message);var st2=$("hdAnaStatus");if(st2)st2.textContent="Scan-Fehler: "+(e&&e.message||e)+" — nochmal öffnen für Retry";}
   _hdScanBusy=false;
@@ -6897,7 +6901,7 @@ function renderHdAna(){
       +'<button onclick="hdImpact(true)" style="background:rgba(52,211,153,.15);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">KAUF</button>'
       +'<button onclick="hdImpact(false)" style="background:rgba(248,113,113,.15);border:1px solid var(--r);color:var(--r);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">VERKAUF</button>'
       +'</div><div id="hdImpRes" style="font-size:11px;margin-top:8px;line-height:1.5;color:var(--tx)"></div>'
-      +'<div id="hdAnaLps"></div><div id="hdAnaTrades"></div>'
+      +'<div id="hdAnaLps"></div><div id="hdAnaEv"></div><div id="hdAnaTrades"></div>'
       +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>';
   }
   var eUsd=_hd.ethUsd||0;
@@ -6905,6 +6909,7 @@ function renderHdAna(){
   // LP-Zusammensetzung (V3/V4-Mathe, beide Token 18 dec, token0=ETH, token1=HOODIE)
   var lpRows="",sumHd=0,sumEthU=0;
   var act=_hdScan.lps.filter(function(x){return x.liq>1;});
+  var closed=_hdScan.lps.filter(function(x){return x.liq<=1;});
   for(var i=0;i<act.length;i++){
     var p=act[i];
     var full=(p.tL<=-887200&&p.tU>=887200);
@@ -6920,6 +6925,13 @@ function renderHdAna(){
     var rng=full?"Full Range":"$"+pLo.toPrecision(3)+"–$"+pHi.toPrecision(3);
     lpRows+='<tr><td>'+addrName(p.w)+'</td><td style="font-size:10px">'+rng+'</td><td style="color:var(--g)">'+F(hd,0)+'</td><td style="color:var(--cy)">$'+F(eth*eUsd,0)+'</td></tr>';
   }
+  for(var ci=0;ci<closed.length;ci++){
+    var cp=closed[ci];
+    var cFull=(cp.tL<=-887200&&cp.tU>=887200);
+    var cLo=eUsd>0?eUsd/Math.pow(1.0001,cp.tU):0,cHi=eUsd>0?eUsd/Math.pow(1.0001,cp.tL):0;
+    var cRng=cFull?"Full Range":"$"+cLo.toPrecision(3)+"–$"+cHi.toPrecision(3);
+    lpRows+='<tr style="opacity:.55"><td>'+addrName(cp.w)+'</td><td style="font-size:10px">'+cRng+'</td><td colspan="2" style="color:var(--r);font-size:10px;font-weight:600">CLOSED'+(cp.t?' · '+new Date(cp.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):'')+'</td></tr>';
+  }
   var sum=$("hdAnaSum");
   if(sum)sum.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
     +MB("HOODIE im Pool",F(sumHd,0),"var(--g)")
@@ -6931,6 +6943,29 @@ function renderHdAna(){
   var lp=$("hdAnaLps");
   if(lp)lp.innerHTML='<div class="lb" style="margin-top:10px">LP-Positionen</div>'
     +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Range</th><th>HOODIE</th><th>ETH ($)</th></tr></thead><tbody>'+(lpRows||'<tr><td colspan="4" style="color:var(--dm)">keine aktiven Positionen</td></tr>')+'</tbody></table></div>';
+  var ev=$("hdAnaEv");
+  if(ev){
+    var evs=(_hdScan.ev||[]).slice().sort(function(a,b){return b.b-a.b;}).slice(0,30);
+    var er="";
+    for(var e2=0;e2<evs.length;e2++){
+      var E=evs[e2];
+      var eFull=(E.tL<=-887200&&E.tU>=887200);
+      var eLo=eUsd>0?eUsd/Math.pow(1.0001,E.tU):0,eHi=eUsd>0?eUsd/Math.pow(1.0001,E.tL):0;
+      var eRng=eFull?"Full Range":"$"+eLo.toPrecision(3)+"–$"+eHi.toPrecision(3);
+      // Mengen aus |liqDelta| zum aktuellen Tick zerlegt (Naeherung fuer historische Events)
+      var eHd=0,eEthU=0;
+      if(tick!==null){
+        var esL=Math.pow(1.0001,E.tL/2),esU=Math.pow(1.0001,E.tU/2);
+        var esc=Math.pow(1.0001,Math.min(Math.max(tick,E.tL),E.tU)/2);
+        eHd=E.dL*(esc-esL)/1e18;eEthU=E.dL*(1/esc-1/esU)/1e18*eUsd;
+        if(!isFinite(eHd)||eHd<0)eHd=0;if(!isFinite(eEthU)||eEthU<0)eEthU=0;
+      }
+      var eTm=E.t?new Date(E.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
+      er+='<tr><td style="font-size:10px">'+eTm+'</td><td style="color:'+(E.ty==="MINT"?"var(--g)":"var(--r)")+';font-weight:600">'+(E.ty==="MINT"?"🟢 OPEN":"🔴 CLOSE")+'</td><td style="font-size:10px">'+addrName(E.w)+'</td><td style="font-size:10px">'+eRng+'</td><td style="font-size:10px">'+F(eHd,0)+' HD'+(eEthU>=1?' + $'+F(eEthU,0):'')+'</td></tr>';
+    }
+    ev.innerHTML='<div class="lb" style="margin-top:10px">📜 LP Aktivität (Open/Close-Log)</div>'
+      +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Zeit</th><th>Event</th><th>Wallet</th><th>Range</th><th>Menge</th></tr></thead><tbody>'+(er||'<tr><td colspan="5" style="color:var(--dm)">noch keine LP-Events</td></tr>')+'</tbody></table></div>';
+  }
   var tr="";
   var shown=_hdScan.trades.slice(0,30);
   for(var j2=0;j2<shown.length;j2++){
