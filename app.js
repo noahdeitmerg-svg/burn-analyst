@@ -6681,10 +6681,14 @@ var _hdScan={lastBlk:0,trades:[],lps:[]};
 try{var _hds=JSON.parse(localStorage.getItem("hd_scan")||"null");if(_hds&&_hds.lastBlk>0&&_hds.v===2)_hdScan=_hds;}catch(e){} // v2: mit LP-Event-Log; aeltere Caches -> Rescan ab Pool-Geburt (billig, Pool ist jung)
 var _hdTxFrom={},_hdBlkTs={};
 async function hdRpc(method,params){
-  var r=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params})});
-  var j=await r.json();
-  if(j&&j.error)throw new Error(j.error.message||"rpc err");
-  return j?j.result:null;
+  var ac=(typeof AbortController!=="undefined")?new AbortController():null;
+  var to=ac?setTimeout(function(){ac.abort();},25000):null;
+  try{
+    var r=await fetch(RH_RPC,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({jsonrpc:"2.0",id:1,method:method,params:params}),signal:ac?ac.signal:undefined});
+    var j=await r.json();
+    if(j&&j.error)throw new Error(j.error.message||"rpc err");
+    return j?j.result:null;
+  }finally{if(to)clearTimeout(to);}
 }
 async function hdCall(to,data){
   var res=await hdRpc("eth_call",[{to:to,data:data},"latest"]);
@@ -6694,60 +6698,74 @@ async function hdCall(to,data){
 }
 function hdI(hexWord){var v=BigInt("0x"+hexWord);if(v>=(2n**255n))v-=(2n**256n);return v;}
 var _hdScanBusy=false;
+// Robuster Scan: adaptive Chunk-Größen (Mobile-RPC wirft große getLogs ab), Fortschritt wird pro
+// Chunk persistiert (Abbruch verliert nichts), 25s-Timeout statt Ewig-Hänger, Retry-Button im UI.
+async function hdProcessLogs(logs){
+  for(var i=0;i<logs.length;i++){
+    var l=logs[i],d=(l.data||"0x").slice(2),t0=l.topics[0],blk=parseInt(l.blockNumber,16);
+    var txh=l.transactionHash;
+    var evk=txh+":"+(l.logIndex||"");
+    if(!_hdScan.seen)_hdScan.seen={};
+    if(_hdScan.seen[evk])continue;
+    _hdScan.seen[evk]=1;
+    var frm=_hdTxFrom[txh];
+    if(!frm){try{var tx=await hdRpc("eth_getTransactionByHash",[txh]);frm=((tx||{}).from||"").toLowerCase();_hdTxFrom[txh]=frm;}catch(e){frm="";}}
+    var ts=_hdBlkTs[blk];
+    if(!ts){try{var bo=await hdRpc("eth_getBlockByNumber",["0x"+blk.toString(16),false]);ts=parseInt((bo||{}).timestamp||"0x0",16)*1000;_hdBlkTs[blk]=ts;}catch(e){ts=0;}}
+    if(t0===HD_SWAP_SIG&&d.length>=128){
+      var a0=Number(hdI(d.slice(0,64)))/1e18,a1=Number(hdI(d.slice(64,128)))/1e18;
+      if(Math.abs(a1)<1)continue;
+      _hdScan.trades.push({k:evk,b:blk,t:ts,ty:a1>0?"BUY":"SELL",hd:Math.abs(a1),e:Math.abs(a0),w:frm});
+    }else if(t0===HD_MODLIQ_SIG&&d.length>=192){
+      var tL=Number(hdI(d.slice(0,64))),tU=Number(hdI(d.slice(64,128))),dL=Number(hdI(d.slice(128,192)));
+      var salt=d.slice(192,256)||"";
+      var pk=frm+":"+tL+":"+tU+":"+salt,found=null;
+      for(var p2=0;p2<_hdScan.lps.length;p2++){if(_hdScan.lps[p2].pk===pk){found=_hdScan.lps[p2];break;}}
+      if(!found){found={pk:pk,w:frm,tL:tL,tU:tU,liq:0,t:ts};_hdScan.lps.push(found);}
+      found.liq+=dL;if(ts)found.t=ts;
+      if(!_hdScan.ev)_hdScan.ev=[];
+      _hdScan.ev.push({k:evk,b:blk,t:ts,ty:dL>0?"MINT":"CLOSE",w:frm,tL:tL,tU:tU,dL:Math.abs(dL)});
+      if(_hdScan.ev.length>200)_hdScan.ev=_hdScan.ev.slice(-200);
+    }
+  }
+}
+function hdSaveScan(){
+  if(_hdScan.trades.length>300)_hdScan.trades=_hdScan.trades.slice(-300);
+  _hdScan.trades.sort(function(a,b){return b.b-a.b;});
+  try{localStorage.setItem("hd_scan",JSON.stringify({v:2,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]}));}catch(e){}
+}
 async function hdScan(){
   if(_hdScanBusy)return;_hdScanBusy=true;
+  var st=$("hdAnaStatus");
   try{
-    var st=$("hdAnaStatus");
     var bn=await hdRpc("eth_blockNumber",[]);
     var head=parseInt(bn,16);
     var from=_hdScan.lastBlk>0?_hdScan.lastBlk+1:HD_INIT_BLK;
-    if(head<from){_hdScanBusy=false;return;}
-    var CH=400000,logs=[];
-    for(var lo=from;lo<=head;lo+=CH){
-      var hi=Math.min(lo+CH-1,head);
-      if(st)st.textContent="Scanne Blöcke "+lo+"–"+hi+"…";
-      var part=await hdRpc("eth_getLogs",[{address:HD_PM,fromBlock:"0x"+lo.toString(16),toBlock:"0x"+hi.toString(16),topics:[[HD_SWAP_SIG,HD_MODLIQ_SIG],HD_POOLID]}]);
-      if(part&&part.length)logs=logs.concat(part);
-    }
-    for(var i=0;i<logs.length;i++){
-      var l=logs[i],d=(l.data||"0x").slice(2),t0=l.topics[0],blk=parseInt(l.blockNumber,16);
-      var txh=l.transactionHash;
-      // IDEMPOTENZ: jedes Event exakt einmal verarbeiten — ein abgebrochener Scan (lastBlk nicht
-      // fortgeschrieben) darf beim Retry keine LP-Liquidity doppelt aufaddieren.
-      var evk=txh+":"+(l.logIndex||"");
-      if(!_hdScan.seen)_hdScan.seen={};
-      if(_hdScan.seen[evk])continue;
-      _hdScan.seen[evk]=1;
-      // tx.from (Owner/Trader) + Block-Zeit, beides gecacht
-      var frm=_hdTxFrom[txh];
-      if(!frm){try{var tx=await hdRpc("eth_getTransactionByHash",[txh]);frm=((tx||{}).from||"").toLowerCase();_hdTxFrom[txh]=frm;}catch(e){frm="";}}
-      var ts=_hdBlkTs[blk];
-      if(!ts){try{var bo=await hdRpc("eth_getBlockByNumber",["0x"+blk.toString(16),false]);ts=parseInt((bo||{}).timestamp||"0x0",16)*1000;_hdBlkTs[blk]=ts;}catch(e){ts=0;}}
-      if(t0===HD_SWAP_SIG&&d.length>=128){
-        var a0=Number(hdI(d.slice(0,64)))/1e18,a1=Number(hdI(d.slice(64,128)))/1e18;
-        if(Math.abs(a1)<1)continue;
-        _hdScan.trades.push({k:evk,b:blk,t:ts,ty:a1>0?"BUY":"SELL",hd:Math.abs(a1),e:Math.abs(a0),w:frm});
-      }else if(t0===HD_MODLIQ_SIG&&d.length>=192){
-        var tL=Number(hdI(d.slice(0,64))),tU=Number(hdI(d.slice(64,128))),dL=Number(hdI(d.slice(128,192)));
-        var salt=d.slice(192,256)||"";
-        var pk=frm+":"+tL+":"+tU+":"+salt,found=null;
-        for(var p2=0;p2<_hdScan.lps.length;p2++){if(_hdScan.lps[p2].pk===pk){found=_hdScan.lps[p2];break;}}
-        if(!found){found={pk:pk,w:frm,tL:tL,tU:tU,liq:0,t:ts};_hdScan.lps.push(found);}
-        found.liq+=dL;if(ts)found.t=ts;
-        // LP-Aktivitaets-Log (wie beim BURN): jedes Open/Close als Ereignis mit Zeit
-        if(!_hdScan.ev)_hdScan.ev=[];
-        _hdScan.ev.push({k:evk,b:blk,t:ts,ty:dL>0?"MINT":"CLOSE",w:frm,tL:tL,tU:tU,dL:Math.abs(dL)});
-        if(_hdScan.ev.length>200)_hdScan.ev=_hdScan.ev.slice(-200);
+    var sizes=[400000,150000,50000];
+    while(from<=head){
+      var part=null,used=0,lastErr=null;
+      for(var si=0;si<sizes.length;si++){
+        var hi=Math.min(from+sizes[si]-1,head);
+        if(st)st.textContent="Scanne Blöcke "+from+"–"+hi+" ("+Math.round((from-HD_INIT_BLK)/(head-HD_INIT_BLK+1)*100)+"%)…";
+        try{
+          part=await hdRpc("eth_getLogs",[{address:HD_PM,fromBlock:"0x"+from.toString(16),toBlock:"0x"+hi.toString(16),topics:[[HD_SWAP_SIG,HD_MODLIQ_SIG],HD_POOLID]}]);
+          used=sizes[si];break;
+        }catch(e){lastErr=e;part=null;}
       }
+      if(part===null)throw lastErr||new Error("getLogs fail");
+      if(part.length)await hdProcessLogs(part);
+      from=Math.min(from+used,head+1);
+      _hdScan.lastBlk=from-1;
+      hdSaveScan(); // Fortschritt sichern — Abbruch kostet ab jetzt nur den Rest
     }
-    if(_hdScan.trades.length>300)_hdScan.trades=_hdScan.trades.slice(-300);
-    _hdScan.trades.sort(function(a,b){return b.b-a.b;});
-    _hdScan.lastBlk=head;
-    // seen NICHT persistieren: nach erfolgreichem Save schützt lastBlk vor Rescans; seen deckt nur
-    // den Retry eines fehlgeschlagenen Scans innerhalb der Session ab. Hält den localStorage klein.
-    try{localStorage.setItem("hd_scan",JSON.stringify({v:2,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]}));}catch(e){}
+    hdSaveScan();
     renderHdAna();
-  }catch(e){console.log("hdScan err:",e&&e.message);var st2=$("hdAnaStatus");if(st2)st2.textContent="Scan-Fehler: "+(e&&e.message||e)+" — nochmal öffnen für Retry";}
+  }catch(e){
+    console.log("hdScan err:",e&&e.message||e);
+    var st2=$("hdAnaStatus");
+    if(st2)st2.innerHTML='Scan-Fehler: '+((e&&e.message)||e)+' bei Block '+(_hdScan.lastBlk||HD_INIT_BLK)+' — <b>↻ Scan fortsetzen</b> drücken (Fortschritt bleibt erhalten)';
+    try{renderHdAna();}catch(e2){}
+  }
   _hdScanBusy=false;
 }
 function hdTick(){ // aktueller V4-Tick aus USD-Preisen (price = token1/token0 = HOODIE pro ETH)
@@ -6901,7 +6919,7 @@ function renderHdAna(){
       +'<button onclick="hdImpact(true)" style="background:rgba(52,211,153,.15);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">KAUF</button>'
       +'<button onclick="hdImpact(false)" style="background:rgba(248,113,113,.15);border:1px solid var(--r);color:var(--r);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">VERKAUF</button>'
       +'</div><div id="hdImpRes" style="font-size:11px;margin-top:8px;line-height:1.5;color:var(--tx)"></div>'
-      +'<div id="hdAnaLps"></div><div id="hdAnaEv"></div><div id="hdAnaTrades"></div>'
+      +'<div id="hdAnaLps"></div><div id="hdAnaEv"></div><div id="hdAnaTrades"></div><div style="margin-top:8px"><button onclick="hdScan()" style="background:rgba(34,211,238,.12);border:1px solid var(--cy);color:var(--cy);border-radius:8px;padding:7px 14px;font-family:inherit;font-size:11px;font-weight:600">↻ Scan starten / fortsetzen</button></div>'
       +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>';
   }
   var eUsd=_hd.ethUsd||0;
