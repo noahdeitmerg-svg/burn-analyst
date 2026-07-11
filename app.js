@@ -6643,6 +6643,7 @@ function renderHoodie(){
 var _hdBusy=false;
 async function fetchHoodie(){
   if(_hdBusy)return;_hdBusy=true;
+  try{fetchEthHist();}catch(e){}
   try{
     try{
       var r=await fetch(HOODIE_GT,{headers:{"Accept":"application/json"}});
@@ -6700,6 +6701,25 @@ async function hdCall(to,data){
   return isFinite(v)&&v>=0?v:null;
 }
 function hdI(hexWord){var v=BigInt("0x"+hexWord);if(v>=(2n**255n))v-=(2n**256n);return v;}
+// ── ETH-Kurshistorie für zeitkorrekte $-Werte vergangener Events (CoinGecko, stündlich) ──
+var _ethHist=[];var _ethHistTs=0;
+try{var _eh=JSON.parse(localStorage.getItem("hd_ethhist")||"null");if(_eh&&_eh.length){_ethHist=_eh;_ethHistTs=Date.now()-3600000;}}catch(e){}
+async function fetchEthHist(){
+  if(Date.now()-_ethHistTs<21600000&&_ethHist.length)return;
+  try{
+    var to=Math.floor(Date.now()/1000),fr=to-14*86400;
+    var r=await fetch("https://api.coingecko.com/api/v3/coins/ethereum/market_chart/range?vs_currency=usd&from="+fr+"&to="+to);
+    var j=await r.json();
+    if(j&&j.prices&&j.prices.length){_ethHist=j.prices;_ethHistTs=Date.now();
+      try{localStorage.setItem("hd_ethhist",JSON.stringify(_ethHist));}catch(e){}}
+  }catch(e){console.log("ethHist err:",e&&e.message);}
+}
+function ethUsdAt(ts){ // ETH-$ zum Zeitpunkt ts; >12h ohne Datenpunkt -> aktueller Kurs
+  if(!ts||!_ethHist.length)return _hd.ethUsd||0;
+  var best=null,bd=Infinity;
+  for(var i=0;i<_ethHist.length;i++){var d=Math.abs(_ethHist[i][0]-ts);if(d<bd){bd=d;best=_ethHist[i][1];}}
+  return (best&&bd<43200000)?best:(_hd.ethUsd||best||0);
+}
 var _hdScanBusy=false;
 // Robuster Scan: adaptive Chunk-Größen (Mobile-RPC wirft große getLogs ab), Fortschritt wird pro
 // Chunk persistiert (Abbruch verliert nichts), 25s-Timeout statt Ewig-Hänger, Retry-Button im UI.
@@ -6734,11 +6754,28 @@ async function hdProcessLogs(logs){
     }
   }
 }
+var _hdSrvTs=0;
 function hdSaveScan(){
   if(_hdScan.trades.length>1000)_hdScan.trades=_hdScan.trades.slice(-1000);
   _hdScan.trades.sort(function(a,b){return b.b-a.b;});
-  try{localStorage.setItem("hd_scan",JSON.stringify({v:3,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]}));}catch(e){}
+  var payload=JSON.stringify({v:3,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]});
+  try{localStorage.setItem("hd_scan",payload);}catch(e){}
+  // Server-Backup (throttled): Neuinstallation der App verliert damit keine Historie mehr
+  if(Date.now()-_hdSrvTs>60000){_hdSrvTs=Date.now();
+    try{fetch("https://95-216-152-31.sslip.io/hdscan",{method:"POST",mode:"cors",body:payload}).catch(function(){});}catch(e){}}
 }
+// Frisch-Install-Hydration: kein lokaler Scan-Stand -> vom Server laden
+setTimeout(async function(){
+  if(_hdScan.lastBlk>0)return;
+  try{
+    var r=await fetch("https://95-216-152-31.sslip.io/hdscan",{mode:"cors"});
+    var j=await r.json();
+    if(j&&j.v===3&&j.lastBlk>0){_hdScan=j;
+      try{localStorage.setItem("hd_scan",JSON.stringify(j));}catch(e){}
+      console.log("hd_scan vom Server hydriert: Block "+j.lastBlk);
+      try{renderHdAna();}catch(e){}}
+  }catch(e){}
+},3500);
 function _hdBtn(txt,dis){try{var b=$("hdScanBtn");if(b){if(txt)b.textContent=txt;b.disabled=!!dis;b.style.opacity=dis?".5":"1";}}catch(e){}}
 async function hdScan(){
   if(_hdScanBusy){var s0=$("hdAnaStatus");if(s0)s0.textContent="Scan läuft bereits – Fortschritt siehe Button/Status…";return;}
@@ -6999,7 +7036,7 @@ function renderHdAna(){
       if(eTick!==null){
         var esL=Math.pow(1.0001,E.tL/2),esU=Math.pow(1.0001,E.tU/2);
         var esc=Math.pow(1.0001,Math.min(Math.max(eTick,E.tL),E.tU)/2);
-        eHd=E.dL*(esc-esL)/1e18;eEthU=E.dL*(1/esc-1/esU)/1e18*eUsd;
+        eHd=E.dL*(esc-esL)/1e18;eEthU=E.dL*(1/esc-1/esU)/1e18*ethUsdAt(E.t); // damaliger ETH-$
         if(!isFinite(eHd)||eHd<0)eHd=0;if(!isFinite(eEthU)||eEthU<0)eEthU=0;
       }
       var eTm=E.t?new Date(E.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
@@ -7012,7 +7049,7 @@ function renderHdAna(){
   if(typeof window._hdTrAll==="undefined")window._hdTrAll=false;
   var shown=window._hdTrAll?_hdScan.trades:_hdScan.trades.slice(0,30);
   for(var j2=0;j2<shown.length;j2++){
-    var t=shown[j2],usd=t.e*eUsd,pxT=t.hd>0?usd/t.hd:0;
+    var t=shown[j2],usd=t.e*ethUsdAt(t.t),pxT=t.hd>0?usd/t.hd:0; // $ zum damaligen ETH-Kurs
     var tm=t.t?new Date(t.t).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}):"—";
     tr+='<tr><td style="font-size:10px">'+tm+'</td><td style="color:'+(t.ty==="BUY"?"var(--g)":"var(--r)")+';font-weight:600">'+t.ty+'</td><td>'+F(t.hd,0)+'</td><td>$'+F(usd,0)+'</td><td style="font-size:10px">$'+(pxT>0?pxT.toPrecision(3):"—")+'</td><td style="font-size:10px">'+addrName(t.w)+'</td></tr>';
   }
@@ -7024,13 +7061,141 @@ function renderHdAna(){
   if(st&&!_hdScanBusy)st.textContent="Stand Block "+_hdScan.lastBlk+" · Auto-Update alle 90s";
 }
 function hdOpenAna(){try{renderHdAna();hdScan();}catch(e){console.log("hdOpenAna err:",e);}}
+// ═══ INVESTOREN-ÜBERSICHT (BURN + HOODIE): pro Wallet investiert / rausgezogen / Bestand ═══
+// HOODIE: exakt ab Pool-Geburt (kompletter Event-Replay). BURN: seit Log-Beginn (allTrades-Fenster
+// + Closed-LP-Entnahmen aus dem Scan) — Allzeit-Historie wäre ein separater Vollscan.
+window._invOpen=false;
+var _invBal={hd:{},burn:{}};
+function _invAgg(){
+  var eU=_hd.ethUsd||0,tick=hdTick();
+  var hd={},burn={};
+  function G(m,w){var k=(w||"?").toLowerCase();if(!m[k])m[k]={inv:0,out:0,lpTok:0,lpUsd:0};return m[k];}
+  // HOODIE: Trades — $ zum damaligen ETH-Kurs
+  (_hdScan.trades||[]).forEach(function(t){
+    if(!t.w)return;var g=G(hd,t.w);
+    var u=t.e*ethUsdAt(t.t);
+    if(t.ty==="BUY")g.inv+=u;else g.out+=u;
+  });
+  // HOODIE: LP-Events — ETH-Anteil zum zeitexakten Tick, $ zum damaligen ETH-Kurs
+  (_hdScan.ev||[]).forEach(function(E){
+    if(!E.w)return;
+    var eTick=hdTickAtBlock(E.b);if(eTick===null)eTick=tick;if(eTick===null)return;
+    var esU=Math.pow(1.0001,E.tU/2);
+    var esc=Math.pow(1.0001,Math.min(Math.max(eTick,E.tL),E.tU)/2);
+    var ethU=E.dL*(1/esc-1/esU)/1e18*ethUsdAt(E.t);
+    if(!isFinite(ethU)||ethU<0)ethU=0;
+    var g=G(hd,E.w);
+    if(E.ty==="MINT")g.inv+=ethU;else g.out+=ethU;
+  });
+  // HOODIE: aktuell in aktiven LPs (Zerlegung zum JETZT-Tick, $ zum JETZT-Kurs)
+  (_hdScan.lps||[]).forEach(function(p){
+    if(!(p.liq>1)||tick===null)return;
+    var spL=Math.pow(1.0001,p.tL/2),spU=Math.pow(1.0001,p.tU/2);
+    var sp=Math.pow(1.0001,Math.min(Math.max(tick,p.tL),p.tU)/2);
+    var phd=p.liq*(sp-spL)/1e18,peth=p.liq*(1/sp-1/spU)/1e18;
+    if(!isFinite(phd)||phd<0)phd=0;if(!isFinite(peth)||peth<0)peth=0;
+    var g=G(hd,p.w);
+    g.lpTok+=phd;g.lpUsd+=phd*(_hd.px||0)+peth*eU;
+  });
+  // BURN: aktuell in aktiven LPs
+  (window._lpOwners||[]).forEach(function(o){
+    if(!o||o.closed||!(o.liq>0)||!o.owner)return;
+    try{
+      var bDep=wtLiqToBurn(o.liq,o.tL,o.tU);if(!(bDep>0))return;
+      var Pb=pxUnified();
+      var cv=v3(bDep,o.lo,o.hi,Pb);
+      var g=G(burn,o.owner);
+      g.lpTok+=cv.left;g.lpUsd+=cv.left*Pb+cv.usdc;
+    }catch(e){}
+  });
+  // BURN: Allzeit-Basis vom Server (burn_fullscan), Live-Trades nur oberhalb lastBlk (kein Doppelzählen)
+  var bsBlk=0;
+  if(_burnStats&&_burnStats.wallets){
+    bsBlk=_burnStats.lastBlk||0;
+    Object.keys(_burnStats.wallets).forEach(function(w){
+      var v=_burnStats.wallets[w],g=G(burn,w);
+      g.inv+=v.inv||0;g.out+=v.out||0;
+    });
+  }
+  (typeof allTrades!=="undefined"?allTrades:[]).forEach(function(t){
+    if(t.blk<=bsBlk)return;
+    var w=(typeof signerCache!=="undefined"&&signerCache[t.txHash])||t.wallet;
+    if(!w)return;var g=G(burn,w);
+    if(t.isBuy)g.inv+=t.usdc;else g.out+=t.usdc;
+  });
+  // BURN: geschlossene LPs — entnommenes USDC
+  var lo=window._lpOwners||[];
+  lo.forEach(function(o){
+    if(o&&o.closed&&o.usdcOut>0&&o.owner){G(burn,o.owner).out+=o.usdcOut;}
+  });
+  return {hd:hd,burn:burn};
+}
+function _invRows(m,balMap,curId){
+  var ks=Object.keys(m).sort(function(a,b){return (m[b].inv+m[b].out)-(m[a].inv+m[a].out);}).slice(0,25);
+  var r="";
+  ks.forEach(function(w){
+    var g=m[w],net=g.out-g.inv;
+    var b=balMap[w];
+    var balTxt=b&&b.v!==undefined?F(b.v,0):"—";
+    var lpTxt=g.lpUsd>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
+    r+='<tr><td style="font-size:10px">'+addrName(w)+'</td>'
+      +'<td style="color:var(--r)">$'+F(g.inv,0)+'</td>'
+      +'<td style="color:var(--g)">$'+F(g.out,0)+'</td>'
+      +'<td style="color:'+(net>=0?"var(--g)":"var(--warn)")+'">'+(net>=0?"+":"−")+"$"+F(Math.abs(net),0)+'</td>'
+      +'<td style="font-size:10px">'+lpTxt+'</td>'
+      +'<td style="font-size:10px">'+balTxt+'</td></tr>';
+  });
+  return r||'<tr><td colspan="6" style="color:var(--dm)">keine Daten — '+(curId==="hd"?"HOODIE-Scan":"BURN-Trades/Scan")+' erst laufen lassen</td></tr>';
+}
+function renderInvestors(){
+  var b=$("invBody");if(!b)return;
+  var a=_invAgg();
+  b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
+    +'<button onclick="invLoadBal(\'hd\')" style="margin:6px 0;background:rgba(52,211,153,.12);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Robinhood)</button>'
+    +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+', inkl. LP-Entnahmen)</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
+    +'<button onclick="invLoadBal(\'burn\')" style="margin:6px 0;background:rgba(251,146,60,.12);border:1px solid var(--o);color:var(--o);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Arbitrum)</button>'
+    +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
+}
+async function invLoadBal(which){
+  try{
+    var a=_invAgg();
+    var m=which==="hd"?a.hd:a.burn;
+    var bm=_invBal[which];
+    var ks=Object.keys(m).sort(function(x,y){return (m[y].inv+m[y].out)-(m[x].inv+m[x].out);}).slice(0,25);
+    for(var i=0;i<ks.length;i++){
+      var w=ks[i];
+      if(bm[w]&&Date.now()-bm[w].ts<600000)continue;
+      try{
+        var v=null;
+        if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
+        else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+             if(hx&&hx!=="0x")v=Number(BigInt(hx))/1e18;}
+        if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
+      }catch(e){}
+      if(i%5===4)renderInvestors();
+    }
+    renderInvestors();
+  }catch(e){console.log("invLoadBal err:",e&&e.message);}
+}
+var _burnStats=null,_burnStatsTs=0;
+async function invLoadBurnStats(){
+  if(_burnStats&&Date.now()-_burnStatsTs<600000)return;
+  try{
+    var r=await fetch("https://95-216-152-31.sslip.io/burnstats",{mode:"cors"});
+    var j=await r.json();
+    if(j&&j.wallets&&j.lastBlk>0){_burnStats=j;_burnStatsTs=Date.now();renderInvestors();}
+  }catch(e){console.log("burnstats err:",e&&e.message);}
+}
+function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}}
 startRefresh();
-var APP_V="20260711d"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260711g"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
 setTimeout(function(){try{fetchHoodie();}catch(e){}},2500);
-setInterval(function(){if(!document.hidden){try{fetchHoodie();}catch(e){}}},90000);
+setInterval(function(){if(!document.hidden){try{fetchHoodie();}catch(e){}try{if(window._invOpen)renderInvestors();}catch(e){}}},90000);
 // PTF-Server-Sync auch periodisch (nicht nur bei ptfSave): haelt portfolio-data.json auf dem VPS
 // frisch, damit der Push-Monitor die echten Bestaende liest statt des app.js-Fallbacks.
 setInterval(function(){if(!document.hidden){try{_ptfLastSync=0;ptfSyncServer();}catch(e){}}},300000);
