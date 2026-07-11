@@ -105,7 +105,7 @@ try{var abServerCache=JSON.parse(localStorage.getItem("addr_book_server")||"{}")
 async function syncAddrBookFromServer(){
   try{
     var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},6000);
-    var r=await fetch("http://95.216.152.31:8082/addressbook",{signal:ac.signal});
+    var r=await fetch("https://95-216-152-31.sslip.io/addressbook",{signal:ac.signal});
     clearTimeout(tm);
     if(!r.ok)return;
     var book=await r.json();
@@ -758,7 +758,7 @@ function walConfirmChange(){
   localStorage.removeItem("walNotifKey");
   // Sync to Hetzner server (so monitor stops alerting)
   try{
-    fetch("http://95.216.152.31:8082/wallet/confirm",{method:"POST",mode:"cors"})
+    fetch("https://95-216-152-31.sslip.io/wallet/confirm",{method:"POST",mode:"cors"})
       .then(function(r){return r.json();})
       .then(function(d){console.log("server confirm:",d);})
       .catch(function(e){console.log("server confirm sync failed (browser blocks HTTP, APK ok):",e&&e.message);});
@@ -772,7 +772,7 @@ function defiConfirmChange(){
   localStorage.removeItem("defiNotifKey");
   // Sync to Hetzner server (so the monitor stops alerting too)
   try{
-    fetch("http://95.216.152.31:8082/defi/confirm",{method:"POST",mode:"cors"})
+    fetch("https://95-216-152-31.sslip.io/defi/confirm",{method:"POST",mode:"cors"})
       .then(function(r){return r.json();})
       .then(function(d){console.log("server defi confirm:",d);})
       .catch(function(e){console.log("server defi confirm sync failed (browser blocks HTTP, APK ok):",e&&e.message);});
@@ -781,7 +781,7 @@ function defiConfirmChange(){
 }
 function fetchServerWalletState(){
   try{
-    fetch("http://95.216.152.31:8082/wallet/state",{mode:"cors"})
+    fetch("https://95-216-152-31.sslip.io/wallet/state",{mode:"cors"})
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d||d.error)return;
@@ -2083,7 +2083,11 @@ function forceScanLiqMap(){
   window._lmapScanning=false;
   try{clearTimeout(window._lmapGuardTimer);}catch(e){}
   try{$("lmapStatus").textContent="Scanning ticks...";}catch(e){}
-  scanLiqMap();
+  // Button-Feedback: alle Scan-Buttons dimmen, nach Scan-Ende zurücksetzen
+  var _bs=[];try{_bs=Array.prototype.slice.call(document.querySelectorAll('button[onclick*="forceScanLiqMap"]'));}catch(e){}
+  _bs.forEach(function(b){b.disabled=true;b.style.opacity=".5";b.dataset._t=b.textContent;b.textContent="⏳ Scan…";});
+  var _done=function(){_bs.forEach(function(b){try{b.disabled=false;b.style.opacity="1";if(b.dataset._t)b.textContent=b.dataset._t;}catch(e){}});};
+  try{var _p=scanLiqMap();if(_p&&_p.finally)_p.finally(_done);else setTimeout(_done,30000);}catch(e){_done();}
 }
 async function scanLiqMap(){
   // Cache lifetime: 4 min (shorter than 5-min auto-scan interval)
@@ -4606,7 +4610,7 @@ function detectNewLPMints(currentLPs){
 }
 
 // ═══ PUSH STATUS / FCM TOKEN SYNC ═══
-var FCM_REGISTER_URL="http://95.216.152.31:8083/fcm/register";
+var FCM_REGISTER_URL="https://95-216-152-31.sslip.io/fcm/register";
 
 function showPushSub(){
   var sub=localStorage.getItem("push_sub");
@@ -4939,7 +4943,7 @@ function renderCflowFullscreen(){
 }
 
 // ═══ PORTFOLIO SYNC TO SERVER ═══
-var SYNC_URL="http://95.216.152.31:8081";
+var SYNC_URL="https://95-216-152-31.sslip.io";
 function syncPortfolioToServer(){
   try{
     if(typeof ptfAssets==="undefined"||!ptfAssets||ptfAssets.length===0)return;
@@ -5133,7 +5137,7 @@ function ptfSyncServer(){
       assets.push({symbol:a.symbol,geckoId:a.geckoId,amount:a.amount,totalCost:a.totalCost||0,avgEntry:a.avgEntry||0});
     }
     var data={assets:assets,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
-    fetch("http://95.216.152.31:8082/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
+    fetch("https://95-216-152-31.sslip.io/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
       var el=$("syncStat");
       if(r.ok){console.log("PTF synced to server");if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--g)">✓ '+new Date().toLocaleTimeString().slice(0,5)+"</span>";}
       else{if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--r)">✗ HTTP '+r.status+"</span>";}
@@ -5151,7 +5155,7 @@ function ptfLoad(){try{
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed)
   setTimeout(function(){try{
-    fetch("http://95.216.152.31:8082/history").then(function(r){return r.json();}).then(function(data){
+    fetch("https://95-216-152-31.sslip.io/history").then(function(r){return r.json();}).then(function(data){
       if(!data||!data.length)return;
       var existing={};
       for(var mi=0;mi<ptfSnapshots.length;mi++){existing[ptfSnapshots[mi][0]]=true;}
@@ -6734,8 +6738,11 @@ function hdSaveScan(){
   _hdScan.trades.sort(function(a,b){return b.b-a.b;});
   try{localStorage.setItem("hd_scan",JSON.stringify({v:2,lastBlk:_hdScan.lastBlk,trades:_hdScan.trades,lps:_hdScan.lps,ev:_hdScan.ev||[]}));}catch(e){}
 }
+function _hdBtn(txt,dis){try{var b=$("hdScanBtn");if(b){if(txt)b.textContent=txt;b.disabled=!!dis;b.style.opacity=dis?".5":"1";}}catch(e){}}
 async function hdScan(){
-  if(_hdScanBusy)return;_hdScanBusy=true;
+  if(_hdScanBusy){var s0=$("hdAnaStatus");if(s0)s0.textContent="Scan läuft bereits – Fortschritt siehe Button/Status…";return;}
+  _hdScanBusy=true;
+  _hdBtn("⏳ Scan läuft… 0%",true);
   var st=$("hdAnaStatus");
   try{
     var bn=await hdRpc("eth_blockNumber",[]);
@@ -6746,7 +6753,9 @@ async function hdScan(){
       var part=null,used=0,lastErr=null;
       for(var si=0;si<sizes.length;si++){
         var hi=Math.min(from+sizes[si]-1,head);
-        if(st)st.textContent="Scanne Blöcke "+from+"–"+hi+" ("+Math.round((from-HD_INIT_BLK)/(head-HD_INIT_BLK+1)*100)+"%)…";
+        var _pct=Math.round((from-HD_INIT_BLK)/(head-HD_INIT_BLK+1)*100);
+        if(st)st.textContent="Scanne Blöcke "+from+"–"+hi+" ("+_pct+"%)…";
+        _hdBtn("⏳ Scan läuft… "+_pct+"%",true);
         try{
           part=await hdRpc("eth_getLogs",[{address:HD_PM,fromBlock:"0x"+from.toString(16),toBlock:"0x"+hi.toString(16),topics:[[HD_SWAP_SIG,HD_MODLIQ_SIG],HD_POOLID]}]);
           used=sizes[si];break;
@@ -6760,11 +6769,14 @@ async function hdScan(){
     }
     hdSaveScan();
     renderHdAna();
+    _hdBtn("↻ Scan starten / fortsetzen",false);
+    var stOk=$("hdAnaStatus");if(stOk)stOk.textContent="Scan komplett · Stand Block "+_hdScan.lastBlk;
   }catch(e){
     console.log("hdScan err:",e&&e.message||e);
     var st2=$("hdAnaStatus");
     if(st2)st2.innerHTML='Scan-Fehler: '+((e&&e.message)||e)+' bei Block '+(_hdScan.lastBlk||HD_INIT_BLK)+' — <b>↻ Scan fortsetzen</b> drücken (Fortschritt bleibt erhalten)';
     try{renderHdAna();}catch(e2){}
+    _hdBtn("↻ Scan fortsetzen",false);
   }
   _hdScanBusy=false;
 }
@@ -6919,7 +6931,7 @@ function renderHdAna(){
       +'<button onclick="hdImpact(true)" style="background:rgba(52,211,153,.15);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">KAUF</button>'
       +'<button onclick="hdImpact(false)" style="background:rgba(248,113,113,.15);border:1px solid var(--r);color:var(--r);border-radius:8px;padding:8px 14px;font-family:inherit;font-size:11px;font-weight:600">VERKAUF</button>'
       +'</div><div id="hdImpRes" style="font-size:11px;margin-top:8px;line-height:1.5;color:var(--tx)"></div>'
-      +'<div id="hdAnaLps"></div><div id="hdAnaEv"></div><div id="hdAnaTrades"></div><div style="margin-top:8px"><button onclick="hdScan()" style="background:rgba(34,211,238,.12);border:1px solid var(--cy);color:var(--cy);border-radius:8px;padding:7px 14px;font-family:inherit;font-size:11px;font-weight:600">↻ Scan starten / fortsetzen</button></div>'
+      +'<div id="hdAnaLps"></div><div id="hdAnaEv"></div><div id="hdAnaTrades"></div><div style="margin-top:8px"><button id="hdScanBtn" onclick="hdScan()" style="background:rgba(34,211,238,.12);border:1px solid var(--cy);color:var(--cy);border-radius:8px;padding:7px 14px;font-family:inherit;font-size:11px;font-weight:600">↻ Scan starten / fortsetzen</button></div>'
       +'<div id="hdAnaStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>';
   }
   var eUsd=_hd.ethUsd||0;
@@ -6995,7 +7007,7 @@ function renderHdAna(){
   if(td)td.innerHTML='<div class="lb" style="margin-top:10px">Trades (neueste 30)</div>'
     +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Zeit</th><th>Typ</th><th>HOODIE</th><th>$</th><th>Preis</th><th>Wallet</th></tr></thead><tbody>'+(tr||'<tr><td colspan="6" style="color:var(--dm)">noch keine Trades gescannt</td></tr>')+'</tbody></table></div>';
   var st=$("hdAnaStatus");
-  if(st)st.textContent="Stand Block "+_hdScan.lastBlk+" · Auto-Update alle 90s";
+  if(st&&!_hdScanBusy)st.textContent="Stand Block "+_hdScan.lastBlk+" · Auto-Update alle 90s";
 }
 function hdOpenAna(){try{renderHdAna();hdScan();}catch(e){console.log("hdOpenAna err:",e);}}
 startRefresh();
