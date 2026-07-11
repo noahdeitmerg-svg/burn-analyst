@@ -7109,12 +7109,13 @@ function _invAgg(){
     }catch(e){}
   });
   // BURN: Allzeit-Basis vom Server (burn_fullscan), Live-Trades nur oberhalb lastBlk (kein Doppelzählen)
-  var bsBlk=0;
+  var bsBlk=0,bsV2=false;
   if(_burnStats&&_burnStats.wallets){
-    bsBlk=_burnStats.lastBlk||0;
+    bsBlk=_burnStats.lastBlk||0;bsV2=(_burnStats.v>=2);
     Object.keys(_burnStats.wallets).forEach(function(w){
       var v=_burnStats.wallets[w],g=G(burn,w);
-      g.inv+=v.inv||0;g.out+=v.out||0;
+      g.inv+=(v.inv||0)+(v.lpInUsd||0);      // Käufe + USDC in LPs eingezahlt
+      g.out+=(v.out||0)+(v.lpOutUsd||0);     // Verkäufe + Collect-Entnahmen (inkl. Fees)
     });
   }
   (typeof allTrades!=="undefined"?allTrades:[]).forEach(function(t){
@@ -7123,11 +7124,12 @@ function _invAgg(){
     if(!w)return;var g=G(burn,w);
     if(t.isBuy)g.inv+=t.usdc;else g.out+=t.usdc;
   });
-  // BURN: geschlossene LPs — entnommenes USDC
-  var lo=window._lpOwners||[];
-  lo.forEach(function(o){
-    if(o&&o.closed&&o.usdcOut>0&&o.owner){G(burn,o.owner).out+=o.usdcOut;}
-  });
+  // BURN: geschlossene LPs — nur als Fallback ohne v2-Serverdaten (sonst doppelt zu Collect)
+  if(!bsV2){
+    (window._lpOwners||[]).forEach(function(o){
+      if(o&&o.closed&&o.usdcOut>0&&o.owner){G(burn,o.owner).out+=o.usdcOut;}
+    });
+  }
   return {hd:hd,burn:burn};
 }
 function _invRows(m,balMap,curId){
@@ -7153,7 +7155,7 @@ function renderInvestors(){
   b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
     +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'hd\')" style="margin:6px 0;background:rgba(52,211,153,.12);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Robinhood)</button>'
-    +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+', inkl. LP-Entnahmen)</div>'
+    +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=2?', Swaps+LP-Flows ✓)':', inkl. LP-Entnahmen)')+'</div>'
     +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'burn\')" style="margin:6px 0;background:rgba(251,146,60,.12);border:1px solid var(--o);color:var(--o);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Arbitrum)</button>'
     +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
