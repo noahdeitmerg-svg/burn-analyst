@@ -1104,7 +1104,8 @@ function render(){
   var maxHi=0;for(var mh=0;mh<LP.length;mh++){if(!LP[mh].fr&&LP[mh].hi>maxHi)maxHi=LP[mh].hi;}
   var lpExposure=portUsd>0?(lpV/portUsd*100):0;
   // P&L Hero: USDC Earned
-  $("pnlHero").innerHTML='<div class="mb" style="padding:16px;text-align:center"><small>USDC EARNED</small><b class="key-val neon-g" style="color:var(--g)">$'+F(pU,2)+'</b></div>';
+  var _hdLine=(window._hdMy&&window._hdMy.ready&&window._hdMy.eth>0.5)?'<div style="font-size:10px;color:var(--cy);margin-top:4px">+ 🧥 HOODIE-LP ETH-Seite: $'+F(window._hdMy.eth,0)+' ('+F(window._hdMy.hd,0)+' HD warten)</div>':'';
+  $("pnlHero").innerHTML='<div class="mb" style="padding:16px;text-align:center"><small>USDC EARNED</small><b class="key-val neon-g" style="color:var(--g)">$'+F(pU,2)+'</b>'+_hdLine+'</div>';
   // P&L Grid
   $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0)+" BURN","var(--o)"),MB("Left",F(pL,0)+" BURN","var(--tx)"),
     MB("100% Filled","$"+F(maxU,0)+" @ $"+maxHi.toFixed(2),"var(--br)"),MB("Outstanding","$"+F(outU,0),"var(--cy)"),
@@ -6603,6 +6604,79 @@ var HOODIE_CHART="https://www.geckoterminal.com/robinhood/pools/0x9286edc5798ca4
 var W_HOODIE="0x6E37Cc7D415466909db6102b6Dc34473AC1bb500"; // Noah Alt (…b500)
 var _hd={px:0,chg:0,vol:0,bal:0,ts:0};
 try{var _hdc=JSON.parse(localStorage.getItem("hd_cache")||"null");if(_hdc&&_hdc.px>0)_hd=_hdc;}catch(e){}
+// ═══ NOAHS HOODIE-SICHT: 3 Wallets, eigene LPs, Next-Fill, P&L-Anteil ═══
+var MY_HD_WALLETS=[
+  "0x6e37cc7d415466909db6102b6dc34473ac1bb500", // Noah Alt (b500)
+  "0x505042ff781ea1689e44e1d200efd691c30db86c", // Noah DeFi (86C) — signiert die LPs
+  "0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2"  // Noah Ledger (Hodl 45M)
+];
+window._hdMy={eth:0,hd:0,ready:false};
+function hdMyPositions(){
+  var out=[],lps=_hdScan.lps||[];
+  for(var i=0;i<lps.length;i++){
+    var p=lps[i];
+    if(p.liq>1&&MY_HD_WALLETS.indexOf((p.w||"").toLowerCase())>=0)out.push(p);
+  }
+  return out;
+}
+function hdRenderMine(){
+  var el=$("hdMyLps");
+  var eU=_hd.ethUsd||0,px=_hd.px||0,tick=hdTick();
+  var mine=hdMyPositions();
+  window._hdMy={eth:0,hd:0,ready:(tick!==null&&eU>0)};
+  if(!el)return;
+  if(!mine.length||tick===null||!(eU>0)){
+    el.innerHTML=mine.length?'<div style="font-size:10px;color:var(--dm);margin-top:8px">🧥 HOODIE-LPs: Preise laden…</div>':"";
+    return;
+  }
+  var rows="";
+  for(var i=0;i<mine.length;i++){
+    var p=mine[i];
+    var spL=Math.pow(1.0001,p.tL/2),spU=Math.pow(1.0001,p.tU/2);
+    var tc=Math.min(Math.max(tick,p.tL),p.tU);
+    var sp=Math.pow(1.0001,tc/2);
+    var hd=p.liq*(sp-spL)/1e18,eth=p.liq*(1/sp-1/spU)/1e18;
+    if(!isFinite(hd)||hd<0)hd=0;if(!isFinite(eth)||eth<0)eth=0;
+    window._hdMy.eth+=eth*eU;window._hdMy.hd+=hd;
+    var fill=(spU-spL)>0?(1-(sp-spL)/(spU-spL))*100:0;
+    var pLo=eU/Math.pow(1.0001,p.tU),pHi=eU/Math.pow(1.0001,p.tL);
+    var inR=(tick>p.tL&&tick<p.tU);
+    rows+='<tr'+(inR?' style="background:rgba(52,211,153,.06)"':'')+'>'
+      +'<td style="font-size:10px">'+(inR?'► ':'')+'$'+pLo.toPrecision(3)+'–$'+pHi.toPrecision(3)+'</td>'
+      +'<td style="color:var(--g)">'+F(hd,0)+'</td>'
+      +'<td style="color:var(--cy)">$'+F(eth*eU,0)+'</td>'
+      +'<td style="color:'+(fill>50?'var(--warn)':'var(--dm)')+'">'+fill.toFixed(0)+'%</td></tr>';
+  }
+  el.innerHTML='<div class="lb" style="margin-top:12px">🧥 MEINE HOODIE LPs ('+mine.length+')</div>'
+    +'<div class="ov"><table class="lp-tbl"><thead><tr><th>Range</th><th>HD Left</th><th>ETH ($)</th><th>Fill</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function hdRenderNextFill(){
+  var el=$("nextFillHd");if(!el)return;
+  var eU=_hd.ethUsd||0,px=_hd.px||0,tick=hdTick();
+  var mine=hdMyPositions();
+  if(!mine.length||tick===null||!(eU>0&&px>0)){el.innerHTML='<span style="color:var(--dm);font-size:11px">🧥 HOODIE Next Fill: Scan/Preise laden…</span>';return;}
+  // "Nächste" Position: in-range zuerst, sonst die mit der niedrigsten Untergrenze über dem Preis
+  var cand=null;
+  for(var i=0;i<mine.length;i++){
+    var p=mine[i];
+    var inR=(tick>p.tL&&tick<p.tU);
+    if(inR){cand=p;break;}
+    if(tick>=p.tU){ // Range liegt komplett über dem Preis
+      if(!cand||p.tU>cand.tU)cand=p; // höchster tU = niedrigster USD-Startpreis
+    }
+  }
+  if(!cand){el.innerHTML='<span style="color:var(--g);font-size:11px">🧥 Alle HOODIE-LPs voll gefüllt ✓</span>';return;}
+  var spL=Math.pow(1.0001,cand.tL/2),spU=Math.pow(1.0001,cand.tU/2);
+  var tc=Math.min(Math.max(tick,cand.tL),cand.tU);
+  var sp=Math.pow(1.0001,tc/2);
+  var fill=(spU-spL)>0?(1-(sp-spL)/(spU-spL))*100:0;
+  var pTop=eU/Math.pow(1.0001,cand.tL);
+  var ethRemain=cand.liq*(1/spL-1/sp)/1e18*eU; if(!isFinite(ethRemain)||ethRemain<0)ethRemain=0;
+  var pr=hdPressure(cand.tL); // Pool-Kaufdruck bis Range-Oberkante (alle LPs)
+  var press=pr?pr.eth*eU:0;
+  el.innerHTML='Next Fill 🧥: <b style="color:var(--g)">$'+pTop.toPrecision(3)+'</b> (↑'+((pTop/px-1)*100).toFixed(0)+'%) · <span style="color:var(--cy)">'+fill.toFixed(0)+'% gefüllt</span>'
+    +'<div style="font-size:11px;margin-top:6px">➜ Ertrag bis voll: <b style="color:var(--g)">$'+F(ethRemain,0)+'</b> · Pool-Kaufdruck bis dahin: <b style="color:var(--p)">$'+F(press,0)+'</b></div>';
+}
 function hdFmtPx(p){if(!(p>0))return"—";return p<0.001?"$"+p.toPrecision(4):"$"+p.toFixed(4);}
 // Kostenbasis (on-chain, 08.07.2026): Kauf 426.512.167 HD für 0,1699 ETH, Verkauf 106.628.042 HD für +0,1286 ETH,
 // 150M versendet (Airdrop-Verteilung). Netto 0,0413 ETH ≈ $72 @ ~$1.750 für den Restbestand.
@@ -6626,7 +6700,7 @@ function renderHoodie(){
       var realExit=(poolHd>0&&_hd.bal>0&&ethSideUsd>0)?ethSideUsd*_hd.bal/(_hd.bal+poolHd):0;
       var realPnl=realExit-HD_COST_USD,realMult=(HD_COST_USD>0&&realExit>0)?realExit/HD_COST_USD:0;
       b.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap">'
-        +MB("Bestand (Noah Alt)",_hd.bal>0?F(_hd.bal,0):"—","var(--g)")
+        +MB("Bestand (3 Wallets)",_hd.bal>0?F(_hd.bal,0):"—","var(--g)")
         +MB("Buchwert",val>0?"$"+F(val,0):"—","var(--g)")
         +MB("Realer Exit (alles)",realExit>0?"~$"+F(realExit,0)+" ("+F(realMult,0)+"×)":"—","var(--warn)")
         +MB("Pool-ETH-Seite",ethSideUsd>0?"$"+F(ethSideUsd,0):"—","var(--cy)")
@@ -6659,14 +6733,20 @@ async function fetchHoodie(){
       }
     }catch(e){console.log("HD GT err:",e&&e.message);}
     try{
-      var bal=await hdCall(HOODIE_TK,"0x70a08231"+W_HOODIE.slice(2).toLowerCase().padStart(64,"0"));
-      if(bal!==null)_hd.bal=bal;
+      var balSum=0,balOk=false;
+      for(var wi=0;wi<MY_HD_WALLETS.length;wi++){
+        var b1=await hdCall(HOODIE_TK,"0x70a08231"+MY_HD_WALLETS[wi].slice(2).padStart(64,"0"));
+        if(b1!==null){balSum+=b1;balOk=true;}
+      }
+      if(balOk)_hd.bal=balSum;
       var pool=await hdCall(HOODIE_TK,"0x70a08231"+HD_PM.slice(2).toLowerCase().padStart(64,"0"));
       if(pool!==null)_hd.pool=pool;
     }catch(e){console.log("HD RPC err:",e&&e.message);}
     _hd.ts=Date.now();
     try{localStorage.setItem("hd_cache",JSON.stringify(_hd));}catch(e){}
     renderHoodie();
+    try{hdRenderMine();hdRenderNextFill();}catch(e){}
+    try{if(window._invOpen)renderInvestors();}catch(e){}
     // Incremental scan keeps Trades/LP feed fresh once the first full scan ran.
     try{if(_hdScan.lastBlk>0)hdScan();}catch(e){}
   }catch(e){console.log("fetchHoodie err:",e&&e.message);}
@@ -6807,6 +6887,7 @@ async function hdScan(){
     }
     hdSaveScan();
     renderHdAna();
+    try{hdRenderMine();hdRenderNextFill();}catch(e){}
     _hdBtn("↻ Scan starten / fortsetzen",false);
     var stOk=$("hdAnaStatus");if(stOk)stOk.textContent="Scan komplett · Stand Block "+_hdScan.lastBlk;
   }catch(e){
@@ -7074,7 +7155,8 @@ function _invAgg(){
   (_hdScan.trades||[]).forEach(function(t){
     if(!t.w)return;var g=G(hd,t.w);
     var u=t.e*ethUsdAt(t.t);
-    if(t.ty==="BUY")g.inv+=u;else g.out+=u;
+    if(t.ty==="BUY"){g.inv+=u;g.tokIn=(g.tokIn||0)+t.hd;}
+    else{g.out+=u;g.tokOut=(g.tokOut||0)+t.hd;}
   });
   // HOODIE: LP-Events — ETH-Anteil zum zeitexakten Tick, $ zum damaligen ETH-Kurs
   (_hdScan.ev||[]).forEach(function(E){
@@ -7116,6 +7198,7 @@ function _invAgg(){
       var v=_burnStats.wallets[w],g=G(burn,w);
       g.inv+=(v.inv||0)+(v.lpInUsd||0);      // Käufe + USDC in LPs eingezahlt
       g.out+=(v.out||0)+(v.lpOutUsd||0);     // Verkäufe + Collect-Entnahmen (inkl. Fees)
+      g.tokIn=(g.tokIn||0)+(v.tokIn||0);g.tokOut=(g.tokOut||0)+(v.tokOut||0);
     });
   }
   (typeof allTrades!=="undefined"?allTrades:[]).forEach(function(t){
@@ -7140,23 +7223,25 @@ function _invRows(m,balMap,curId){
     var b=balMap[w];
     var balTxt=b&&b.v!==undefined?F(b.v,0):"—";
     var lpTxt=g.lpUsd>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
+    var tokTxt=((g.tokIn||0)>0.5||(g.tokOut||0)>0.5)?('<span style="color:var(--g)">+'+F(g.tokIn||0,0)+'</span><br><span style="color:var(--r)">−'+F(g.tokOut||0,0)+'</span>'):"—";
     r+='<tr><td style="font-size:10px">'+addrName(w)+'</td>'
       +'<td style="color:var(--r)">$'+F(g.inv,0)+'</td>'
       +'<td style="color:var(--g)">$'+F(g.out,0)+'</td>'
       +'<td style="color:'+(net>=0?"var(--g)":"var(--warn)")+'">'+(net>=0?"+":"−")+"$"+F(Math.abs(net),0)+'</td>'
+      +'<td style="font-size:9px;line-height:1.4">'+tokTxt+'</td>'
       +'<td style="font-size:10px">'+lpTxt+'</td>'
       +'<td style="font-size:10px">'+balTxt+'</td></tr>';
   });
-  return r||'<tr><td colspan="6" style="color:var(--dm)">keine Daten — '+(curId==="hd"?"HOODIE-Scan":"BURN-Trades/Scan")+' erst laufen lassen</td></tr>';
+  return r||'<tr><td colspan="7" style="color:var(--dm)">keine Daten — '+(curId==="hd"?"HOODIE-Scan":"BURN-Trades/Scan")+' erst laufen lassen</td></tr>';
 }
 function renderInvestors(){
   var b=$("invBody");if(!b)return;
   var a=_invAgg();
   b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'hd\')" style="margin:6px 0;background:rgba(52,211,153,.12);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Robinhood)</button>'
     +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=2?', Swaps+LP-Flows ✓)':', inkl. LP-Entnahmen)')+'</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'burn\')" style="margin:6px 0;background:rgba(251,146,60,.12);border:1px solid var(--o);color:var(--o);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Arbitrum)</button>'
     +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
 }
@@ -7190,7 +7275,29 @@ async function invLoadBurnStats(){
     if(j&&j.wallets&&j.lastBlk>0){_burnStats=j;_burnStatsTs=Date.now();renderInvestors();}
   }catch(e){console.log("burnstats err:",e&&e.message);}
 }
-function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}}
+async function invAutoBal(){
+  try{
+    var a=_invAgg();
+    var jobs=[["hd",a.hd],["burn",a.burn]];
+    for(var j=0;j<jobs.length;j++){
+      var which=jobs[j][0],m=jobs[j][1],bm=_invBal[which];
+      var ks=Object.keys(m).sort(function(x,y){return (m[y].inv+m[y].out)-(m[x].inv+m[x].out);}).slice(0,10);
+      for(var i=0;i<ks.length;i++){
+        var w=ks[i];
+        if(bm[w]&&Date.now()-bm[w].ts<600000)continue;
+        try{
+          var v=null;
+          if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
+          else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+               if(hx&&hx!=="0x")v=Number(BigInt(hx))/1e18;}
+          if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
+        }catch(e){}
+      }
+    }
+    renderInvestors();
+  }catch(e){}
+}
+function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
 var APP_V="20260711g"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
