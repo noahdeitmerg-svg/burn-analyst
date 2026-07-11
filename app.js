@@ -6596,7 +6596,7 @@ setTimeout(function(){
 },8000);
 // ═══ HOODIE (Robinhood Chain, Uniswap V4) ═══
 // Verified 08.07.2026: chainId 4663, decimals 18, CORS ok (RPC + GT API).
-var RH_RPC="https://rpc.mainnet.chain.robinhood.com";
+var RH_RPC="https://95-216-152-31.sslip.io/rhrpc"; // RH-RPC via eigenen Caddy-Proxy (Original blockt Mobile-Clients; VPS-Route bewiesen)
 var HOODIE_TK="0x91b7304099f0be58029fb4269ad6aa0bf601e666";
 var HOODIE_GT="https://api.geckoterminal.com/api/v2/networks/robinhood/pools/0x9286edc5798ca4e2279297d27bf5edfc9b639c94c772303b0d62e434785cba19";
 var HOODIE_CHART="https://www.geckoterminal.com/robinhood/pools/0x9286edc5798ca4e2279297d27bf5edfc9b639c94c772303b0d62e434785cba19";
@@ -7011,7 +7011,7 @@ function renderHdAna(){
 }
 function hdOpenAna(){try{renderHdAna();hdScan();}catch(e){console.log("hdOpenAna err:",e);}}
 startRefresh();
-var APP_V="20260708i"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260711a"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
