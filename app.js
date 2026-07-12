@@ -6712,6 +6712,7 @@ function renderHoodie(){
         +MB("P&L Buch",(val>0?(pnl>=0?"+":"−")+"$"+F(Math.abs(pnl),0)+" ("+F(mult,0)+"×)":"—"),pnl>=0?"var(--g)":"var(--r)")
         +MB("Einstand",entry>0?"$"+entry.toPrecision(2):"—","var(--dm)")
         +MB("24h Vol",_hd.vol>0?"$"+F(_hd.vol,0):"—","var(--dm)")
+        +MB("🔥 Verbrannt",(_hd.dead>0?F(_hd.dead,0)+" ("+(_hd.dead/1e9*100).toFixed(1)+"%)":"—"),"var(--o)")
         +'</div>'
         +'<div style="font-size:9px;color:var(--dm);margin-top:8px">Netto-Einsatz ~$'+HD_COST_USD+' (0,0413 ETH) · Pool gesamt $'+F(_hd.resUsd||0,0)+' · HOODIE/WETH 0,3% · Uniswap V4 · <a href="'+HOODIE_CHART+'" target="_blank" style="color:var(--cy)">Chart auf GeckoTerminal</a>'
         +(_hd.ts?' · Stand '+new Date(_hd.ts).toLocaleTimeString().slice(0,5):'')+'</div>';
@@ -6737,6 +6738,10 @@ async function fetchHoodie(){
       }
     }catch(e){console.log("HD GT err:",e&&e.message);}
     try{
+      try{
+        var dd=await hdCall(HOODIE_TK,"0x70a08231"+"000000000000000000000000000000000000dEaD".toLowerCase().padStart(64,"0"));
+        if(dd!==null)_hd.dead=dd;
+      }catch(e){}
       var balSum=0,balOk=false;
       for(var wi=0;wi<MY_HD_WALLETS.length;wi++){
         var b1=await hdCall(HOODIE_TK,"0x70a08231"+MY_HD_WALLETS[wi].slice(2).padStart(64,"0"));
@@ -6920,7 +6925,9 @@ function hdTick(){
     var tr=_hdScan.trades||[];
     var newest=null;
     for(var i=0;i<tr.length;i++){if(tr[i].tk!==null&&tr[i].tk!==undefined){if(!newest||tr[i].b>newest.b)newest=tr[i];}}
-    if(newest&&newest.t&&(Date.now()-newest.t)<1800000)return newest.tk;
+    // Kein Zeitfenster: V4-Preis bewegt sich NUR durch Swaps — der letzte Swap-Tick IST der Pool-Tick,
+    // bis der nächste Trade kommt (den der 90s-Scan einsammelt).
+    if(newest)return newest.tk;
   }catch(e){}
   return hdTickGT();
 }
@@ -7314,7 +7321,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260712d"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260712f"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
