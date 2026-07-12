@@ -1104,7 +1104,11 @@ function render(){
   var maxHi=0;for(var mh=0;mh<LP.length;mh++){if(!LP[mh].fr&&LP[mh].hi>maxHi)maxHi=LP[mh].hi;}
   var lpExposure=portUsd>0?(lpV/portUsd*100):0;
   // P&L Hero: USDC Earned
-  var _hdLine=(window._hdMy&&window._hdMy.ready&&window._hdMy.eth>0.5)?'<div style="font-size:10px;color:var(--cy);margin-top:4px">+ 🧥 HOODIE-LP ETH-Seite: $'+F(window._hdMy.eth,0)+' ('+F(window._hdMy.hd,0)+' HD warten)</div>':'';
+  var _hdLine='';
+  if(window._hdMy&&window._hdMy.ready&&window._hdMy.eth>0.5){
+    _hdLine='<div style="font-size:10px;color:var(--cy);margin-top:4px">+ 🧥 HOODIE-LP ETH-Seite: $'+F(window._hdMy.eth,0)+' ('+F(window._hdMy.hd,0)+' HD warten)</div>'
+      +'<div style="font-size:12px;color:var(--g);margin-top:4px;font-weight:700">Σ Gesamt (BURN + HOODIE LP): $'+F(pU+window._hdMy.eth,2)+'</div>';
+  }
   $("pnlHero").innerHTML='<div class="mb" style="padding:16px;text-align:center"><small>USDC EARNED</small><b class="key-val neon-g" style="color:var(--g)">$'+F(pU,2)+'</b>'+_hdLine+'</div>';
   // P&L Grid
   $("pnlGrid").innerHTML=[MB("Deposited",F(pD,0)+" BURN","var(--o)"),MB("Left",F(pL,0)+" BURN","var(--tx)"),
@@ -6909,7 +6913,18 @@ function hdTickAtBlock(b){
   }
   return best;
 }
-function hdTick(){ // aktueller V4-Tick aus USD-Preisen (price = token1/token0 = HOODIE pro ETH)
+function hdTick(){
+  // Bevorzugt den ON-CHAIN-Tick des neuesten gescannten Swaps (exakt wie Uniswap ihn sieht).
+  // GT-Ableitung (zwei getrennte USD-Preise) kippt an Range-Grenzen — Fix für falsches Fill%.
+  try{
+    var tr=_hdScan.trades||[];
+    var newest=null;
+    for(var i=0;i<tr.length;i++){if(tr[i].tk!==null&&tr[i].tk!==undefined){if(!newest||tr[i].b>newest.b)newest=tr[i];}}
+    if(newest&&newest.t&&(Date.now()-newest.t)<1800000)return newest.tk;
+  }catch(e){}
+  return hdTickGT();
+}
+function hdTickGT(){ // aktueller V4-Tick aus USD-Preisen (price = token1/token0 = HOODIE pro ETH)
   if(!(_hd.px>0&&_hd.ethUsd>0))return null;
   return Math.log(_hd.ethUsd/_hd.px)/Math.log(1.0001);
 }
@@ -7299,7 +7314,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260711g"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260712d"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
