@@ -51,9 +51,9 @@ def twos(h):
 try: st=json.load(open(STATE))
 except Exception: st={"v":2,"arbBlk":299_999_999,"hdBlk":3_799_999,"rows":{},"dayPx":{},"ptax":{},"ptaxDay":"","eth":[],"ethTs":0}
 
-if st.get("v")!=2:
-    st["v"]=2; st["arbBlk"]=299_999_999  # Backfill für stBURN (Dedupe verhindert Doppel)
-    print("Schema v2 -> Arbitrum-Backfill (stBURN)",flush=True)
+if st.get("v")!=3:
+    st["v"]=3; st["arbBlk"]=-1; st["hdBlk"]=-1  # Vollhistorie ab Block 0, beide Chains
+    print("Schema v3 -> Komplett-Backfill ab Block 0",flush=True)
 
 # ── PTAX (BCB) täglich aktualisieren ──
 today=datetime.date.today().isoformat()
@@ -82,7 +82,10 @@ if time.time()-st.get("ethTs",0)>21600:
     try:
         to=int(time.time()); fr=to-85*86400
         req=urllib.request.Request(f"https://api.coingecko.com/api/v3/coins/ethereum/market_chart/range?vs_currency=usd&from={fr}&to={to}",headers={"User-Agent":"Mozilla/5.0"})
-        st["eth"]=json.loads(urllib.request.urlopen(req,timeout=30).read())["prices"]; st["ethTs"]=time.time()
+        newp=json.loads(urllib.request.urlopen(req,timeout=30).read())["prices"]
+        have={int(p[0]//3600000) for p in st.get("eth",[])}
+        st["eth"]=sorted(st.get("eth",[])+[p for p in newp if int(p[0]//3600000) not in have])
+        st["ethTs"]=time.time()
         print(f"ETH-Kurse: {len(st['eth'])} Punkte",flush=True)
     except Exception as e: print(f"ETH-Kurs-Fehler (Cache): {e}",flush=True)
 def eth_usd(ts):
@@ -271,6 +274,35 @@ for o in outs:
             else:
                 o["typ"]=f"PERMUTA ({o['tok']}→{i['tok']}, {o['cp']})"
                 i["typ"]=f"PERMUTA-Erhalt ({i['tok']}, {i['cp']})"
+# (3b) HOODIE-Tagespreise aus eigenen Market-Swaps; LP-Zeilen (RH) idempotent bewerten
+hdDayPx={}
+for r in rowsL:
+    if r["chain"]=="RH" and "Market" in r["typ"] and (r.get("usd") or 0)>0 and r["amt"]>0:
+        hdDayPx.setdefault(_d(r),[]).append(r["usd"]/r["amt"])
+hdDayPx={d:sum(v)/len(v) for d,v in hdDayPx.items()}
+def px_hd(day):
+    if day in hdDayPx: return hdDayPx[day],"Tagespreis aus eigenen HD-Trades"
+    if day in HD_PX_ASSUME: return HD_PX_ASSUME[day],"Näherungskurs (Beleganlage)"
+    dd=datetime.date.fromisoformat(day)
+    for off in range(1,30):
+        for c in [(dd-datetime.timedelta(days=off)).isoformat(),(dd+datetime.timedelta(days=off)).isoformat()]:
+            if c in hdDayPx: return hdDayPx[c],f"Näherung: HD-Kurs vom {c}"
+            if c in HD_PX_ASSUME: return HD_PX_ASSUME[c],f"Näherung: Belegkurs vom {c}"
+    return None,None
+for r in rowsL:
+    if r["chain"]!="RH": continue
+    if r["typ"] not in ("LP-EINLAGE","LP-ENTNAHME"): continue
+    day=_d(r)
+    if day<RESIDENZ: continue
+    hp,src=px_hd(day)
+    if not hp: continue
+    px,_pd=ptax_of(day)
+    r["kurs"]=hp; r["usd"]=round(r["amt"]*hp,2); r["ptax"]=px
+    r["brl"]=round(r["usd"]*px,2) if px else None
+    r["l1"]=r["brl"] or 0; r["l2"]=0
+    base=r.get("note","").split(" · L1:")[0]
+    r["note"]=(base+" · " if base else "")+f"L1: {src} · Lesart strittig · §Dossier B/LP"
+
 # (4) Idempotente Neubewertung aller ARB-Zeilen (BURN/stBURN/USDC)
 for r in rowsL:
     if r["chain"]!="ARB": continue
@@ -298,7 +330,9 @@ for r in rowsL:
     else:
         bp=px_of(day)
         if t.startswith("PERMUTA (") and not pre:
-            if bp: setv(r["amt"]*bp,(r.pop("_pairnote","")+" · " if r.get("_pairnote") else "")+"Krypto-zu-Krypto-Tausch = Veräußerung (SC COSIT 214/2021, GESICHERT) · zählt · §Dossier A.3"); r["l2"]=r["brl"] or 0
+            wrapper=(set((r["tok"],)) | {"BURN","stBURN"})=={"BURN","stBURN"}
+            ref="Krypto-zu-Krypto-Tausch = Veräußerung (SC COSIT 214/2021) · konservativ gezählt"+(" · GEGENAUFFASSUNG dokumentiert: gedeckter Wrapper-Tausch, kein Vermögenszuwachs — §Dossier B/Wrapper" if wrapper else "")+" · §Dossier A.3"
+            if bp: setv(r["amt"]*bp,(r.pop("_pairnote","")+" · " if r.get("_pairnote") else "")+ref); r["l2"]=r["brl"] or 0
         elif t.startswith("STAKING/WRAP (") and not pre:
             if bp: setv(r["amt"]*bp,"Staking-Hin-/Rücktausch über Kontrakt · Lesart strittig (wie LP) · §Dossier B/LP"); r["l1"]=r["brl"] or 0
         elif t=="OTC-VERKAUF (Token-Lieferung)":
@@ -309,6 +343,14 @@ for r in rowsL:
             if bp: setv(r["amt"]*bp,"L1: Rücktausch-Bewertung · Lesart strittig · §Dossier B/LP"); r["l1"]=r["brl"] or 0
         elif t.startswith("BURN (neutral)"):
             r["note"]=(base+" · " if base else "")+"kein Tausch, kein Erwerber · neutral · §Dossier B/Burn"
+
+# DE-Periode einheitlich kennzeichnen (Erklärungen in DE bis einschl. 2025 abgegeben)
+DE_TXT="DE-Periode bis 12.09.2025 (deutsche Steuererklärung abgegeben) — für BR nur Kostenbasis"
+for r in st["rows"].values():
+    if _d(r)<RESIDENZ:
+        rest=r.get("note","").replace("vor Steuerresidenz (12.09.2025) — nur Kostenbasis","").replace("vor Steuerresidenz (nur Kostenbasis)","").strip(" ·")
+        r["note"]=DE_TXT+((" · "+rest) if rest else "")
+        r["l1"]=0;r["l2"]=0
 
 # ── Monatsaggregation + Ledger schreiben ──
 months={}

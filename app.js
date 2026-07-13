@@ -5626,7 +5626,8 @@ function hdRenderNextFill(){
   var el=$("nextFillHd");if(!el)return;
   var eU=_hd.ethUsd||0,px=_hd.px||0,tick=hdTick();
   var mine=hdMyPositions();
-  if(!mine.length||tick===null||!(eU>0&&px>0)){el.innerHTML='<span style="color:var(--dm);font-size:11px">🧥 HOODIE Next Fill: Scan/Preise laden…</span>';return;}
+  if(!mine.length){el.innerHTML='<span style="color:var(--dm);font-size:11px">🧥 HOODIE: keine aktiven LPs — Leiter legen, wenn der nächste Zyklus startet</span>';return;}
+  if(tick===null||!(eU>0&&px>0)){el.innerHTML='<span style="color:var(--dm);font-size:11px">🧥 HOODIE Next Fill: Preise laden…</span>';return;}
   // "Nächste" Position: in-range zuerst, sonst die mit der niedrigsten Untergrenze über dem Preis
   var cand=null;
   for(var i=0;i<mine.length;i++){
@@ -6289,7 +6290,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260713b"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260713c"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
