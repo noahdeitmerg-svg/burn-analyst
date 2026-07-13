@@ -583,8 +583,9 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
     <div class="col" onclick="tog(this,'sec-ptf-io')" style="font-size:10px">💾 Export / Import</div>
     <div id="sec-ptf-io" class="col-b">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-        <button class="btn" onclick="ptfExport()" style="font-size:10px">Export JSON</button>
-        <button class="btn" onclick="ptfImport()" style="font-size:10px">Import JSON</button>
+        <button class="btn" onclick="ptfExport()" style="font-size:10px">💾 Backup (Server + Datei)</button>
+        <button class="btn" onclick="ptfRestoreServer()" style="font-size:10px">↩ Vom Server laden</button>
+        <button class="btn" onclick="ptfImport()" style="font-size:10px">Import Datei</button>
       </div>
       <div id="ptfImportErr" style="font-size:9px;margin-top:6px"></div>
     </div>
@@ -716,134 +717,10 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   </div>
 </div>
 
-<!-- ═══ TAX REPORT ═══ -->
+<!-- ═══ STEUER (BR) · AUTOMATIK ═══ -->
 <div class="c" style="border-left:3px solid #fbbf24">
-  <div class="col" onclick="tog(this,'sec-tax')">🧾 Tax Report (BR)</div>
-  <div id="sec-tax" class="col-b">
-    <!-- BR Tax Compliance Module -->
-    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🇧🇷 Brasil — Receita Federal Compliance</div>
-    
-    <!-- Tax Mode Toggle -->
-    <div style="background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.3);border-radius:6px;padding:8px;margin-bottom:10px">
-      <div style="font-size:9px;color:var(--cy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Steuermodell wählen</div>
-      <div style="display:flex;gap:6px">
-        <button id="brMode35k" class="btn" onclick="brSetTaxMode('35k')" style="font-size:10px;flex:1">R$35k-Regel</button>
-        <button id="brModeLei" class="btn" onclick="brSetTaxMode('lei14754')" style="font-size:10px;flex:1">Lei 14.754 (15%)</button>
-      </div>
-      <div id="brModeDesc" style="font-size:8px;color:var(--dm);margin-top:6px;line-height:1.4"></div>
-    </div>
-    
-    <!-- PTAX + Compliance Status -->
-    <div id="brTaxStatus" class="mg" style="margin-bottom:10px">
-      <div class="mb"><small>USD/BRL (PTAX)</small><b style="color:var(--cy)" id="brPtax">—</b></div>
-      <div class="mb"><small>Akt. Monat Volumen</small><b id="brMonthVol">—</b></div>
-      <div class="mb"><small>DeCripto-Schwelle</small><b id="brDecripto">—</b></div>
-      <div class="mb"><small>Jahr-Gewinn 2026</small><b id="brYearProfit">—</b></div>
-    </div>
-    
-    <!-- Custo Médio per Asset - SUMMARY ONLY -->
-    <div class="col" onclick="tog(this,'sec-tax-cm')" style="font-size:10px">💰 Custo Médio Ponderado</div>
-    <div id="sec-tax-cm" class="col-b">
-      <div id="cmSummary" class="mg" style="margin-bottom:8px">
-        <div class="mb"><small>Assets erfasst</small><b id="cmAssetCount">—</b></div>
-        <div class="mb"><small>Total Custo (BRL)</small><b id="cmTotalCost">—</b></div>
-        <div class="mb"><small>Total FMV (BRL)</small><b id="cmTotalFmv">—</b></div>
-        <div class="mb"><small>Unrealized P&L</small><b id="cmTotalPL">—</b></div>
-      </div>
-      <div style="font-size:8px;color:var(--dm);margin-top:4px">Details pro Asset im IRPF-Export verfügbar.</div>
-    </div>
-    
-    <!-- Permuta Events - SUMMARY ONLY -->
-    <div class="col" onclick="tog(this,'sec-tax-permuta')" style="font-size:10px">🔄 Permuta-Events</div>
-    <div id="sec-tax-permuta" class="col-b">
-      <div id="permutaSummary" class="mg" style="margin-bottom:8px">
-        <div class="mb"><small>Total Events</small><b id="prmCount">—</b></div>
-        <div class="mb"><small>2025 Volumen</small><b id="prmVol2025">—</b></div>
-        <div class="mb"><small>2026 Volumen</small><b id="prmVol2026">—</b></div>
-        <div class="mb"><small>Total Gewinn (BRL)</small><b id="prmProfit">—</b></div>
-        <div class="mb"><small>Steuer (Modus)</small><b id="prmTax">—</b></div>
-        <div class="mb"><small>Letztes Event</small><b id="prmLast">—</b></div>
-      </div>
-      <div style="font-size:8px;color:var(--dm);margin-top:4px">Alle Events mit Datum + Hash im DeCripto/DARF Export.</div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn" onclick="prmAddManual()" style="font-size:10px;border-color:var(--o)">+ Manuell</button>
-        <button class="btn" onclick="if(confirm('Alle Events neu aus PTF/CL/MS aufbauen?')){brInitCustoMedio();brRenderTaxUI();}" style="font-size:10px;border-color:var(--cy)">🔄 Re-Init</button>
-        <button class="btn" onclick="if(confirm('Alle BR Tax Events LÖSCHEN? Custo Médio bleibt!')){BR_PERMUTAS=[];brSavePermutas();brRenderTaxUI();}" style="font-size:10px;border-color:var(--r)">🗑️ Clear</button>
-      </div>
-    </div>
-    
-    <!-- Monthly Volume - SUMMARY ONLY -->
-    <div class="col" onclick="tog(this,'sec-tax-monthly')" style="font-size:10px">📊 Monatsvolumen</div>
-    <div id="sec-tax-monthly" class="col-b">
-      <div id="monthlySummary" class="mg" style="margin-bottom:8px">
-        <div class="mb"><small>Höchster Monat 2025</small><b id="mvMax2025">—</b></div>
-        <div class="mb"><small>Höchster Monat 2026</small><b id="mvMax2026">—</b></div>
-        <div class="mb"><small>Monate über R$30k</small><b id="mvAbove30k">—</b></div>
-        <div class="mb"><small>Monate über R$35k</small><b id="mvAbove35k">—</b></div>
-      </div>
-      <div style="font-size:8px;color:var(--dm);margin-top:4px;line-height:1.4">
-        Über R$30k (bis 30.06.2026) bzw. R$35k (ab 01.07.2026): DeCripto-Meldung im e-CAC bis Letztwerktag Folgemonat.
-      </div>
-    </div>
-    
-    <!-- DARF - SUMMARY ONLY -->
-    <div class="col" onclick="tog(this,'sec-tax-darf')" style="font-size:10px">💸 DARF Steuer</div>
-    <div id="sec-tax-darf" class="col-b">
-      <div id="darfSummary" class="mg" style="margin-bottom:8px">
-        <div class="mb"><small>Steuer offen 2025</small><b id="darfOpen2025">—</b></div>
-        <div class="mb"><small>Steuer offen 2026</small><b id="darfOpenTotal">—</b></div>
-        <div class="mb"><small>Nächste Fälligkeit</small><b id="darfNextDue">—</b></div>
-        <div class="mb"><small>Aktiver Modus</small><b id="darfMode">—</b></div>
-      </div>
-      <div style="font-size:8px;color:var(--dm);margin-top:4px;line-height:1.4">
-        Monatliche Berechnung im DARF-Export. Zahlung bis Letztwerktag Folgemonat.<br>
-        DARF-Code: 4600 (Capital Gain) oder 6015 (Auslandserträge) — bestätige mit Steuerberater.
-      </div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn" onclick="brExportDARF(null,2025)" style="font-size:10px;border-color:var(--g)">📋 DARF 2025 CSV</button>
-        <button class="btn" onclick="brExportDARF()" style="font-size:10px;border-color:var(--g)">📋 DARF 2026 CSV</button>
-      </div>
-    </div>
-    
-    <!-- IRPF - SUMMARY ONLY -->
-    <div class="col" onclick="tog(this,'sec-tax-irpf')" style="font-size:10px">📜 IRPF Bens e Direitos</div>
-    <div id="sec-tax-irpf" class="col-b">
-      <div id="irpfSummary" class="mg" style="margin-bottom:8px">
-        <div class="mb"><small>Snapshot 2025</small><b id="irpfStatus2025">—</b></div>
-        <div class="mb"><small>Snapshot 2026</small><b id="irpfStatus2026">—</b></div>
-        <div class="mb"><small>Total Holdings BRL (akt.)</small><b id="irpfTotalBrl">—</b></div>
-      </div>
-      <div style="font-size:8px;color:var(--dm);margin-top:4px;line-height:1.4">
-        Bens e Direitos = Bestände am <b>31.12.</b> mit Anschaffungskosten. IRPF-Codes: 81 (BTC), 82 (Outros).<br>
-        <b>2025</b>: für DAA März 2026 · <b>2026</b>: für DAA März 2027.
-      </div>
-      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn" onclick="brSaveYearEndSnapshot(2025);brRenderTaxUI();alert('Snapshot 2025 gespeichert')" style="font-size:10px;border-color:var(--o)">📸 Snap 2025</button>
-        <button class="btn" onclick="brExportIRPF(2025)" style="font-size:10px;border-color:var(--g)">📋 IRPF 2025 CSV</button>
-        <button class="btn" onclick="brSaveYearEndSnapshot(2026);brRenderTaxUI();alert('Snapshot 2026 gespeichert')" style="font-size:10px;border-color:var(--o)">📸 Snap 2026</button>
-        <button class="btn" onclick="brExportIRPF(2026)" style="font-size:10px;border-color:var(--g)">📋 IRPF 2026 CSV</button>
-      </div>
-    </div>
-    
-    <div class="sep" style="margin:12px 0 8px"></div>
-    
-    <!-- Legacy USD Tax Report (BURN-only) - Summary only -->
-    <div style="text-align:center;font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">USD-View: BURN Token (Legacy)</div>
-    <div id="taxSummary" class="mg" style="margin-bottom:10px"><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div><div class="mb"><span class="skel" style="width:40px;height:8px;margin-bottom:6px"></span><span class="skel" style="width:70px;height:16px"></span></div></div>
-    <div style="display:none"><div id="taxYears"></div><tbody id="taxTableB"></tbody></div>
-    <div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">
-      🇧🇷 <b>Lei 14.754/2023:</b> 15% auf Jahresgewinn, KEINE R$35k-Freigrenze für DEX/Self-Custody.<br>
-      Details aller Verkäufe im Excel-Export. Custo Médio Ponderado.<br>
-      <b>Keine Steuerberatung</b> — konsultiere einen Steuerberater für verbindliche Auskünfte.
-    </div>
-    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn" onclick="taxExportCSV()" style="font-size:10px">📋 Verkäufe CSV</button>
-      <button class="btn" onclick="brExportDecriptoCSV()" style="font-size:10px;border-color:var(--cy)">📋 DeCripto CSV</button>
-      <button class="btn" onclick="taxExportExcel(2025)" style="font-size:10px">Excel 2025</button>
-      <button class="btn" onclick="taxExportExcel(2026)" style="font-size:10px">Excel 2026</button>
-    </div>
-    <div id="taxYearEndStatus" style="font-size:9px;color:var(--dm);margin-top:6px"></div>
-  </div>
+  <div class="col" onclick="tog(this,'sec-tax')">🧾 STEUER (BR) · AUTOMATIK</div>
+  <div id="sec-tax" class="col-b"><div id="taxBody"><span class="skel" style="width:100%;height:30px"></span></div></div>
 </div>
 
 <!-- ═══ 6. CHART (collapsible) ═══ -->
@@ -1093,7 +970,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260712f"></script>
+<script src="app.js?v=20260713b"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){
