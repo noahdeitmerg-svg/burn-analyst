@@ -228,22 +228,26 @@ print(f"Robinhood: {len(uniqH)} neue Transfers bis Block {rhHead:,}",flush=True)
 # ── POST-PASS: Tagespreise, OTC/Permuta/Staking-Erkennung, idempotente Neubewertung ──
 def _d(r): return r["dt"][:10]
 rowsL=list(st["rows"].values())
-# (1) Tagespreise NUR aus echten Market-Paaren (Swap-Txs)
-mk_u={};mk_t={}
+# (1) Preise: (a) EXAKT pro Tx aus USDC-Gegenseite jeder Swap-Tx (deckt auch frühe Käufe ohne Pool-Erkennung),
+#            (b) daraus Tagespreise als Fallback für Zeilen ohne USDC-Gegenseite (z.B. LP/Permuta).
+txUsd={};txTok={}
 for r in rowsL:
     if r["chain"]!="ARB": continue
-    if r["typ"] in ("VERKAUFS-Erlös (USDC)","KAUF-Zahlung (USDC)"): mk_u[r["tx"]]=mk_u.get(r["tx"],0)+r["amt"]
-    if r["typ"] in ("VERKAUF (Market)","KAUF (Market)") and r["tok"]=="BURN":
-        e=mk_t.setdefault(r["tx"],{"b":0,"d":_d(r)}); e["b"]+=r["amt"]
+    if r["tok"]=="USDC": txUsd[r["tx"]]=txUsd.get(r["tx"],0)+r["amt"]
+    elif r["tok"] in ("BURN","stBURN"): txTok[r["tx"]]=txTok.get(r["tx"],0)+r["amt"]
+txPx={}
+for tx,tk in txTok.items():
+    u=txUsd.get(tx,0)
+    if u>0 and tk>0: txPx[tx]=u/tk
 dayPx={}
-for tx,u in mk_u.items():
-    e=mk_t.get(tx)
-    if e and e["b"]>0: dayPx.setdefault(e["d"],[]).append(u/e["b"])
+for r in rowsL:
+    if r["chain"]=="ARB" and r["tx"] in txPx: dayPx.setdefault(_d(r),[]).append(txPx[r["tx"]])
 dayPx={d:sum(v)/len(v) for d,v in dayPx.items()}
-def px_of(day):
+def px_of(day,tx=None):
+    if tx and tx in txPx: return txPx[tx]
     if day in dayPx: return dayPx[day]
     dd=datetime.date.fromisoformat(day)
-    for off in range(1,60):
+    for off in range(1,90):
         for c in [(dd-datetime.timedelta(days=off)).isoformat(),(dd+datetime.timedelta(days=off)).isoformat()]:
             if c in dayPx: return dayPx[c]
     return None
@@ -355,6 +359,41 @@ for r in rowsL:
         elif t.startswith("BURN (neutral)"):
             r["note"]=(base+" · " if base else "")+"kein Tausch, kein Erwerber · neutral · §Dossier B/Burn"
 
+# (5) ═══ CUSTO MÉDIO PONDERADO (walletübergreifend, chronologisch) ═══
+# Gemeinsamer wirtschaftlicher Pool BURN+stBURN (stBURN = gewrappter BURN, ~1:1 gedeckt).
+# Erwerb (Kauf, Permuta-Erhalt von Person, Airdrop): Bestand+Menge, Einstand gewichtet (Airdrop=0).
+# Veräußerung (Verkauf, OTC, Permuta an Person): Gewinn = Erlös − Menge×Ø-Einstand; custo/ganho in Zeile.
+# Wrapper/Staking (eigener Kontrakt), LP-Einlage/-Entnahme, interne Transfers: NEUTRAL (Token bleibt wirtsch. meiner).
+# Burn an dead: Abgang ohne Gewinn. Annahme (mit Contadora zu bestätigen): gemeinsamer Pool, Wrapper basiswahrend.
+_pool={"q":0.0,"c":0.0}  # q=Menge (BURN-Äq.), c=Gesamt-Anschaffungskosten USD
+def _acq(q,pxusd):
+    if q>0: _pool["q"]+=q; _pool["c"]+=q*(pxusd or 0)
+def _disp(q,pxusd_sell,day):
+    if _pool["q"]<=0 or q<=0: return 0.0,(q*(pxusd_sell or 0)),0.0  # kein Bestand → custo 0
+    avg=_pool["c"]/_pool["q"]; qq=min(q,_pool["q"])
+    custo=qq*avg; erloes=q*(pxusd_sell or 0); gewinn=erloes-qq*avg
+    _pool["q"]-=qq; _pool["c"]-=custo
+    return custo,erloes,gewinn
+for r in sorted(rowsL,key=lambda x:(x["ts"],x.get("li",0) if isinstance(x.get("li"),int) else 0)):
+    if r["tok"] not in ("BURN","stBURN"): continue
+    t=r["typ"]; d=_d(r); dr=r.get("dir")
+    pxusd=px_of(d,r.get("tx")) or (r.get("kurs") or 0)
+    if dr=="IN":
+        if "KAUF (Market)" in t or "PERMUTA-Erhalt" in t: _acq(r["amt"],pxusd)
+        elif "ERHALT" in t or "Airdrop" in t: _acq(r["amt"],0.0)
+        # LP-zurück, STAKING/WRAP-Erhalt, INTERN: neutral (bleibt im Pool)
+    elif dr=="OUT":
+        isDisp=("VERKAUF (Market)" in t) or ("OTC-VERKAUF (Token" in t) or t.startswith("PERMUTA (")
+        if isDisp:
+            custo,erloes,gewinn=_disp(r["amt"],pxusd,d)
+            pt,_=ptax_of(d)
+            r["custoUSD"]=round(custo,2)
+            r["custo"]=round(custo*(pt or 0),2) if pt else None      # Anschaffungskosten BRL
+            r["ganho"]=round(gewinn*(pt or 0),2) if pt else None     # realisierter Gewinn BRL
+            r["avgUSD"]=round((_pool["c"]/_pool["q"]) if _pool["q"]>0 else 0,6)
+        elif "BURN (neutral)" in t: _disp(r["amt"],0.0,d)  # Vernichtung, kein Gewinn
+        # LP-EINLAGE, STAKING/WRAP(, INTERN: neutral
+
 # DE-Periode einheitlich kennzeichnen (Erklärungen in DE bis einschl. 2025 abgegeben)
 DE_TXT="DE-Periode bis 12.09.2025 (deutsche Steuererklärung abgegeben) — für BR nur Kostenbasis"
 for r in st["rows"].values():
@@ -367,10 +406,13 @@ for r in st["rows"].values():
 months={}
 for r in st["rows"].values():
     mon=r["dt"][:7]
-    g=months.setdefault(mon,{"l2":0.0,"l1":0.0,"n":0})
+    g=months.setdefault(mon,{"l2":0.0,"l1":0.0,"n":0,"ganho":0.0,"custo":0.0})
     g["l2"]+=r["l2"] or 0; g["l1"]+=r["l1"] or 0; g["n"]+=1
+    g["ganho"]+=r.get("ganho") or 0; g["custo"]+=r.get("custo") or 0
 for g in months.values():
     g["l2"]=round(g["l2"],2); g["l1"]=round(g["l1"],2); g["l1total"]=round(g["l2"]+g["l1"],2)
+    g["ganho"]=round(g["ganho"],2); g["custo"]=round(g["custo"],2)  # realisierter Gewinn / Anschaffungskosten BRL
+    g["darf"]=round(max(g["ganho"],0)*0.15,2) if g["l2"]>35000 else 0.0  # 15% GCAP nur wenn Monat >35k (L2)
 rows=sorted(st["rows"].values(),key=lambda r:r["ts"],reverse=True)
 json.dump({"v":1,"updated":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
            "residenz":RESIDENZ,"limite":35000.0,"months":months,"rows":rows[:600]},open(LEDGER,"w"))
