@@ -14,7 +14,7 @@
 <title>My Crypto Portfolio</title>
 <style>
 /* ═══ MCP PREMIUM UX — Complete CSS ═══ */
-@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root{--bg:#05080f;--cd:rgba(12,18,32,.82);--bd:#1e293b;--dm:#94a3b8;--mt:#cbd5e1;--tx:#e2e8f0;--br:#f8fafc;
 --g:#34d399;--r:#f87171;--b:#60a5fa;--o:#fb923c;--p:#c084fc;--cy:#22d3ee;--warn:#fbbf24;
@@ -355,6 +355,113 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 @media(prefers-reduced-motion:reduce){
   body::before,body::after,.orb,.orb-main,.prog-bar::after,.heart-dot,.hero-card::before{animation:none !important}
 }
+
+
+/* ===== STEUER v3 ===== */
+/* ═══ STEUER-MODUL v3 — Premium Compliance UI ═══ */
+#taxBody{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+#taxBody *{box-sizing:border-box}
+.tx-load{color:var(--dm);font-size:12px;padding:20px;text-align:center}
+.tx-empty{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:22px;text-align:center;display:flex;flex-direction:column;gap:4px}
+.tx-empty b{font-size:13px;color:var(--tx)}.tx-empty span{font-size:11px;color:var(--dm)}
+
+/* Eyebrow */
+.tx-eyebrow{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.tx-eyebrow>span:first-child{color:var(--cy)}
+.tx-eyebrow-dim{color:var(--dm);letter-spacing:.04em;text-transform:none;font-weight:500;font-size:9.5px}
+
+/* Hero */
+.tx-hero{display:flex;gap:18px;align-items:center;background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(11,17,32,.85));border:1px solid var(--bd);border-radius:18px;padding:20px;margin-bottom:18px;position:relative;overflow:hidden}
+.tx-hero::before{content:"";position:absolute;inset:0;opacity:.5;pointer-events:none}
+.tx-hero-over{border-color:rgba(248,113,113,.35)}
+.tx-hero-over::before{background:radial-gradient(120px 120px at 22% 30%,rgba(248,113,113,.14),transparent)}
+.tx-hero-near{border-color:rgba(251,191,36,.28)}
+.tx-hero-near::before{background:radial-gradient(120px 120px at 22% 30%,rgba(251,191,36,.1),transparent)}
+.tx-hero-free::before{background:radial-gradient(120px 120px at 22% 30%,rgba(52,211,153,.09),transparent)}
+.tx-hero-ring{position:relative;width:104px;height:104px;flex-shrink:0}
+.tx-ring{width:104px;height:104px;display:block}
+.tx-ring-arc{transition:stroke-dashoffset 1.1s cubic-bezier(.16,1,.3,1)}
+.tx-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.tx-ring-pct{font-size:24px;font-weight:700;color:var(--br);line-height:1;letter-spacing:-.02em}
+.tx-ring-pct i{font-size:12px;font-weight:500;color:var(--dm);font-style:normal;margin-left:1px}
+.tx-ring-lbl{font-size:8.5px;color:var(--dm);text-transform:uppercase;letter-spacing:.08em}
+.tx-hero-main{flex:1;min-width:0}
+.tx-hero-month{font-size:11px;color:var(--dm);font-weight:500;margin-bottom:2px}
+.tx-hero-val{font-size:30px;font-weight:800;color:var(--br);line-height:1.02;letter-spacing:-.025em}
+.tx-hero-sub{font-size:9.5px;color:var(--dm);margin-top:2px;margin-bottom:10px}
+.tx-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;padding:5px 10px 5px 8px;border-radius:8px;line-height:1.2}
+.tx-status .tx-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.tx-status-over{background:rgba(248,113,113,.12);color:var(--r)}.tx-status-over .tx-dot{background:var(--r);box-shadow:0 0 0 3px rgba(248,113,113,.18)}
+.tx-status-near{background:rgba(251,191,36,.1);color:var(--warn)}.tx-status-near .tx-dot{background:var(--warn);box-shadow:0 0 0 3px rgba(251,191,36,.16)}
+.tx-status-free{background:rgba(52,211,153,.1);color:var(--g)}.tx-status-free .tx-dot{background:var(--g);box-shadow:0 0 0 3px rgba(52,211,153,.16)}
+.tx-hero-l1{font-size:9px;color:var(--dm);margin-top:8px;opacity:.8}
+
+/* Signature — Jahresverlauf */
+.tx-sig{background:var(--cd);border:1px solid var(--bd);border-radius:16px;padding:14px 16px 10px;margin-bottom:18px}
+.tx-sig-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+.tx-sig-note{font-size:9.5px;color:var(--dm)}
+.tx-lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dm);font-weight:600}
+.tx-lbl-mt{display:block;margin:0 2px 8px}
+.tx-spark{position:relative;display:flex;align-items:flex-end;gap:3px;height:76px;padding-top:4px}
+.tx-thresh{position:absolute;left:0;right:0;border-top:1px dashed rgba(248,113,113,.45);pointer-events:none;z-index:2}
+.tx-thresh span{position:absolute;right:0;top:-14px;font-size:8px;color:var(--r);font-weight:600;background:var(--bg);padding:0 3px;border-radius:3px}
+.tx-bar-wrap{flex:1;height:100%;display:flex;align-items:flex-end;cursor:pointer;min-width:0}
+.tx-bar{width:100%;border-radius:3px 3px 1px 1px;min-height:2px;transition:height 1s cubic-bezier(.16,1,.3,1),opacity .2s;opacity:.9}
+.tx-bar-wrap:hover .tx-bar{opacity:1}
+.tx-bar-cur{outline:1.5px solid var(--cy);outline-offset:1px}
+.tx-spark-axis{display:flex;justify-content:space-between;font-size:8px;color:var(--dm);margin-top:6px;padding:0 1px;font-variant-numeric:tabular-nums}
+
+/* Monatskarten */
+.tx-months{display:flex;flex-direction:column;gap:8px}
+.tx-card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;overflow:hidden;transition:border-color .2s}
+.tx-card-over{border-color:rgba(248,113,113,.4)}
+.tx-card:hover{border-color:rgba(96,165,250,.28)}
+.tx-card-head{width:100%;display:flex;align-items:center;gap:11px;padding:13px 14px;background:none;border:0;cursor:pointer;text-align:left;color:inherit;font-family:inherit}
+.tx-chev{width:15px;height:15px;color:var(--dm);flex-shrink:0;transition:transform .25s cubic-bezier(.16,1,.3,1)}
+.tx-card-info{flex:1;min-width:0}
+.tx-card-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.tx-card-month{font-size:13px;font-weight:600;color:var(--tx)}
+.tx-card-month.tx-cur{color:var(--cy)}
+.tx-card-val{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.tx-card-track{height:4px;background:rgba(148,163,184,.1);border-radius:99px;overflow:hidden;margin:7px 0 5px}
+.tx-card-fill{height:100%;border-radius:99px;transition:width 1s cubic-bezier(.16,1,.3,1)}
+.tx-card-meta{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dm)}
+.tx-card-status{font-weight:600}
+.tx-card-body{max-height:0;overflow:hidden;opacity:0;transition:max-height .35s cubic-bezier(.16,1,.3,1),opacity .3s}
+.tx-card-body.open{max-height:4000px;opacity:1;padding:0 14px 12px}
+.tx-none{font-size:11px;color:var(--dm);padding:10px 2px}
+
+/* Transaktionszeile */
+.tx-tx{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px solid var(--line-1,rgba(30,41,59,.5))}
+.tx-ico{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tx-ico svg{width:18px;height:18px}
+.tx-ico-count{background:rgba(52,211,153,.1);color:var(--g)}
+.tx-ico-l1{background:rgba(251,191,36,.1);color:var(--warn)}
+.tx-ico-neutral{background:rgba(148,163,184,.09);color:var(--dm)}
+.tx-tx-main{flex:1;min-width:0}
+.tx-tx-label{display:block;font-size:12px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-tx-sub{display:block;font-size:9.5px;color:var(--dm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.tx-tx-amt{text-align:right;flex-shrink:0;margin-right:2px}
+.tx-tx-tok{display:block;font-size:11px;font-weight:600;color:var(--mt)}
+.tx-tx-brl{display:block;font-size:10px;color:var(--dm);margin-top:1px}
+.tx-brl-count{color:var(--g);font-weight:600}
+.tx-chip{flex-shrink:0;font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:5px;letter-spacing:.02em;min-width:42px;text-align:center}
+.tx-chip-count{background:rgba(52,211,153,.14);color:var(--g)}
+.tx-chip-l1{background:rgba(251,191,36,.12);color:var(--warn)}
+.tx-chip-neutral{background:transparent;color:var(--dm);opacity:.65}
+.tx-card-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding-top:11px;border-top:1px solid var(--bd);font-size:10px;color:var(--dm)}
+.tx-mini{font-size:9.5px;font-weight:600;color:var(--cy);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.2);border-radius:7px;padding:5px 10px;cursor:pointer;font-family:inherit;flex-shrink:0}
+.tx-mini:active{transform:scale(.96)}
+
+/* Aktionen + Fuß */
+.tx-actions{display:flex;gap:8px;margin-top:16px}
+.tx-btn{flex:1;font-size:11px;font-weight:600;padding:10px;border-radius:10px;cursor:pointer;font-family:inherit;background:var(--cy);color:#04121a;border:0}
+.tx-btn-ghost{background:transparent;color:var(--warn);border:1px solid rgba(251,191,36,.35)}
+.tx-btn:active{transform:scale(.98)}
+.tx-foot{font-size:8.5px;line-height:1.6;color:var(--dm);margin-top:12px;opacity:.85}
+.tx-foot b{color:var(--mt);font-weight:600}
+
+@media (prefers-reduced-motion:reduce){#taxBody *{transition:none!important;animation:none!important}.tx-ring-arc{transition:none!important}}
 
 </style>
 </head>
@@ -970,7 +1077,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260713c"></script>
+<script src="app.js?v=20260713f"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

@@ -3253,69 +3253,212 @@ var BR_PERMUTAS=[];
 // Custo Médio Ponderado pro Asset {asset: {qty, totalCostBrl, avgCostBrl}}
 var BR_CUSTO_MEDIO={};
 
-// ═══ STEUER-MODUL (BR) v2 — Server-Ledger-Automatik ═══
-// Ersetzt das alte lokale Tax-Modul komplett. Datenquelle: /root/tax_extract.py auf dem VPS
-// (6h-Cron, scannt alle 3 Wallets auf Arbitrum + Robinhood Chain, klassifiziert via Receipts,
-// bewertet USD + BRL/PTAX, Lesarten L2/L1 gemäß Steuer-Dossier). Die App zeigt nur an.
-function brAddPermuta(){/* obsolet — Erfassung erfolgt on-chain durch den Server-Extraktor */}
+// ═══ STEUER-MODUL (BR) v3 — Premium Compliance-Dashboard ═══
+// Datenquelle: /root/tax_extract.py (Server-Ledger). Die App zeigt nur an.
+function brAddPermuta(){/* obsolet — Erfassung on-chain durch Server-Extraktor */}
 var _taxL=null;
 async function taxLoad(force){
   var el=$("taxBody");
   try{
-    if(force&&el)el.innerHTML='<span style="color:var(--dm)">Lade Ledger…</span>';
+    if(force&&el)el.innerHTML='<div class="tx-load">Ledger wird geladen…</div>';
     var r=await fetch("https://95-216-152-31.sslip.io/taxledger"+(force?"?t="+Date.now():""),{mode:"cors"});
     _taxL=await r.json();
     taxRender();
-  }catch(e){if(el)el.innerHTML='<span style="color:var(--r)">Steuer-Ledger nicht erreichbar ('+((e&&e.message)||"Netz")+') — Server-Extraktor prüfen</span>';}
+  }catch(e){if(el)el.innerHTML='<div class="tx-empty"><b>Ledger nicht erreichbar</b><span>'+((e&&e.message)||"Netzwerkfehler")+' — Server-Extraktor prüfen.</span></div>';}
 }
+
+// ── Formatierung ──
+function txBRL(v){if(v==null||v==="")return"—";return"R$ "+Number(v).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2});}
+function txBRL0(v){if(v==null||v==="")return"—";return"R$ "+Number(v).toLocaleString("de-DE",{maximumFractionDigits:0});}
+function txAmt(n){n=Number(n)||0;var a=Math.abs(n);if(a>=1e6)return(n/1e6).toLocaleString("de-DE",{maximumFractionDigits:2})+"M";if(a>=1e3)return(n/1e3).toLocaleString("de-DE",{maximumFractionDigits:a>=1e5?0:1})+"K";if(a>=1)return n.toLocaleString("de-DE",{maximumFractionDigits:2});return n.toLocaleString("de-DE",{maximumFractionDigits:4});}
+
+// ── Line-Icons (monochrom, stroke=currentColor) ──
+var TX_ICONS={
+  offramp:'<path d="M3 8.5 10 4l7 4.5M4 8.5v7M16 8.5v7M3 16h14M7 11v2.5M10 11v2.5M13 11v2.5"/>',
+  swap:'<path d="M4 7h9m0 0-2.5-2.5M13 7l-2.5 2.5M16 13H7m0 0 2.5-2.5M7 13l2.5 2.5"/>',
+  sell:'<path d="M4 6l4 5 3-2.5 5 5M16 13.5V9m0 4.5h-4.5"/>',
+  buy:'<path d="M4 14l4-5 3 2.5 5-5M16 6.5V11m0-4.5h-4.5"/>',
+  coins:'<path d="M10 6.5c3.3 0 6-.9 6-2s-2.7-2-6-2-6 .9-6 2 2.7 2 6 2Z" transform="translate(0 1.5)"/><path d="M4 8v3c0 1.1 2.7 2 6 2s6-.9 6-2V8" transform="translate(0 1.5)"/>',
+  lp:'<path d="M10 3 4.5 8.5a5 5 0 1 0 11 0L10 3Z"/>',
+  lpout:'<path d="M10 3 4.5 8.5a5 5 0 1 0 11 0L10 3Z" opacity=".5"/><path d="M8 10.5h4"/>',
+  burn:'<path d="M10 3s3 3 3 6a3 3 0 0 1-6 0c0-1.2.6-2.2 1.2-3 .2 1 .8 1.5 1.3 1.5.6 0 .8-.7.5-1.5-.4-1.2-.5-2.5 0-3Z"/>',
+  tout:'<path d="M4 10h9m0 0-3-3m3 3-3 3M14 5h2v10h-2"/>',
+  tin:'<path d="M16 10H7m0 0 3-3m-3 3 3 3M6 5H4v10h2"/>',
+  airdrop:'<path d="M10 3v7m0 0L7 7m3 3 3-3M4 13v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2"/>',
+  refund:'<path d="M5 10a5 5 0 1 1 1.5 3.5M5 10V6.5M5 10h3.5"/>',
+  stake:'<path d="M6 9V6.5a4 4 0 0 1 8 0V9M5 9h10v7H5z"/>',
+  intern:'<path d="M4 7h9m0 0-2.5-2.5M13 7l-2.5 2.5M16 13H7m0 0 2.5-2.5M7 13l2.5 2.5" opacity=".55"/>',
+  dot:'<circle cx="10" cy="10" r="2.5"/>'
+};
+function txIcon(k){return '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'+(TX_ICONS[k]||TX_ICONS.dot)+'</svg>';}
+
+// ── Klassifizierung: roher Ledger-Typ → {icon, label, sub, tone} ──
+// tone: 'count' (L2, zählt) · 'l1' (strittig) · 'neutral'
+function txClassify(r){
+  var t=r.typ||"",cp=r.cp||"",tok=r.tok||"";
+  var name=(cp&&cp.indexOf("0x")!==0)?cp:"";
+  var tone=r.l2>0?"count":(r.l1>0?"l1":"neutral");
+  function P(icon,label,sub){return{icon:icon,label:label,sub:sub||"",tone:tone};}
+  if(/OFF-RAMP/i.test(t)){var ex=/Crypto\.com/i.test(t)?"Crypto.com":"Kraken";return P("offramp","Off-Ramp → "+ex,"Verkauf an Börse (→ EUR)");}
+  if(/^PERMUTA \(/i.test(t)){var mm=t.match(/PERMUTA \(([^)]+)\)/);var inner=mm?mm[1]:"";var who=inner.split(",").pop().trim();var pair=inner.split(",")[0].trim();return P("swap","Tausch "+pair,(who&&who.indexOf("0x")!==0?"mit "+who:"Krypto-Tausch")+" · Veräußerung");}
+  if(/PERMUTA-Erhalt/i.test(t))return P("swap","Tausch erhalten · "+tok,"Gegenwert aus Permuta");
+  if(/STAKING\/WRAP \(/i.test(t)){var sm=t.match(/\(([^)]+)\)/);return P("stake","Staking · "+(sm?sm[1]:""),"über Protokoll · strittig");}
+  if(/STAKING\/WRAP-Erhalt/i.test(t))return P("stake","Staking erhalten · "+tok,"");
+  if(/OTC-VERKAUF \(Erl/i.test(t))return P("coins","OTC-Verkauf",(name?name+" · ":"")+"Veräußerung");
+  if(/OTC-VERKAUF \(Token/i.test(t))return P("swap","OTC-Lieferung · "+tok,"Erlös separat gebucht");
+  if(/VERKAUF \(Market\)/i.test(t))return P("sell","Verkauf","Markt · "+tok+" → "+(tok==="HOODIE"?"ETH":"USDC"));
+  if(/KAUF \(Market\)/i.test(t))return P("buy","Kauf","Markt · → "+tok);
+  if(/VERKAUFS-Erl/i.test(t))return P("coins","Verkaufserlös","aus Markt-Swap");
+  if(/KAUF-Zahlung/i.test(t))return P("buy","Kaufzahlung","Anschaffung · USDC");
+  if(/LP-COLLECT \(Fills/i.test(t))return P("coins","LP-Erlös","Fills aus Liquidität");
+  if(/LP-COLLECT \(Token/i.test(t))return P("lpout","LP-Token zurück","aus Liquidität");
+  if(/LP-EINLAGE/i.test(t))return P("lp","LP-Einlage · "+tok,"in Pool · strittig");
+  if(/LP-ENTNAHME/i.test(t))return P("lpout","LP-Entnahme · "+tok,"aus Pool · strittig");
+  if(/BURN \(neutral\)/i.test(t))return P("burn","Burn · "+tok,"vernichtet · kein Verkauf");
+  if(/^INTERN/i.test(t))return P("intern","Interner Transfer · "+tok,"eigene Wallets");
+  if(/ERHALT \(Airdrop/i.test(t))return P("airdrop","Erhalt · "+tok,"Airdrop · Kostenbasis 0");
+  if(/ERLÖS-Eingang/i.test(t))return P("coins","Erlös-Eingang",(name?"von "+name+" · ":"")+"prüfen");
+  if(/Rückfluss/i.test(t))return P("refund","Rückfluss · "+tok,"von Börse zurück");
+  if(/TRANSFER AN/i.test(t))return P("tout","Transfer · "+tok,(name?"an "+name:"an Dritte"));
+  if(/TRANSFER VON/i.test(t))return P("tin","Transfer · "+tok,(name?"von "+name:"von Dritten"));
+  return P("dot",t,name);
+}
+
+// ── SVG-Ring (% der Freigrenze) ──
+function txRing(pct,tone){
+  var R=54,C=2*Math.PI*R,cap=Math.min(pct,100),off=C*(1-cap/100);
+  var col=tone==="over"?"var(--r)":(tone==="near"?"var(--warn)":"var(--g)");
+  return '<svg class="tx-ring" viewBox="0 0 128 128">'
+    +'<circle cx="64" cy="64" r="'+R+'" fill="none" stroke="rgba(148,163,184,.13)" stroke-width="9"/>'
+    +'<circle class="tx-ring-arc" cx="64" cy="64" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="9" stroke-linecap="round" '
+    +'stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+C.toFixed(1)+'" data-off="'+off.toFixed(1)+'" transform="rotate(-90 64 64)"/></svg>';
+}
+
+var _taxOpen={};
+function taxToggleMonth(m){
+  var b=$("txm-"+m),a=$("txa-"+m);if(!b)return;
+  var open=b.classList.toggle("open");_taxOpen[m]=open;
+  if(a)a.style.transform=open?"rotate(90deg)":"";
+}
+function taxScrollToMonth(m){
+  if(!_taxOpen[m])taxToggleMonth(m);
+  var c=$("txcard-"+m);if(c)c.scrollIntoView({behavior:"smooth",block:"start"});
+}
+
 function taxRender(){
   var el=$("taxBody");if(!el||!_taxL)return;
   var L=_taxL,lim=L.limite||35000;
   var mons=Object.keys(L.months||{}).sort();
-  if(!mons.length){el.innerHTML='<span style="color:var(--dm)">Noch keine Daten im Ledger</span>';return;}
-  var cur=mons[mons.length-1];
-  var cm=L.months[cur];
-  function amp(v){return v>lim?'<b style="color:var(--r)">ÜBER 35k — DARF/DeCripto prüfen</b>':(v>lim*0.8?'<b style="color:var(--warn)">R$'+F(lim-v,0)+' Luft bis zur Grenze</b>':'<b style="color:var(--g)">unter 35k — steuerfrei</b>');}
-  var h='<div class="mg" style="margin-bottom:10px">'
-    +MB("Monat",cur,"var(--cy)")
-    +MB("L2 · Verkäufe","R$"+F(cm.l2,0),cm.l2>lim?"var(--r)":"var(--g)")
-    +MB("L1 · inkl. LP","R$"+F(cm.l1total,0),cm.l1total>lim?"var(--r)":"var(--warn)")
-    +'</div>'
-    +'<div style="font-size:11px;margin-bottom:6px">L2 (nur echte Verkäufe/Fills): '+amp(cm.l2)+'</div>'
-    +'<div style="font-size:11px;margin-bottom:8px">L1 (zusätzl. LP-Bewegungen, strittige Lesart): '+amp(cm.l1total)+'</div>'
-    +'<div style="font-size:9px;color:var(--dm);margin-bottom:10px">Fristen bei Überschreitung: DARF 4600 + DeCripto bis letzter Werktag des Folgemonats · Residenz-Cutoff '+(L.residenz||"—")+' · Extraktor-Stand: '+(L.updated||"—")+'</div>';
-  h+='<div class="lb">MONATE (alle Wallets, beide Chains)</div><div class="ov"><table class="mkt-tbl"><thead><tr><th>Monat</th><th>L2 (BRL)</th><th>L1 gesamt</th><th>Status</th><th>Tx</th></tr></thead><tbody>';
-  for(var i=mons.length-1;i>=0;i--){
-    var m=L.months[mons[i]];
-    h+='<tr'+(mons[i]===cur?' style="background:rgba(52,211,153,.06)"':'')+'><td>'+mons[i]+'</td><td>R$'+F(m.l2,0)+'</td><td>R$'+F(m.l1total,0)+'</td>'
-      +'<td style="font-size:9px">'+(m.l2>lim?'<span style="color:var(--r)">L2 ÜBER</span>':'<span style="color:var(--g)">frei</span>')
-      +(m.l1total>lim&&m.l2<=lim?' <span style="color:var(--warn)">L1 über</span>':'')+'</td><td>'+m.n+'</td></tr>';
-  }
-  h+='</tbody></table></div>';
-  var rows=(L.rows||[]).filter(function(r){return r.dt.slice(0,7)===cur;});
-  h+='<div class="lb" style="margin-top:10px">TRANSAKTIONEN '+cur+' ('+rows.length+')</div><div class="ov"><table class="mkt-tbl"><thead><tr><th>Datum</th><th>Typ</th><th>Menge</th><th>BRL</th><th></th></tr></thead><tbody>';
-  var show=window._taxAll?rows:rows.slice(0,25);
-  show.forEach(function(r){
-    h+='<tr><td style="font-size:9px;white-space:nowrap">'+r.dt+'</td><td style="font-size:9px">'+r.typ+'<br><span style="color:var(--dm)">'+r.wallet+' · '+(r.note||"")+'</span></td>'
-      +'<td style="font-size:9px">'+F(r.amt,0)+' '+r.tok+'</td>'
-      +'<td style="font-size:9px">'+(r.brl!==null&&r.brl!==undefined?"R$"+F(r.brl,0):"—")+'</td>'
-      +'<td style="font-size:9px">'+(r.l2?'<span style="color:var(--g)">L2</span>':'')+(r.l1?'<span style="color:var(--warn)"> L1</span>':'')+'</td></tr>';
+  if(!mons.length){el.innerHTML='<div class="tx-empty"><b>Noch keine Daten</b><span>Der Extraktor hat noch keine Transaktionen erfasst.</span></div>';return;}
+  var cur=mons[mons.length-1],cm=L.months[cur];
+  var pct=cm.l2/lim*100, tone=cm.l2>lim?"over":((lim-cm.l2)<lim*0.15?"near":"free"), luft=lim-cm.l2;
+  var yy=cur.slice(0,4), mLabel=curMonthLabel(cur);
+
+  var h='';
+  // ── EYEBROW ──
+  h+='<div class="tx-eyebrow"><span>Steuer · Brasilien</span><span class="tx-eyebrow-dim">Freigrenze R$ 35.000 / Monat</span></div>';
+
+  // ── HERO: Ring + aktueller Monat ──
+  h+='<div class="tx-hero tx-hero-'+tone+'">'
+    +'<div class="tx-hero-ring">'+txRing(pct,tone)
+      +'<div class="tx-ring-center"><span class="tx-ring-pct">'+Math.round(pct)+'<i>%</i></span><span class="tx-ring-lbl">der Grenze</span></div></div>'
+    +'<div class="tx-hero-main">'
+      +'<div class="tx-hero-month">'+mLabel+'</div>'
+      +'<div class="tx-hero-val">'+txBRL0(cm.l2)+'</div>'
+      +'<div class="tx-hero-sub">steuerbare Veräußerungen (L2)</div>';
+  if(tone==="over") h+='<div class="tx-status tx-status-over"><span class="tx-dot"></span>Über der Freigrenze · DARF 4600 + DeCripto fällig</div>';
+  else if(tone==="near") h+='<div class="tx-status tx-status-near"><span class="tx-dot"></span>Noch '+txBRL(luft)+' bis zur Grenze — keine Verkäufe</div>';
+  else h+='<div class="tx-status tx-status-free"><span class="tx-dot"></span>Unter der Freigrenze · '+txBRL0(luft)+' Spielraum</div>';
+  h+='<div class="tx-hero-l1">Mit LP/Staking (strittig): '+txBRL0(cm.l1total)+'</div>'
+    +'</div></div>';
+
+  // ── SIGNATURE: Jahresverlauf mit Schwellenlinie ──
+  var vals=mons.map(function(m){return L.months[m].l2;});
+  var maxV=Math.max.apply(null,vals.concat([lim*1.15]));
+  var thrPct=lim/maxV*100;
+  var overCount=mons.filter(function(m){return L.months[m].l2>lim;}).length;
+  h+='<div class="tx-sig">'
+    +'<div class="tx-sig-head"><span class="tx-lbl">Jahresverlauf</span>'
+      +'<span class="tx-sig-note">'+(overCount?overCount+' Monat über der Grenze':'kein Monat über der Grenze')+'</span></div>'
+    +'<div class="tx-spark">'
+      +'<div class="tx-thresh" style="bottom:'+thrPct.toFixed(1)+'%"><span>R$ 35k</span></div>';
+  mons.forEach(function(m){
+    var v=L.months[m].l2, hp=Math.max(v/maxV*100,v>0?3:0), o=v>lim, isCur=m===cur;
+    var bcol=o?"var(--r)":(v<=0?"rgba(148,163,184,.22)":"var(--g)");
+    h+='<div class="tx-bar-wrap" onclick="taxScrollToMonth(\''+m+'\')" title="'+m+': '+txBRL0(v)+'">'
+      +'<div class="tx-bar'+(isCur?' tx-bar-cur':'')+'" style="height:'+hp.toFixed(1)+'%;background:'+bcol+'"></div></div>';
   });
-  h+='</tbody></table></div>';
-  if(rows.length>25)h+='<button class="btn" style="font-size:10px;margin-top:6px" onclick="window._taxAll=!window._taxAll;taxRender()">'+(window._taxAll?"weniger anzeigen":"alle "+rows.length+" anzeigen")+'</button>';
-  h+='<div style="margin-top:8px"><button class="btn" style="font-size:10px" onclick="taxLoad(true)">↻ Aktualisieren</button> '
-    +'<button class="btn" style="font-size:10px" onclick="taxCsv()">📋 Monat als CSV kopieren</button> '
-    +'<button class="btn" style="font-size:10px;border-color:var(--warn);color:var(--warn)" onclick="window.open(\'https://95-216-152-31.sslip.io/dossier\',\'_blank\')">📄 Grundsatz-Dossier (PDF)</button></div>'
-    +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Automatik: On-Chain-Extraktor (6h-Takt) · Jede Zeile mit Tx-Hash im CSV · L1 = permuta-Lesart (SC COSIT 214/2021 analog, strittig) · BRL = USD × PTAX venda (BCB) · Rechtsgrundlagen im Steuer-Dossier</div>';
+  h+='</div><div class="tx-spark-axis"><span>'+mons[0].replace("-","·")+'</span><span>'+cur.replace("-","·")+'</span></div></div>';
+
+  // ── MONATSLISTE ──
+  h+='<div class="tx-lbl tx-lbl-mt">Monate</div><div class="tx-months">';
+  for(var i=mons.length-1;i>=0;i--){
+    var mk=mons[i],m=L.months[mk];
+    var mo=m.l2>lim, mnear=!mo&&(lim-m.l2)<lim*0.15&&m.l2>0, mzero=m.l2<=0;
+    var mtone=mo?"over":(mzero?"zero":(mnear?"near":"free"));
+    var mcol=mo?"var(--r)":(mzero?"var(--dm)":(mnear?"var(--warn)":"var(--g)"));
+    var mpct=Math.min(m.l2/lim*100,100);
+    var isCur=mk===cur, openNow=_taxOpen[mk]!==undefined?_taxOpen[mk]:isCur;
+    _taxOpen[mk]=openNow;
+    var statusTxt=mo?"DARF-pflichtig":(mzero?"keine Verkäufe":(mnear?"knapp":"steuerfrei"));
+    var rows=(L.rows||[]).filter(function(r){return r.dt.slice(0,7)===mk;}).sort(function(a,b){return a.ts-b.ts;});
+    h+='<div class="tx-card tx-card-'+mtone+'" id="txcard-'+mk+'">'
+      +'<button class="tx-card-head" onclick="taxToggleMonth(\''+mk+'\')">'
+        +'<svg class="tx-chev" id="txa-'+mk+'"'+(openNow?' style="transform:rotate(90deg)"':'')+' viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>'
+        +'<div class="tx-card-info">'
+          +'<div class="tx-card-top"><span class="tx-card-month'+(isCur?" tx-cur":"")+'">'+monthLabel(mk)+'</span>'
+            +'<span class="tx-card-val" style="color:'+mcol+'">'+txBRL0(m.l2)+'</span></div>'
+          +'<div class="tx-card-track"><div class="tx-card-fill" style="width:'+mpct.toFixed(1)+'%;background:'+mcol+'"></div></div>'
+          +'<div class="tx-card-meta"><span>'+m.n+' Vorgänge</span><span class="tx-card-status" style="color:'+mcol+'">'+statusTxt+'</span></div>'
+        +'</div></button>'
+      +'<div class="tx-card-body'+(openNow?" open":"")+'" id="txm-'+mk+'">';
+    if(!rows.length){h+='<div class="tx-none">Keine Transaktionen in diesem Monat.</div>';}
+    else{
+      rows.forEach(function(r){
+        var c=txClassify(r);
+        var chip=c.tone==="count"?'<span class="tx-chip tx-chip-count">zählt</span>'
+                :(c.tone==="l1"?'<span class="tx-chip tx-chip-l1">L1</span>':'<span class="tx-chip tx-chip-neutral">neutral</span>');
+        h+='<div class="tx-tx">'
+          +'<span class="tx-ico tx-ico-'+c.tone+'">'+txIcon(c.icon)+'</span>'
+          +'<div class="tx-tx-main"><span class="tx-tx-label">'+c.label+'</span>'
+            +'<span class="tx-tx-sub">'+fmtDay(r.dt)+(c.sub?' · '+c.sub:'')+'</span></div>'
+          +'<div class="tx-tx-amt"><span class="tx-tx-tok">'+txAmt(r.amt)+' '+r.tok+'</span>'
+            +'<span class="tx-tx-brl'+(c.tone==="count"?" tx-brl-count":"")+'">'+(r.brl!=null?txBRL0(r.brl):"—")+'</span></div>'
+          +chip+'</div>';
+      });
+      h+='<div class="tx-card-foot"><span>Σ steuerbar <b style="color:'+mcol+'">'+txBRL0(m.l2)+'</b> · LP/Staking '+txBRL0(m.l1total)+'</span>'
+        +'<button class="tx-mini" onclick="event.stopPropagation();taxCsv(\''+mk+'\')">CSV kopieren</button></div>';
+    }
+    h+='</div></div>';
+  }
+  h+='</div>';
+
+  // ── FUSS ──
+  h+='<div class="tx-actions">'
+    +'<button class="tx-btn" onclick="taxLoad(true)">Aktualisieren</button>'
+    +'<button class="tx-btn tx-btn-ghost" onclick="window.open(\'https://95-216-152-31.sslip.io/dossier\',\'_blank\')">Grundsatz-Dossier</button></div>'
+    +'<p class="tx-foot">Automatischer On-Chain-Extraktor · alle Wallets, beide Chains · 6-Stunden-Takt. <b>Zählt</b> = steuerbare Veräußerung (L2, Freigrenze R$ 35.000). <b>L1</b> = LP/Staking nach permuta-Lesart (SC COSIT 214/2021 analog, strittig). Beträge in BRL zum PTAX-venda (BCB). Jede Zeile mit Tx-Hash im CSV für die Steuerberatung. Stand '+(L.updated||"—")+' · Steuerresidenz '+(L.residenz||"—")+'.</p>';
+
   el.innerHTML=h;
+  // Ring-Animation triggern
+  requestAnimationFrame(function(){var a=el.querySelector(".tx-ring-arc");if(a)requestAnimationFrame(function(){a.style.strokeDashoffset=a.getAttribute("data-off");});});
 }
-function taxCsv(){
+
+// ── Monatslabels (deutsch) ──
+var MON_DE=["Jan","Feb","März","Apr","Mai","Juni","Juli","Aug","Sept","Okt","Nov","Dez"];
+var MON_DE_LONG=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+function monthLabel(mk){var p=mk.split("-");return MON_DE[+p[1]-1]+" "+p[0];}
+function curMonthLabel(mk){var p=mk.split("-");return MON_DE_LONG[+p[1]-1]+" "+p[0];}
+function fmtDay(dt){var p=dt.split(" ");var d=p[0].split("-");return d[2]+". "+MON_DE[+d[1]-1]+(p[1]?" · "+p[1]:"");}
+
+function taxCsv(mon){
   if(!_taxL)return;
-  var mons=Object.keys(_taxL.months||{}).sort();var cur=mons[mons.length-1];
-  var rows=(_taxL.rows||[]).filter(function(r){return r.dt.slice(0,7)===cur;});
+  var mons=Object.keys(_taxL.months||{}).sort();
+  var cur=mon||mons[mons.length-1];
+  var rows=(_taxL.rows||[]).filter(function(r){return r.dt.slice(0,7)===cur;}).sort(function(a,b){return a.ts-b.ts;});
   var csv="Datum;Chain;Wallet;Typ;Menge;Token;Kurs;USD;PTAX;BRL;L2_BRL;L1_BRL;Gegenpartei;TxHash;Notiz\n";
   rows.forEach(function(r){csv+=[r.dt,r.chain,r.wallet,r.typ,r.amt,r.tok,r.kurs||"",r.usd||"",r.ptax||"",r.brl||"",r.l2||"",r.l1||"",r.cp,r.tx,(r.note||"").replace(/;/g,",")].join(";")+"\n";});
-  try{navigator.clipboard.writeText(csv);alert("CSV ("+rows.length+" Zeilen) in der Zwischenablage — z.B. an Contadora mailen");}catch(e){alert("Clipboard nicht verfügbar");}
+  try{navigator.clipboard.writeText(csv);alert("CSV "+cur+" ("+rows.length+" Zeilen) kopiert — an die Steuerberatung mailen.");}catch(e){alert("Zwischenablage nicht verfügbar.");}
 }
 
 // ═══ AUTO-DETECT CLOSED LPs ═══
@@ -6290,7 +6433,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260713c"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260713f"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
