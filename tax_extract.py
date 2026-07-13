@@ -31,6 +31,8 @@ W=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd
 WSET=set(W); WT=["0x000000000000000000000000"+w[2:] for w in W]
 DEAD="0x000000000000000000000000000000000000dead"
 KRAKEN="0xd049a54c8f8757ae7392f0c6f65a487f82ddfde9"  # Noahs Kraken-Einzahladresse: USDC OUT dorthin = Off-Ramp (USDC->EUR->Bank) = Veraeusserung (L2), Transfertag als Naeherung
+CRYPTOCOM="0xe7d324bfb30f7b6e314a1698cea57ac8eec4d366"  # Noahs Crypto.com-Einzahladresse: USDC OUT dorthin = Off-Ramp = Veraeusserung (L2)
+OFFRAMPS={KRAKEN,CRYPTOCOM}  # Boersen-Auszahladressen: jeder USDC-OUT = Veraeusserung
 RESIDENZ="2025-09-12"
 HD_PX_ASSUME={"2026-07-11":0.000434,"2026-07-12":0.000286}  # dokumentierte Näherung (Beleganlage)
 STATE="/root/tax_state.json"; LEDGER="/root/tax_ledger.json"
@@ -319,18 +321,19 @@ for r in rowsL:
         r["note"]=(base+" · " if base else "")+ref
     if r["tok"]=="USDC":
         usd=r["amt"]
-        kr=(r.get("cpa","") or "").lower()==KRAKEN
+        kr=(r.get("cpa","") or "").lower() in OFFRAMPS
+        rampname="Kraken" if (r.get("cpa","") or "").lower()==KRAKEN else "Crypto.com"
         if t=="VERKAUFS-Erlös (USDC)": setv(usd,"Market-Verkaufserlös · zählt · §Dossier B/Verkauf"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif t=="LP-COLLECT (Fills/Entnahme)": setv(usd,"LP-Fill-Erlös · zählt · §Dossier B/Fills"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif t=="LP-EINLAGE": setv(usd,"USDC-Seite LP-Einlage · Lesart strittig · §Dossier B/LP"); r["l1"]=0 if pre else (r["brl"] or 0)
         elif t=="OTC-VERKAUF (Erlös)": setv(usd,(r.pop("_pairnote","OTC"))+" · zählt (Veräußerung) · §Dossier B/OTC"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif t=="KAUF-Zahlung (USDC)": setv(usd,"Kaufpreis (Anschaffung) · §Dossier B/Kauf")
         elif kr and r.get("dir")=="OUT":
-            r["typ"]="KRAKEN-OFF-RAMP (Veräußerung)"
-            setv(usd,"USDC→Kraken (Off-Ramp, USDC→EUR→Bankkonto) = Veräußerung · Transfertag als Näherung · §Dossier B/Verkauf"); r["l2"]=0 if pre else (r["brl"] or 0)
+            r["typ"]=f"OFF-RAMP {rampname} (Veräußerung)"
+            setv(usd,f"USDC→{rampname} (Off-Ramp, USDC→EUR/Fiat→Bankkonto) = Veräußerung · Transfertag als Näherung · §Dossier B/Verkauf"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif kr and r.get("dir")=="IN":
-            r["typ"]="KRAKEN-Rückfluss (neutral, prüfen)"
-            setv(usd,"USDC-Rückfluss von Kraken-Adresse — keine Veräußerung, evtl. zurückgewiesene/teilw. Einzahlung; Zuordnung mit Contadora prüfen · neutral")
+            r["typ"]=f"{rampname}-Rückfluss (neutral, prüfen)"
+            setv(usd,f"USDC-Rückfluss von {rampname}-Adresse — keine Veräußerung (zurückgewiesene/teilw. Einzahlung); Zuordnung mit Contadora prüfen · neutral")
         elif "TRANSFER VON" in t and usd>=500 and not pre:
             r["typ"]="ERLÖS-Eingang (Zuordnung prüfen)"
             setv(usd,"USDC von Person ohne erkanntes Gegen-Asset — konservativ als Erlös gezählt · §Dossier B/OTC"); r["l2"]=r["brl"] or 0
