@@ -228,28 +228,54 @@ print(f"Robinhood: {len(uniqH)} neue Transfers bis Block {rhHead:,}",flush=True)
 # ── POST-PASS: Tagespreise, OTC/Permuta/Staking-Erkennung, idempotente Neubewertung ──
 def _d(r): return r["dt"][:10]
 rowsL=list(st["rows"].values())
-# (1) Preise: (a) EXAKT pro Tx aus USDC-Gegenseite jeder Swap-Tx (deckt auch frühe Käufe ohne Pool-Erkennung),
-#            (b) daraus Tagespreise als Fallback für Zeilen ohne USDC-Gegenseite (z.B. LP/Permuta).
-txUsd={};txTok={}
+# (1) Preise: pro Token GETRENNT (BURN≠stBURN), nur echte 1:1-Swaps (genau 1 USDC + 1 Token in Tx),
+#     Median statt Mittel (ausreißerrobust), Plausibilitäts-Range je Token.
+import statistics as _stats
+def _tx_sides(txid):
+    s=[r for r in rowsL if r["tx"]==txid and r["chain"]=="ARB"]
+    return s
+# Sammle Kandidaten-Preise pro Tx und Token
+txPxBurn={};txPxSt={}
+_seen={}
 for r in rowsL:
-    if r["chain"]!="ARB": continue
-    if r["tok"]=="USDC": txUsd[r["tx"]]=txUsd.get(r["tx"],0)+r["amt"]
-    elif r["tok"] in ("BURN","stBURN"): txTok[r["tx"]]=txTok.get(r["tx"],0)+r["amt"]
-txPx={}
-for tx,tk in txTok.items():
-    u=txUsd.get(tx,0)
-    if u>0 and tk>0: txPx[tx]=u/tk
-dayPx={}
-for r in rowsL:
-    if r["chain"]=="ARB" and r["tx"] in txPx: dayPx.setdefault(_d(r),[]).append(txPx[r["tx"]])
-dayPx={d:sum(v)/len(v) for d,v in dayPx.items()}
-def px_of(day,tx=None):
-    if tx and tx in txPx: return txPx[tx]
-    if day in dayPx: return dayPx[day]
+    if r["chain"]!="ARB" or r["tok"] not in ("BURN","stBURN"): continue
+    if r["tx"] in _seen: continue
+    _seen[r["tx"]]=1
+    sides=_tx_sides(r["tx"])
+    usd=[x for x in sides if x["tok"]=="USDC"]
+    burn=[x for x in sides if x["tok"]=="BURN"]
+    st_=[x for x in sides if x["tok"]=="stBURN"]
+    # echter Swap = genau eine USDC-Seite + genau eine Token-Seite, KEIN Mix aus BURN+stBURN
+    tot_usd=sum(x["amt"] for x in usd)
+    if tot_usd<=0: continue
+    if burn and not st_:
+        q=sum(x["amt"] for x in burn)
+        if q>0: txPxBurn[r["tx"]]=tot_usd/q
+    elif st_ and not burn:
+        q=sum(x["amt"] for x in st_)
+        if q>0: txPxSt[r["tx"]]=tot_usd/q
+# Plausibilitäts-Range (BURN & stBURN historisch $0,002–$0,50) — Ausreißer raus
+def _clean(d,lo=0.002,hi=0.5): return {k:v for k,v in d.items() if lo<=v<=hi}
+txPxBurn=_clean(txPxBurn); txPxSt=_clean(txPxSt)
+# Tages-Median je Token
+def _daymed(txpx):
+    dd={}
+    for r in rowsL:
+        if r["tx"] in txpx: dd.setdefault(_d(r),[]).append(txpx[r["tx"]])
+    return {d:_stats.median(v) for d,v in dd.items()}
+dayBurn=_daymed(txPxBurn); daySt=_daymed(txPxSt)
+def px_of(day,tx=None,tok="BURN"):
+    src_tx=txPxSt if tok=="stBURN" else txPxBurn
+    src_day=daySt if tok=="stBURN" else dayBurn
+    if tx and tx in src_tx: return src_tx[tx]
+    if day in src_day: return src_day[day]
     dd=datetime.date.fromisoformat(day)
-    for off in range(1,90):
+    for off in range(1,120):
         for c in [(dd-datetime.timedelta(days=off)).isoformat(),(dd+datetime.timedelta(days=off)).isoformat()]:
-            if c in dayPx: return dayPx[c]
+            if c in src_day: return src_day[c]
+    # letzter Fallback: anderer Token-Preis (stBURN≈BURN wenn eigene Quelle leer)
+    other=dayBurn if tok=="stBURN" else daySt
+    if day in other: return other[day]
     return None
 # (2) Contract vs. Person (eth_getCode, gecacht)
 st.setdefault("code",{})
@@ -343,7 +369,7 @@ for r in rowsL:
             setv(usd,"USDC von Person ohne erkanntes Gegen-Asset — konservativ als Erlös gezählt · §Dossier B/OTC"); r["l2"]=r["brl"] or 0
         else: setv(usd,base or "Transfer")
     else:
-        bp=px_of(day)
+        bp=px_of(day,r.get("tx"),r["tok"])
         if t.startswith("PERMUTA (") and not pre:
             wrapper=(set((r["tok"],)) | {"BURN","stBURN"})=={"BURN","stBURN"}
             ref="Krypto-zu-Krypto-Tausch = Veräußerung (SC COSIT 214/2021) · konservativ gezählt"+(" · GEGENAUFFASSUNG dokumentiert: gedeckter Wrapper-Tausch, kein Vermögenszuwachs — §Dossier B/Wrapper" if wrapper else "")+" · §Dossier A.3"
@@ -377,7 +403,7 @@ def _disp(q,pxusd_sell,day):
 for r in sorted(rowsL,key=lambda x:(x["ts"],x.get("li",0) if isinstance(x.get("li"),int) else 0)):
     if r["tok"] not in ("BURN","stBURN"): continue
     t=r["typ"]; d=_d(r); dr=r.get("dir")
-    pxusd=px_of(d,r.get("tx")) or (r.get("kurs") or 0)
+    pxusd=px_of(d,r.get("tx"),r["tok"]) or 0
     if dr=="IN":
         if "KAUF (Market)" in t or "PERMUTA-Erhalt" in t: _acq(r["amt"],pxusd)
         elif "ERHALT" in t or "Airdrop" in t: _acq(r["amt"],0.0)
