@@ -6,7 +6,8 @@
 import json,sys,time,datetime,urllib.request
 
 OTC="0xa1b9dec925a4dcb26ed096f238669d45df27c465"   # Sammel-Wallet des OTC-Deals (Mario)
-ARB="https://arb1.arbitrum.io/rpc"
+ARBS=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://arbitrum.llamarpc.com","https://rpc.ankr.com/arbitrum","https://1rpc.io/arb"]
+ARB=ARBS[0]
 BURN_TK="0xbfc6620459762a6e485ebf1cf7e532e06253b62f"
 STBURN_TK="0xd36701e8cfe1c8edd993fa67b90134671c8f8424"
 USDC_TK="0xaf88d065e77c8cc2239327c5edb3a432268e5831"
@@ -28,18 +29,25 @@ try:
 except Exception:
     def NAME(a): return None
 
-def rpc(method,params,tries=5):
+_rpc_i=0
+def rpc(method,params,tries=None):
+    """Rotiert über mehrere RPCs; 403 = Endpoint blockt -> naechster."""
+    global _rpc_i
     body=json.dumps({"jsonrpc":"2.0","id":1,"method":method,"params":params}).encode()
-    for i in range(tries):
+    hdr={"Content-Type":"application/json","User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36","Accept":"*/*"}
+    last=None
+    for n in range(len(ARBS)*2):
+        url=ARBS[(_rpc_i+n)%len(ARBS)]
         try:
-            req=urllib.request.Request(ARB,data=body,headers={"Content-Type":"application/json"})
+            req=urllib.request.Request(url,data=body,headers=hdr)
             with urllib.request.urlopen(req,timeout=40) as r:
                 j=json.loads(r.read())
             if "error" in j: raise RuntimeError(j["error"])
+            _rpc_i=(_rpc_i+n)%len(ARBS)
             return j["result"]
         except Exception as e:
-            if i==tries-1: raise
-            time.sleep(1.5*(i+1))
+            last=e; time.sleep(0.6)
+    raise RuntimeError(f"alle RPCs fehlgeschlagen: {last}")
 
 def logs(token,topics,fr,to):
     out=[];step=100_000
