@@ -3466,13 +3466,27 @@ function taxCsv(mon){
 var _otc=null,_otcLoaded=false;
 async function otcLoad(force){
   if(_otcLoaded&&!force)return;
-  var el=$("otcBody");
+  var el=$("otcBody"),btn=$("otcBtn");
+  var t0=Date.now();
   try{
+    if(btn){btn.textContent="Lädt…";btn.disabled=true;btn.style.opacity=".6";}
     if(el&&!_otc)el.innerHTML='<div style="color:var(--dm);font-size:11px;padding:14px;text-align:center">OTC-Daten werden geladen…</div>';
-    var r=await fetch("https://95-216-152-31.sslip.io/otc"+(force?"?t="+Date.now():""),{mode:"cors"});
-    _otc=await r.json();_otcLoaded=true;otcRender();
+    var r=await fetch("https://95-216-152-31.sslip.io/otc?t="+Date.now(),{mode:"cors",cache:"no-store"});
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    var j=await r.json();
+    var changed=!_otc||JSON.stringify(j.party)!==JSON.stringify(_otc.party);
+    _otc=j;_otcLoaded=true;otcRender();
+    var b2=$("otcBtn");
+    if(b2){
+      b2.textContent=changed?"✓ Aktualisiert":"✓ Keine Änderung";
+      b2.style.background="var(--g)";b2.style.color="#04121a";
+      setTimeout(function(){var b3=$("otcBtn");if(b3){b3.textContent="Aktualisieren";b3.style.background="";b3.style.color="";b3.disabled=false;b3.style.opacity="";}},1800);
+    }
   }catch(e){
-    if(el)el.innerHTML='<div class="otc-warn"><b>OTC-Daten nicht erreichbar</b><br>'+((e&&e.message)||"Netzwerkfehler")+' — Server prüfen (otc_track.py --json).</div>';
+    var b4=$("otcBtn");
+    if(b4){b4.textContent="✗ Fehler";b4.style.background="var(--r)";b4.disabled=false;b4.style.opacity="";
+      setTimeout(function(){var b5=$("otcBtn");if(b5){b5.textContent="Aktualisieren";b5.style.background="";}},2200);}
+    if(el&&!_otc)el.innerHTML='<div class="otc-warn"><b>OTC-Daten nicht erreichbar</b><br>'+((e&&e.message)||"Netzwerkfehler")+' — Server prüfen (otc_track.py --json).</div>';
   }
 }
 function otcRender(){
@@ -3544,7 +3558,7 @@ function otcRender(){
   if(unk)h+='<div class="otc-warn">⚠ '+unk+' unbekannte Adresse(n) — im addr_book ergänzen, dann erscheint der Name hier.</div>';
 
   h+='<div style="display:flex;gap:6px;margin-top:10px">'
-    +'<button class="tx-btn" style="flex:1" onclick="otcLoad(true)">Aktualisieren</button></div>'
+    +'<button class="tx-btn" id="otcBtn" style="flex:1;transition:background .2s" onclick="otcLoad(true)">Aktualisieren</button></div>'
     +'<p class="otc-foot">Live vom Sammel-Wallet '+((_otc.otc||"").slice(0,8))+'… · Namen aus dem Adressbuch. '
     +'Käufer kaufen von Björn — Noahs eigener Deal (191k stBURN → $24.000) läuft separat über seine Wallet und erscheint im Steuer-Modul. '
     +'Stand: '+((_otc.updated||"").replace("T"," ").slice(0,16))+'</p>';
@@ -6523,7 +6537,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260716a"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260716b"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
