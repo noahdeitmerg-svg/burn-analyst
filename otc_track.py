@@ -8,6 +8,13 @@ import json,sys,time,datetime,urllib.request
 OTC="0xa1b9dec925a4dcb26ed096f238669d45df27c465"   # Sammel-Wallet des OTC-Deals (Mario)
 ARBS=["https://arb1.arbitrum.io/rpc","https://arbitrum-one-rpc.publicnode.com","https://arbitrum.llamarpc.com","https://rpc.ankr.com/arbitrum","https://1rpc.io/arb"]
 ARB=ARBS[0]
+# Ethereum Mainnet — Kaeufer koennen auch dort USDC/USDT schicken
+ETHS=["https://ethereum-rpc.publicnode.com","https://eth.llamarpc.com","https://rpc.ankr.com/eth","https://1rpc.io/eth","https://cloudflare-eth.com"]
+USDC_ETH="0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"   # USDC auf Ethereum
+USDT_ETH="0xdac17f958d2ee523a2206206994597c13d831ec7"   # USDT auf Ethereum
+DEC_ETH={USDC_ETH:6,USDT_ETH:6}
+SYM_ETH={USDC_ETH:"USDC",USDT_ETH:"USDT"}
+FCM_KEY="/root/firebase-key.json"
 BURN_TK="0xbfc6620459762a6e485ebf1cf7e532e06253b62f"
 STBURN_TK="0xd36701e8cfe1c8edd993fa67b90134671c8f8424"
 USDC_TK="0xaf88d065e77c8cc2239327c5edb3a432268e5831"
@@ -32,31 +39,61 @@ except Exception:
     def NAME(a): return None
 
 _rpc_i=0
-def rpc(method,params,tries=None):
-    """Rotiert über mehrere RPCs; 403 = Endpoint blockt -> naechster."""
+def rpc(method,params,tries=None,pool=None):
+    """Rotiert über mehrere RPCs; 403 = Endpoint blockt -> naechster. pool=ARBS oder ETHS."""
     global _rpc_i
+    POOL=pool or ARBS
     body=json.dumps({"jsonrpc":"2.0","id":1,"method":method,"params":params}).encode()
     hdr={"Content-Type":"application/json","User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36","Accept":"*/*"}
     last=None
-    for n in range(len(ARBS)*2):
-        url=ARBS[(_rpc_i+n)%len(ARBS)]
+    for n in range(len(POOL)*2):
+        url=POOL[(_rpc_i+n)%len(POOL)]
         try:
             req=urllib.request.Request(url,data=body,headers=hdr)
             with urllib.request.urlopen(req,timeout=40) as r:
                 j=json.loads(r.read())
             if "error" in j: raise RuntimeError(j["error"])
-            _rpc_i=(_rpc_i+n)%len(ARBS)
+            _rpc_i=(_rpc_i+n)%len(POOL)
             return j["result"]
         except Exception as e:
             last=e; time.sleep(0.6)
     raise RuntimeError(f"alle RPCs fehlgeschlagen: {last}")
 
-def logs(token,topics,fr,to):
-    out=[];step=100_000
+# ── FCM-Push (nutzt dieselbe Firebase-Config wie burn-monitor-fcm.py) ──
+_msg=None;_fcm_tok=None
+def push_init():
+    global _msg,_fcm_tok
+    if _msg is not None: return True
+    try:
+        import firebase_admin
+        from firebase_admin import credentials,messaging
+        try: firebase_admin.get_app()
+        except ValueError: firebase_admin.initialize_app(credentials.Certificate(FCM_KEY))
+        _msg=messaging
+        # Token aus burn-monitor-fcm.py uebernehmen
+        import re as _re
+        src=open("/root/burn-monitor-fcm.py").read()
+        m=_re.search(r'FCM_TOKEN\s*=\s*["\']([^"\']+)["\']',src)
+        _fcm_tok=m.group(1) if m else None
+        return bool(_fcm_tok)
+    except Exception as e:
+        print("Push nicht verfuegbar:",e); return False
+def push(title,body):
+    if not push_init(): return
+    try:
+        _msg.send(_msg.Message(notification=_msg.Notification(title=title,body=body),
+            data={"title":title,"body":body},
+            android=_msg.AndroidConfig(priority="high",notification=_msg.AndroidNotification(sound="default",channel_id="burn_alerts")),
+            token=_fcm_tok))
+        print("  push:",title,"·",body[:60])
+    except Exception as e: print("  push-Fehler:",e)
+
+def logs(token,topics,fr,to,pool=None):
+    out=[];step=100_000 if pool is not ETHS else 20_000
     while fr<=to:
         hi=min(fr+step,to)
         try:
-            r=rpc("eth_getLogs",[{"address":token,"fromBlock":hex(fr),"toBlock":hex(hi),"topics":topics}])
+            r=rpc("eth_getLogs",[{"address":token,"fromBlock":hex(fr),"toBlock":hex(hi),"topics":topics}],pool=pool)
             out+=r; fr=hi+1
         except Exception:
             step=max(step//4,2_000)
@@ -66,35 +103,80 @@ def logs(token,topics,fr,to):
 def t2a(t): return "0x"+t[-40:]
 def amt(data,dec): return int(data,16)/(10**dec)
 
-def blk_time(bn,cache={}):
-    if bn in cache: return cache[bn]
-    b=rpc("eth_getBlockByNumber",[hex(bn),False])
-    ts=int(b["timestamp"],16); cache[bn]=ts; return ts
+def blk_time(bn,cache={},pool=None):
+    ck=(bn,id(pool))
+    if ck in cache: return cache[ck]
+    b=rpc("eth_getBlockByNumber",[hex(bn),False],pool=pool)
+    ts=int(b["timestamp"],16); cache[ck]=ts; return ts
 
 def main():
-    head=int(rpc("eth_blockNumber",[]),16)
+    quiet = "--json" in sys.argv
     try: st=json.load(open(STATE))
-    except Exception: st={"from":0,"rows":{}}
-    # Erstlauf: ab Deploy-Zeitraum grob eingrenzen (Arbitrum ~4 Blöcke/s) — sonst inkrementell
-    fr=st.get("from") or max(head-4*60*60*24*30,0)   # ~30 Tage zurück beim Erstlauf
-    topic_to="0x"+"0"*24+OTC[2:]
+    except Exception: st={"from":0,"from_eth":0,"rows":{},"pushed":[]}
     rows=st.get("rows",{})
+    pushed=set(st.get("pushed",[]))
+    before=set(rows.keys())
+    topic_to="0x"+"0"*24+OTC[2:]
+
+    # ── ARBITRUM ──
+    head=int(rpc("eth_blockNumber",[]),16)
+    fr=st.get("from") or max(head-4*60*60*24*30,0)   # Erstlauf ~30 Tage (Arbitrum ~4 Bl/s)
     for tk in (BURN_TK,STBURN_TK,USDC_TK):
-        for topics in ([TRANSFER,None,topic_to],[TRANSFER,topic_to,None]):   # IN und OUT
+        for topics in ([TRANSFER,None,topic_to],[TRANSFER,topic_to,None]):
             for lg in logs(tk,topics,fr,head):
-                key=lg["transactionHash"]+"-"+str(int(lg["logIndex"],16))
+                key="ARB-"+lg["transactionHash"]+"-"+str(int(lg["logIndex"],16))
                 if key in rows: continue
-                frm=t2a(lg["topics"][1]); to=t2a(lg["topics"][2])
                 v=amt(lg["data"],DEC[tk])
                 if v<=0: continue
-                rows[key]={"tx":lg["transactionHash"],"blk":int(lg["blockNumber"],16),
-                           "tok":SYM[tk],"amt":v,"from":frm,"to":to}
-    # Zeitstempel nachziehen
+                rows[key]={"tx":lg["transactionHash"],"blk":int(lg["blockNumber"],16),"chain":"ARB",
+                           "tok":SYM[tk],"amt":v,"from":t2a(lg["topics"][1]),"to":t2a(lg["topics"][2])}
+
+    # ── ETHEREUM MAINNET (USDC/USDT) ──
+    head_eth=None
+    try:
+        head_eth=int(rpc("eth_blockNumber",[],pool=ETHS),16)
+        fr_eth=st.get("from_eth") or max(head_eth-(60*60*24*30)//12,0)   # ~30 Tage (12s/Block)
+        for tk in (USDC_ETH,USDT_ETH):
+            for topics in ([TRANSFER,None,topic_to],[TRANSFER,topic_to,None]):
+                for lg in logs(tk,topics,fr_eth,head_eth,pool=ETHS):
+                    key="ETH-"+lg["transactionHash"]+"-"+str(int(lg["logIndex"],16))
+                    if key in rows: continue
+                    v=amt(lg["data"],DEC_ETH[tk])
+                    if v<=0: continue
+                    rows[key]={"tx":lg["transactionHash"],"blk":int(lg["blockNumber"],16),"chain":"ETH",
+                               "tok":SYM_ETH[tk],"amt":v,"from":t2a(lg["topics"][1]),"to":t2a(lg["topics"][2])}
+    except Exception as e:
+        if not quiet: print("⚠ Ethereum-Scan uebersprungen:",str(e)[:80])
+
+    # Zeitstempel
     for k,r in rows.items():
         if "ts" not in r:
-            try: r["ts"]=blk_time(r["blk"])
+            try: r["ts"]=blk_time(r["blk"],pool=(ETHS if r.get("chain")=="ETH" else None))
             except Exception: r["ts"]=0
-    st={"from":head+1,"rows":rows}
+
+    # ── PUSH bei neuen Bewegungen ──
+    new=[k for k in rows if k not in before and k not in pushed]
+    if new and before:            # beim allerersten Lauf nicht 20 Pushes feuern
+        def _n(a):
+            x=NAME(a)
+            if x: return x
+            if a.lower() in [w.lower() for w in NOAH]: return "Noah"
+            return a[:6]+"…"+a[-4:]
+        for k in sorted(new,key=lambda x:rows[x].get("ts",0)):
+            r=rows[k]; o=OTC.lower()
+            if r["to"].lower()==o:
+                cp=_n(r["from"]); arrow="⬅ EIN"
+            else:
+                cp=_n(r["to"]); arrow="➡ AUS"
+            ch=" ("+r.get("chain","ARB")+")" if r.get("chain")=="ETH" else ""
+            v=f"{r['amt']:,.2f}" if r["tok"] in ("USDC","USDT") else f"{r['amt']:,.0f}"
+            push(f"🤝 OTC {arrow}{ch}", f"{v} {r['tok']} · {cp}")
+            pushed.add(k)
+    else:
+        pushed |= set(new)
+
+    st={"from":head+1,"from_eth":(head_eth+1) if head_eth else st.get("from_eth",0),
+        "rows":rows,"pushed":sorted(pushed)[-500:]}
     json.dump(st,open(STATE,"w"))
 
     R=sorted(rows.values(),key=lambda x:(x["ts"],x["blk"]))
@@ -191,7 +273,8 @@ def main():
         d="→" if r["to"].lower()==OTC.lower() else "←"
         cp=r["from"] if r["to"].lower()==OTC.lower() else r["to"]
         t=datetime.datetime.fromtimestamp(r["ts"]).strftime("%d.%m %H:%M") if r["ts"] else "—"
-        print(f"  {t}  {d} {r['amt']:>14,.2f} {r['tok']:<7} {nm(cp)}")
+        ch=r.get("chain","ARB")
+        print(f"  {t}  [{ch:3}] {d} {r['amt']:>14,.2f} {r['tok']:<7} {nm(cp)}")
 
 if __name__=="__main__":
     main()
