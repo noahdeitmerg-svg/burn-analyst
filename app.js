@@ -3461,6 +3461,96 @@ function taxCsv(mon){
   try{navigator.clipboard.writeText(csv);alert("CSV "+cur+" ("+rows.length+" Zeilen) kopiert — an die Steuerberatung mailen.");}catch(e){alert("Zwischenablage nicht verfügbar.");}
 }
 
+
+// ═══ OTC-DEAL TRACKER ═══ (Daten: /otc vom Server, gespeist aus otc_track.py --json)
+var _otc=null,_otcLoaded=false;
+async function otcLoad(force){
+  if(_otcLoaded&&!force)return;
+  var el=$("otcBody");
+  try{
+    if(el&&!_otc)el.innerHTML='<div style="color:var(--dm);font-size:11px;padding:14px;text-align:center">OTC-Daten werden geladen…</div>';
+    var r=await fetch("https://95-216-152-31.sslip.io/otc"+(force?"?t="+Date.now():""),{mode:"cors"});
+    _otc=await r.json();_otcLoaded=true;otcRender();
+  }catch(e){
+    if(el)el.innerHTML='<div class="otc-warn"><b>OTC-Daten nicht erreichbar</b><br>'+((e&&e.message)||"Netzwerkfehler")+' — Server prüfen (otc_track.py --json).</div>';
+  }
+}
+function otcRender(){
+  var el=$("otcBody");if(!el||!_otc)return;
+  var P=_otc.party||{},TARGET=_otc.target||40600,PRICE=_otc.price||0.105;
+  var mine=(_otc.otc||"").toLowerCase();
+  var buyers=[],suppliers=[],payouts=[];
+  Object.keys(P).forEach(function(a){
+    var p=P[a];
+    if((p.usdc_in||0)>0)buyers.push({a:a,usd:p.usdc_in,tok:p.burn_out||0,nm:p.name||null});
+    if((p.burn_in||0)>0)suppliers.push({a:a,tok:p.burn_in,nm:p.name||null});
+    if((p.usdc_out||0)>0)payouts.push({a:a,usd:p.usdc_out,nm:p.name||null});
+  });
+  buyers.sort(function(x,y){return y.usd-x.usd});
+  suppliers.sort(function(x,y){return y.tok-x.tok});
+  var raised=buyers.reduce(function(s,b){return s+b.usd},0);
+  var tokIn=suppliers.reduce(function(s,b){return s+b.tok},0);
+  var tokOut=buyers.reduce(function(s,b){return s+b.tok},0);
+  var paid=payouts.reduce(function(s,b){return s+b.usd},0);
+  var pct=Math.min(raised/TARGET*100,100);
+  function nm(x){return x.nm||(x.a.slice(0,6)+"…"+x.a.slice(-4))}
+  function ini(s){return (s||"?").replace(/^0x/,"").slice(0,2).toUpperCase()}
+  function usd(v){return "$"+Number(v).toLocaleString("de-DE",{minimumFractionDigits:2,maximumFractionDigits:2})}
+  function tk(v){return Number(v).toLocaleString("de-DE",{maximumFractionDigits:0})}
+
+  var h='<div class="otc-hero">'
+    +'<div class="otc-top"><div><div class="otc-raised">'+usd(raised)+'</div>'
+      +'<div class="otc-target">von '+usd(TARGET)+' Ziel</div></div>'
+      +'<div class="otc-pct">'+pct.toFixed(1)+'%</div></div>'
+    +'<div class="otc-track"><div class="otc-fill" style="width:'+pct.toFixed(1)+'%"></div></div>'
+    +'<div class="otc-meta"><span>'+buyers.length+' Käufer · $'+PRICE.toFixed(3)+'/Token</span>'
+      +'<span>noch '+usd(Math.max(TARGET-raised,0))+' offen</span></div></div>';
+
+  h+='<span class="otc-lbl">Käufer ('+buyers.length+')</span>';
+  if(!buyers.length)h+='<div style="font-size:11px;color:var(--dm);padding:6px 2px">Noch keine Zahlungen eingegangen.</div>';
+  buyers.forEach(function(b){
+    var due=b.usd/PRICE, got=b.tok>0;
+    h+='<div class="otc-row"><span class="otc-av">'+ini(b.nm||b.a)+'</span>'
+      +'<div class="otc-nm">'+nm(b)+'<span class="otc-sub">'+(got?tk(b.tok)+" Token erhalten":tk(due)+" Token offen")+'</span></div>'
+      +'<div class="otc-amt"><span class="otc-usd">'+usd(b.usd)+'</span></div>'
+      +'<span class="otc-chip '+(got?"otc-done":"otc-wait")+'">'+(got?"geliefert":"offen")+'</span></div>';
+  });
+
+  if(suppliers.length){
+    h+='<span class="otc-lbl">Lieferanten</span>';
+    suppliers.forEach(function(s){
+      var q=tokIn?(s.tok/tokIn*100):0;
+      h+='<div class="otc-row"><span class="otc-av">'+ini(s.nm||s.a)+'</span>'
+        +'<div class="otc-nm">'+nm(s)+'<span class="otc-sub">'+q.toFixed(1)+'% der Token</span></div>'
+        +'<div class="otc-amt"><span class="otc-usd" style="color:var(--tx)">'+tk(s.tok)+'</span><span class="otc-tok">BURN</span></div></div>';
+    });
+  }
+  if(payouts.length){
+    h+='<span class="otc-lbl">Auszahlungen</span>';
+    payouts.forEach(function(p){
+      h+='<div class="otc-row"><span class="otc-av">'+ini(p.nm||p.a)+'</span>'
+        +'<div class="otc-nm">'+nm(p)+'</div>'
+        +'<div class="otc-amt"><span class="otc-usd">'+usd(p.usd)+'</span></div></div>';
+    });
+  }
+
+  h+='<div class="otc-bal">'
+    +'<div class="otc-bx"><small>USDC im Wallet</small><b style="color:var(--g)">'+usd(raised-paid)+'</b></div>'
+    +'<div class="otc-bx"><small>Token im Wallet</small><b>'+tk(tokIn-tokOut)+'</b></div>'
+    +'<div class="otc-bx"><small>Eingegangen</small><b>'+usd(raised)+'</b></div>'
+    +'<div class="otc-bx"><small>Ausgeliefert</small><b>'+tk(tokOut)+'</b></div></div>';
+
+  var unk=buyers.filter(function(b){return !b.nm}).length;
+  if(unk)h+='<div class="otc-warn">⚠ '+unk+' unbekannte Adresse(n) — im addr_book ergänzen, dann erscheint der Name hier.</div>';
+
+  h+='<div style="display:flex;gap:6px;margin-top:10px">'
+    +'<button class="tx-btn" style="flex:1" onclick="otcLoad(true)">Aktualisieren</button></div>'
+    +'<p class="otc-foot">Live vom Sammel-Wallet '+((_otc.otc||"").slice(0,8))+'… · Namen aus dem Adressbuch. '
+    +'Käufer kaufen von Björn — Noahs eigener Deal (191k stBURN → $24.000) läuft separat über seine Wallet und erscheint im Steuer-Modul. '
+    +'Stand: '+((_otc.updated||"").replace("T"," ").slice(0,16))+'</p>';
+  el.innerHTML=h;
+}
+
 // ═══ AUTO-DETECT CLOSED LPs ═══
 var lpPrevious=[];
 try{var lpPrevStr=localStorage.getItem("lp_previous");if(lpPrevStr)lpPrevious=JSON.parse(lpPrevStr);}catch(e){}
@@ -6433,7 +6523,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260713f"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260716a"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}

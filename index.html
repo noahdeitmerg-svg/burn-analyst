@@ -463,6 +463,34 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 
 @media (prefers-reduced-motion:reduce){#taxBody *{transition:none!important;animation:none!important}.tx-ring-arc{transition:none!important}}
 
+/* ═══ OTC-DEAL TRACKER ═══ */
+#otcBody{font-family:'Inter',-apple-system,sans-serif;font-variant-numeric:tabular-nums}
+.otc-hero{background:linear-gradient(180deg,rgba(15,23,42,.55),rgba(11,17,32,.85));border:1px solid var(--bd);border-radius:16px;padding:16px;margin-bottom:12px}
+.otc-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.otc-raised{font-size:26px;font-weight:800;color:var(--br);letter-spacing:-.02em;line-height:1}
+.otc-target{font-size:11px;color:var(--dm)}
+.otc-pct{font-size:15px;font-weight:700;color:var(--cy)}
+.otc-track{height:9px;background:rgba(148,163,184,.13);border-radius:99px;overflow:hidden;margin:8px 0 6px}
+.otc-fill{height:100%;background:linear-gradient(90deg,var(--cy),var(--g));border-radius:99px;transition:width 1s cubic-bezier(.16,1,.3,1)}
+.otc-meta{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dm)}
+.otc-lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--dm);font-weight:600;margin:12px 2px 7px;display:block}
+.otc-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(30,41,59,.5)}
+.otc-av{width:28px;height:28px;border-radius:8px;background:rgba(34,211,238,.1);color:var(--cy);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.otc-nm{flex:1;min-width:0;font-size:12px;color:var(--tx);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.otc-sub{font-size:9px;color:var(--dm);display:block;font-weight:400}
+.otc-amt{text-align:right;flex-shrink:0}
+.otc-usd{font-size:12px;font-weight:700;color:var(--g)}
+.otc-tok{font-size:9px;color:var(--dm);display:block}
+.otc-chip{font-size:8px;font-weight:700;padding:2px 6px;border-radius:5px;flex-shrink:0;min-width:46px;text-align:center}
+.otc-wait{background:rgba(251,191,36,.12);color:var(--warn)}
+.otc-done{background:rgba(52,211,153,.14);color:var(--g)}
+.otc-bal{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.otc-bx{background:var(--cd);border:1px solid var(--bd);border-radius:9px;padding:8px 10px}
+.otc-bx small{font-size:8.5px;color:var(--dm);display:block;text-transform:uppercase;letter-spacing:.05em}
+.otc-bx b{font-size:13px;color:var(--tx);font-weight:700}
+.otc-warn{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);border-radius:8px;padding:8px 10px;font-size:9.5px;color:var(--warn);margin-top:10px;line-height:1.5}
+.otc-foot{font-size:8.5px;color:var(--dm);margin-top:10px;line-height:1.5}
+
 </style>
 </head>
 <body>
@@ -830,6 +858,12 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
   <div id="sec-tax" class="col-b"><div id="taxBody"><span class="skel" style="width:100%;height:30px"></span></div></div>
 </div>
 
+<!-- ═══ OTC-DEAL TRACKER ═══ -->
+<div class="c" style="border-left:3px solid #22d3ee">
+  <div class="col" onclick="tog(this,'sec-otc');otcLoad()">🤝 OTC-DEAL · LIVE</div>
+  <div id="sec-otc" class="col-b"><div id="otcBody"><span class="skel" style="width:100%;height:30px"></span></div></div>
+</div>
+
 <!-- ═══ 6. CHART (collapsible) ═══ -->
 <div class="c c-novis" style="border-left:3px solid #475569">
   <div class="col" onclick="tog(this,'sec-chart')">📉 Chart <a href="https://www.geckoterminal.com/arbitrum/pools/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:12px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ GeckoTerminal</a> <a href="https://dexscreener.com/arbitrum/0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37" target="_blank" rel="noopener" style="font-size:9px;color:var(--b);margin-left:10px;letter-spacing:.5px" onclick="event.stopPropagation()">↗ DexScreener</a></div>
@@ -1077,7 +1111,7 @@ background-size:300px 100%;animation:shimmer 2.4s ease-in-out infinite,skelPulse
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 </div>
 
-<script src="app.js?v=20260713f"></script>
+<script src="app.js?v=20260716a"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

@@ -16,6 +16,8 @@ DEC={BURN_TK:18,STBURN_TK:18,USDC_TK:6}
 SYM={BURN_TK:"BURN",STBURN_TK:"stBURN",USDC_TK:"USDC"}
 STATE="/root/otc_state.json"
 OUT="/root/otc_report.json"
+TARGET=40600.0   # Ziel-Volumen USD
+PRICE=0.105      # $/Token
 NOAH=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd691c30db86c","0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2"]
 
 sys.path.insert(0,"/root")
@@ -111,10 +113,17 @@ def main():
         p["txs"].append(r)
 
     if "--json" in sys.argv:
-        json.dump({"otc":OTC,"updated":datetime.datetime.utcnow().isoformat()+"Z",
-                   "party":{k:{kk:vv for kk,vv in v.items() if kk!="txs"} for k,v in party.items()},
-                   "rows":R},open(OUT,"w"),indent=1)
-        print("geschrieben:",OUT); return
+        pj={}
+        for k,v in party.items():
+            d={kk:vv for kk,vv in v.items() if kk!="txs"}
+            n=NAME(k)
+            if not n and k.lower() in [x.lower() for x in NOAH]: n="Noah"
+            d["name"]=n
+            pj[k]=d
+        json.dump({"otc":OTC,"target":TARGET,"price":PRICE,
+                   "updated":datetime.datetime.utcnow().isoformat()+"Z",
+                   "party":pj,"rows":R},open(OUT,"w"),indent=1)
+        print("geschrieben:",OUT,"·",len(pj),"Parteien"); return
 
     # ── Report ──
     def nm(a):
