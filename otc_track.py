@@ -109,6 +109,18 @@ def blk_time(bn,cache={},pool=None):
     b=rpc("eth_getBlockByNumber",[hex(bn),False],pool=pool)
     ts=int(b["timestamp"],16); cache[ck]=ts; return ts
 
+# ── Live-Bestand (balanceOf) je Adresse — BURN + stBURN auf Arbitrum ──
+def balance_of(token,addr,dec=18):
+    try:
+        data="0x70a08231"+"0"*24+addr[2:].lower()
+        r=rpc("eth_call",[{"to":token,"data":data},"latest"])
+        return int(r,16)/(10**dec)
+    except Exception:
+        return None
+
+def holdings(addr):
+    return (balance_of(BURN_TK,addr,18) or 0),(balance_of(STBURN_TK,addr,18) or 0)
+
 def main():
     quiet = "--json" in sys.argv
     try: st=json.load(open(STATE))
@@ -201,6 +213,9 @@ def main():
             n=NAME(k)
             if not n and k.lower() in [x.lower() for x in NOAH]: n="Noah"
             d["name"]=n
+            if v.get("usdc_in",0)>0:              # Live-Bestand nur fuer Kaeufer
+                hb,hs=holdings(k)
+                d["hold_burn"]=round(hb,2); d["hold_stburn"]=round(hs,2)
             pj[k]=d
         json.dump({"otc":OTC,"target":TARGET,"price":PRICE,
                    "updated":datetime.datetime.utcnow().isoformat()+"Z",
@@ -227,12 +242,13 @@ def main():
     buyers=[(a,p) for a,p in party.items() if p["usdc_in"]>0]
     buyers.sort(key=lambda x:-x[1]["usdc_in"])
     print(f"\n── KÄUFER (USDC eingegangen) ── gesamt ${tot_usdc:,.2f}\n")
-    print(f"  {'Name / Adresse':<34} {'USDC rein':>12} {'BURN raus':>14} {'$/Token':>9}")
-    print("  "+"-"*72)
+    print(f"  {'Name / Adresse':<26} {'USDC rein':>10} {'BURN raus':>11} {'Besitz BURN':>12} {'stBURN':>10}")
+    print("  "+"-"*76)
     for a,p in buyers:
-        px=(p["usdc_in"]/p["burn_out"]) if p["burn_out"]>0 else 0
-        print(f"  {nm(a):<34} {p['usdc_in']:>12,.2f} {p['burn_out']:>14,.0f} {(f'${px:.4f}' if px else '—'):>9}")
-        if p["burn_out"]<=0: print(f"  {'':<34} {'':>12} {'>> noch keine Token erhalten':>26}")
+        hb,hs=holdings(a)
+        mark=" *" if p["burn_out"]<=0 else "  "
+        print(f"  {nm(a):<26} {p['usdc_in']:>10,.2f} {p['burn_out']:>11,.0f} {hb:>12,.0f} {hs:>10,.0f}{mark}")
+    print("  (* = Token noch nicht geliefert)")
 
     # LIEFERANTEN = haben BURN eingezahlt (Noah, Björn)
     supp=[(a,p) for a,p in party.items() if p["burn_in"]>0]

@@ -3496,7 +3496,7 @@ function otcRender(){
   var buyers=[],suppliers=[],payouts=[];
   Object.keys(P).forEach(function(a){
     var p=P[a];
-    if((p.usdc_in||0)>0)buyers.push({a:a,usd:p.usdc_in,tok:p.burn_out||0,nm:p.name||null});
+    if((p.usdc_in||0)>0)buyers.push({a:a,usd:p.usdc_in,tok:p.burn_out||0,nm:p.name||null,hb:p.hold_burn,hs:p.hold_stburn});
     if((p.burn_in||0)>0)suppliers.push({a:a,tok:p.burn_in,nm:p.name||null});
     if((p.usdc_out||0)>0)payouts.push({a:a,usd:p.usdc_out,nm:p.name||null});
   });
@@ -3525,7 +3525,7 @@ function otcRender(){
   buyers.forEach(function(b){
     var due=b.usd/PRICE, got=b.tok>0;
     h+='<div class="otc-row"><span class="otc-av">'+ini(b.nm||b.a)+'</span>'
-      +'<div class="otc-nm">'+nm(b)+'<span class="otc-sub">'+(got?tk(b.tok)+" Token erhalten":tk(due)+" Token offen")+'</span></div>'
+      +'<div class="otc-nm">'+nm(b)+'<span class="otc-sub">'+(got?tk(b.tok)+" Token erhalten":tk(due)+" Token offen")+(b.hb!=null?' · besitzt '+tk(b.hb)+' BURN'+(b.hs>0?' + '+tk(b.hs)+' stB':''):'')+'</span></div>'
       +'<div class="otc-amt"><span class="otc-usd">'+usd(b.usd)+'</span></div>'
       +'<span class="otc-chip '+(got?"otc-done":"otc-wait")+'">'+(got?"geliefert":"offen")+'</span></div>';
   });
@@ -6537,7 +6537,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260716b"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260716c"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
