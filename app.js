@@ -285,7 +285,7 @@ var cache={P:0,stR:1,sup:null};
 // ═══ HELPERS ═══
 function $(id){return document.getElementById(id)}
 function sF(v){var n=parseFloat(v);return isFinite(n)?n:0;} // safe parseFloat — never NaN
-function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(1)+"M";if(d===0)return(Math.round(n/10)*10).toLocaleString("en");if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
+function F(n,d){if(d==null)d=2;if(!isFinite(n))return"—";var a=Math.abs(n);if(a>=1e9)return(n/1e9).toFixed(2)+"B";if(a>=1e6)return(n/1e6).toFixed(1)+"M";if(d===0)return(a>=1000?Math.round(n/10)*10:Math.round(n)).toLocaleString("en");if(a>=1e3)return(n/1e3).toFixed(d)+"K";return n.toFixed(d)}
 function FP(n){if(!isFinite(n)||n<=0)return"—";if(n>=1)return"$"+n.toFixed(4);if(n>=.0001)return"$"+n.toFixed(6);return"$"+n.toExponential(3)}
 function TG(t,c){return'<span class="tg" style="background:'+c+'18;color:'+c+'">'+t+'</span>'}
 function MB(l,v,c){return'<div class="mb"><small>'+l+'</small><b style="color:'+c+'">'+v+'</b></div>'}
@@ -590,7 +590,7 @@ function renderWal(){
       (lpBurnLeft>0?'<div style="font-size:9px;color:var(--mt);margin-top:3px;letter-spacing:.3px">incl. <span style="color:var(--b);font-weight:600">'+F(lpBurnLeft,0)+'</span> BURN in LPs</div>':'')+
       (MY_DEFI_BURN>0?'<div style="font-size:9px;color:var(--mt);margin-top:2px;letter-spacing:.3px">incl. <span style="color:var(--o);font-weight:600">'+F(MY_DEFI_BURN,0)+'</span> BURN auf DeFi-Wallet</div>':'')+
     '</div>';
-  try{renderStrategy(MY_BURN,MY_STBURN,lpBurnLeft);}catch(e){console.log("strat err:",e.message);}
+  try{renderStrategy(MY_BURN,MY_STBURN,lpBurnLeft,MY_DEFI_BURN);}catch(e){console.log("strat err:",e.message);}
 }
 
 // ═══ STRATEGY COCKPIT ═══
@@ -603,7 +603,7 @@ function setStratHoldTarget(){
   var n=parseFloat((v+"").replace(/[^0-9.]/g,""));
   if(n>0){STRAT_HOLD_TARGET=n;localStorage.setItem("strat_hold_target",n.toString());try{renderWal();}catch(e){}}
 }
-function renderStrategy(burn,stburn,lpLeft){
+function renderStrategy(burn,stburn,lpLeft,defiBurn){
   var box=document.getElementById("stratBox");if(!box)return;
   burn=burn||0;stburn=stburn||0;lpLeft=lpLeft||0;
   var ratio=(typeof stR!=="undefined"&&stR>0)?stR:1.038;
@@ -611,7 +611,7 @@ function renderStrategy(burn,stburn,lpLeft){
   var avgEntry=(typeof AVG_ENTRY!=="undefined")?AVG_ENTRY:0.003682;
   // OWNERSHIP
   var stburnEq=stburn*ratio;
-  var ownedEquiv=burn+stburnEq+lpLeft; // total BURN-equivalent incl LP
+  var ownedEquiv=burn+stburnEq+lpLeft+(defiBurn||0); // total BURN-equivalent incl LP + DeFi-Wallet
   // SOLD
   var sold=(typeof TS!=="undefined")?TS:0;
   var soldUsdc=(typeof TR!=="undefined")?TR:0;
@@ -1882,8 +1882,8 @@ function runTradeSim(side){
   if(!res){box.innerHTML='<span style="color:var(--warn)">Keine Liquiditätsdaten — bitte erst die Pool Liquidity Map scannen lassen.</span>';return;}
   var impact=P>0?((res.newPrice-P)/P)*100:0;        // FINAL marginal price impact (where price ends up)
   var src=res.v2?"V2 Schätzung":"V3 live (alle LPs)";
-  var avgPx=amt>0?res.usdc/amt:0;
   var effAmt=res.partial?res.filled:amt;
+  var avgPx=effAmt>0?res.usdc/effAmt:0;
   // AVG price impact = what you actually pay/lose vs spot (the real slippage)
   var avgImpact=P>0?((avgPx-P)/P)*100:0;
   var spotValue=effAmt*P;                            // value at current spot price
@@ -3171,11 +3171,11 @@ function renderLpPnl(){
       tVN+=valueNow;tHV+=hodlValue;tIL+=il;tSold+=sold;tUsdc+=cv.usdc;
       rows+='<tr><td class="bld">'+rng+' <span style="font-size:8px;color:var(--g)">ACTIVE</span></td><td style="color:var(--o)">'+F(sold,0)+'</td>';
       rows+='<td style="color:'+avgClr+'">'+(sold>0?"$"+avgSell.toFixed(4):"—")+'</td>';
-      rows+='<td style="color:var(--br)">$'+F(valueNow,2)+'</td>';
+      rows+='<td style="color:var(--br)">$'+F(cv.usdc,2)+'</td>';
       rows+='<td style="color:var(--dm)">$'+F(hodlValue,2)+'</td>';
       rows+='<td style="color:'+ilClr+'">'+(il>=0?"+":"-")+"$"+F(Math.abs(il),2)+'</td>';
       rows+='<td style="color:'+ilClr+'">'+ilPct.toFixed(1)+'%</td>';
-      rows+='<td style="color:var(--g)">$'+F(ff.usdc,0)+'</td></tr>';
+      rows+='<td style="color:var(--dm)">active</td></tr>';
     }
     // Closed LPs
     for(var ci2=0;ci2<CL.length;ci2++){
@@ -3366,7 +3366,7 @@ function taxRender(){
       +'<div class="tx-hero-month">'+mLabel+'</div>'
       +'<div class="tx-hero-val">'+txBRL0(cm.l2)+'</div>'
       +'<div class="tx-hero-sub">steuerbare Veräußerungen (L2)</div>';
-  if(tone==="over") h+='<div class="tx-status tx-status-over"><span class="tx-dot"></span>Über der Freigrenze · DARF 4600 + DeCripto fällig</div>';
+  if(tone==="over") h+='<div class="tx-status tx-status-over"><span class="tx-dot"></span>Über der Freigrenze · DARF '+txBRL(cm.darf)+' + DeCripto fällig</div>';
   else if(tone==="near") h+='<div class="tx-status tx-status-near"><span class="tx-dot"></span>Noch '+txBRL(luft)+' bis zur Grenze — keine Verkäufe</div>';
   else h+='<div class="tx-status tx-status-free"><span class="tx-dot"></span>Unter der Freigrenze · '+txBRL0(luft)+' Spielraum</div>';
   h+='<div class="tx-hero-l1">Mit LP/Staking (strittig): '+txBRL0(cm.l1total)+'</div>'
@@ -3401,7 +3401,7 @@ function taxRender(){
     var isCur=mk===cur, openNow=_taxOpen[mk]!==undefined?_taxOpen[mk]:isCur;
     _taxOpen[mk]=openNow;
     var statusTxt=mo?"DARF-pflichtig":(mzero?"keine Verkäufe":(mnear?"knapp":"steuerfrei"));
-    var rows=(L.rows||[]).filter(function(r){return r.dt.slice(0,7)===mk;}).sort(function(a,b){return a.ts-b.ts;});
+    var rows=(L.rows||[]).filter(function(r){return r.dt.slice(0,7)===mk;}).filter(function(r){var cc=txClassify(r);if(cc.tone!=="count"&&cc.tone!=="l1")return false;var u=Math.abs(r.usd||0);if(u<5&&r.tok!=="HOODIE"&&r.tok!=="stBURN")return false;return true;}).sort(function(a,b){var bb=Math.abs(b.l2||0)+Math.abs(b.l1||0),aaa=Math.abs(a.l2||0)+Math.abs(a.l1||0);if(bb!==aaa)return bb-aaa;return b.ts-a.ts;});
     h+='<div class="tx-card tx-card-'+mtone+'" id="txcard-'+mk+'">'
       +'<button class="tx-card-head" onclick="taxToggleMonth(\''+mk+'\')">'
         +'<svg class="tx-chev" id="txa-'+mk+'"'+(openNow?' style="transform:rotate(90deg)"':'')+' viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg>'
@@ -3412,7 +3412,7 @@ function taxRender(){
           +'<div class="tx-card-meta"><span>'+m.n+' Vorgänge</span><span class="tx-card-status" style="color:'+mcol+'">'+statusTxt+'</span></div>'
         +'</div></button>'
       +'<div class="tx-card-body'+(openNow?" open":"")+'" id="txm-'+mk+'">';
-    if(!rows.length){h+='<div class="tx-none">Keine Transaktionen in diesem Monat.</div>';}
+    if(!rows.length){h+='<div class="tx-none">Keine steuerrelevanten Transaktionen in diesem Monat.</div>';}
     else{
       rows.forEach(function(r){
         var c=txClassify(r);
@@ -3456,9 +3456,9 @@ function taxCsv(mon){
   var mons=Object.keys(_taxL.months||{}).sort();
   var cur=mon||mons[mons.length-1];
   var rows=(_taxL.rows||[]).filter(function(r){return r.dt.slice(0,7)===cur;}).sort(function(a,b){return a.ts-b.ts;});
-  var csv="Datum;Chain;Wallet;Typ;Menge;Token;Kurs;USD;PTAX;BRL;L2_BRL;L1_BRL;Gegenpartei;TxHash;Notiz\n";
-  rows.forEach(function(r){csv+=[r.dt,r.chain,r.wallet,r.typ,r.amt,r.tok,r.kurs||"",r.usd||"",r.ptax||"",r.brl||"",r.l2||"",r.l1||"",r.cp,r.tx,(r.note||"").replace(/;/g,",")].join(";")+"\n";});
-  try{navigator.clipboard.writeText(csv);alert("CSV "+cur+" ("+rows.length+" Zeilen) kopiert — an die Steuerberatung mailen.");}catch(e){alert("Zwischenablage nicht verfügbar.");}
+  var csv="Datum;Chain;Wallet;Typ;Menge;Token;Kurs;USD;PTAX;BRL;L2_BRL;L1_BRL;Ganho_BRL;Custo_BRL;AvgEinstand_USD;Gegenpartei;TxHash;Notiz\n";
+  rows.forEach(function(r){csv+=[r.dt,r.chain,r.wallet,r.typ,r.amt,r.tok,r.kurs||"",r.usd||"",r.ptax||"",r.brl||"",r.l2||"",r.l1||"",r.ganho||"",r.custo||"",r.avgUSD||"",r.cp,r.tx,(r.note||"").replace(/;/g,",")].join(";")+"\n";});
+  var _mm=(_taxL.months||{})[cur]||{};csv+="\nMONAT;"+cur+";;;;;;;;;L2="+(_mm.l2||0)+";L1total="+(_mm.l1total||0)+";Ganho="+(_mm.ganho||0)+";Custo="+(_mm.custo||0)+";DARF="+(_mm.darf||0)+"\n";try{navigator.clipboard.writeText(csv);alert("CSV "+cur+" ("+rows.length+" Zeilen + Monats-DARF) kopiert — an die Steuerberatung mailen.");}catch(e){alert("Zwischenablage nicht verfügbar.");}
 }
 
 
