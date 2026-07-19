@@ -572,9 +572,46 @@ function renderWal(){
     '</div>';
   }
 
+  // ─── HOODIE Bestand (Ledger) + Änderungs-Alarm (≥1 Token) ───
+  var hdBalNow=(typeof _hd!=="undefined"&&_hd.bal>0)?_hd.bal:0;
+  var hdBanner='',hdLine='';
+  if(hdBalNow>0){
+    var hdLastConf=parseFloat(localStorage.getItem("hdConfirmedBal")||"-1");
+    if(hdLastConf<0){localStorage.setItem("hdConfirmedBal",hdBalNow.toString());hdLastConf=hdBalNow;}
+    var hdDelta=hdBalNow-hdLastConf;
+    var hdChanged=Math.abs(hdDelta)>=1;
+    if(hdChanged){
+      var hdKey=hdLastConf.toFixed(0)+"_"+hdBalNow.toFixed(0);
+      var hdNotifKey=localStorage.getItem("hdNotifKey")||"";
+      if(hdNotifKey!==hdKey){
+        localStorage.setItem("hdNotifKey",hdKey);
+        var hdDir=hdDelta>0?"+"+F(hdDelta,0):F(hdDelta,0);
+        notify("⚠ HOODIE Bestand geändert","HOODIE: "+F(hdLastConf,0)+" → "+F(hdBalNow,0)+" ("+hdDir+"). Tap to confirm.");
+        if(soundOn)beep();
+      }
+    }
+    var hdClr=hdChanged?"var(--r)":"var(--g)";
+    var hdIcon=hdChanged?'<span style="color:var(--r);font-weight:900;margin-right:4px;animation:skelPulse 1.5s ease-in-out infinite">⚠</span>':'';
+    hdLine='<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;font-size:12px">'
+      +'<span style="font-size:13px">🧥</span>'
+      +'<span style="color:'+hdClr+';font-weight:600">'+hdIcon+F(hdBalNow,0)+' HOODIE</span>'
+      +'</div>';
+    if(hdChanged){
+      var hdDir2=hdDelta>0?"+"+F(hdDelta,0):F(hdDelta,0);
+      hdBanner='<div style="margin:-4px -2px 10px;padding:10px 12px;border-radius:10px;background:linear-gradient(180deg,rgba(248,113,113,.15),rgba(248,113,113,.05));border:1px solid rgba(248,113,113,.4);box-shadow:0 0 16px rgba(248,113,113,.2),0 0 0 1px rgba(248,113,113,.15) inset;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+        +'<div style="font-size:10px;color:var(--tx);line-height:1.4">'
+          +'<div style="font-weight:700;color:var(--r);text-transform:uppercase;letter-spacing:1px;font-size:9px;font-family:Inter,sans-serif;margin-bottom:2px">⚠ HOODIE Bestand geändert</div>'
+          +'<div style="color:var(--mt)"><span style="color:var(--dm)">prev:</span> '+F(hdLastConf,0)+' → <span style="color:var(--br);font-weight:600">'+F(hdBalNow,0)+'</span> <span style="color:'+(hdDelta>0?"var(--g)":"var(--r)")+';font-weight:600">('+hdDir2+')</span></div>'
+        +'</div>'
+        +'<button onclick="hdConfirmChange()" style="background:linear-gradient(180deg,rgba(52,211,153,.18),rgba(52,211,153,.05));border:1px solid rgba(52,211,153,.5);color:var(--g);padding:8px 14px;border-radius:8px;font-family:Inter,sans-serif;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;cursor:pointer;min-height:36px;white-space:nowrap">✓ Ich war\'s</button>'
+      +'</div>';
+    }
+  }
+
   $("walGrid").innerHTML=
     banner+
     defiBanner+
+    hdBanner+
     '<div style="display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:8px">'+
       '<span style="color:'+bClr+';font-weight:600">'+(bDrop?"":"+")+F(MY_BURN,0)+' BURN</span>'+
       '<span style="color:var(--dm)">·</span>'+
@@ -583,6 +620,7 @@ function renderWal(){
       '<span style="color:'+totalClr+';font-weight:700">'+totalAlertIcon+F(totalTokens,0)+' Total</span>'+
       (oldDropAlert?' <span style="color:var(--r);font-weight:700">⚠ DROP</span>':'')+
     '</div>'+
+    hdLine+
     '<div style="text-align:center">'+
       '<span style="font-size:9px;color:#ffffff;text-transform:uppercase;letter-spacing:1.2px;font-weight:600">BURN-Equivalent ≈</span> '+
       '<span style="color:var(--cy);font-weight:700;font-size:17px;margin-left:2px">'+F(totalBurnEq,0)+'</span>'+
@@ -751,6 +789,15 @@ function renderStrategy(burn,stburn,lpLeft,defiBurn){
   box.innerHTML=html;
 }
 
+
+// Confirm HOODIE balance change (resets baseline, stops the alarm).
+function hdConfirmChange(){
+  try{
+    if(typeof _hd!=="undefined"&&_hd.bal>0)localStorage.setItem("hdConfirmedBal",_hd.bal.toString());
+    localStorage.removeItem("hdNotifKey");
+    renderWal();
+  }catch(e){console.log("hdConfirm err:",e&&e.message);}
+}
 
 function walConfirmChange(){
   var totalNow=MY_BURN+MY_STBURN;
@@ -5879,6 +5926,7 @@ async function fetchHoodie(){
     _hd.ts=Date.now();
     try{localStorage.setItem("hd_cache",JSON.stringify(_hd));}catch(e){}
     renderHoodie();
+    try{renderWal();}catch(e){} // HOODIE-Zeile + Alarm in den Ledger-Beständen aktualisieren
     try{hdRenderMine();hdRenderNextFill();}catch(e){}
     try{if(window._invOpen)renderInvestors();}catch(e){}
     // Incremental scan keeps Trades/LP feed fresh once the first full scan ran.
