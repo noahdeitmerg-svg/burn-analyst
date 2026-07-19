@@ -558,7 +558,8 @@ tr:hover td{background:rgba(45,212,191,.04)!important}
 .a-sub{font-size:11px;letter-spacing:.02em;color:#7f8b8c;font-weight:500}
 /* Tab-Bar unten */
 .abar{position:sticky;bottom:0;display:flex;justify-content:space-around;align-items:center;padding:12px 18px 20px;background:linear-gradient(180deg,rgba(7,10,13,.4),rgba(7,10,13,.96) 40%);border-top:1px solid rgba(255,255,255,.06);margin:0 -14px -14px}
-.abar .it{display:flex;flex-direction:column;align-items:center;gap:4px;color:#6f7b7c}
+.abar .it{display:flex;flex-direction:column;align-items:center;gap:4px;color:#6f7b7c;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s}
+.abar .it:active{transform:scale(.92)}
 .abar .it.on{color:#5fe3d3}
 .abar .it svg{width:21px;height:21px}
 .abar .it span{font-size:10px;font-weight:600}
@@ -1205,10 +1206,10 @@ td{padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 
 <div class="abar">
-  <div class="it on"><i data-lucide="layout-dashboard"></i><span>Übersicht</span></div>
-  <div class="it"><i data-lucide="line-chart"></i><span>Markt</span></div>
-  <div class="it"><i data-lucide="receipt"></i><span>Steuer</span></div>
-  <div class="it"><i data-lucide="wallet"></i><span>Wallet</span></div>
+  <div class="it on" onclick="navJump('ueber',this)"><i data-lucide="layout-dashboard"></i><span>Übersicht</span></div>
+  <div class="it" onclick="navJump('markt',this)"><i data-lucide="line-chart"></i><span>Markt</span></div>
+  <div class="it" onclick="navJump('steuer',this)"><i data-lucide="receipt"></i><span>Steuer</span></div>
+  <div class="it" onclick="navJump('wallet',this)"><i data-lucide="wallet"></i><span>Wallet</span></div>
 </div>
 </div>
 

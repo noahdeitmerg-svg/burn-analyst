@@ -473,22 +473,25 @@ function renderWal(){
   var wShort=W_LEDGER.slice(0,6)+"…"+W_LEDGER.slice(-4);
   var totalTokens=MY_BURN+MY_STBURN;
   // Calculate LP detail: BURN deposited, BURN-left (sellable), BURN already sold to USDC, USDC value
-  var lpBurnLeft=0,lpBurnDeposited=0,lpBurnSold=0,lpUsdcValue=0,lpCount=0;
+  var lpBurnLeft=0,lpBurnDeposited=0,lpBurnSold=0,lpUsdcValue=0,lpCount=0,lpPositions=[];
   try{
     if(typeof LP!=="undefined"&&typeof v3==="function"&&typeof P!=="undefined"&&P>0){
       var Pw=pxUnified(); // COHERENCE: same price as P&L card & LP table
       for(var lpi=0;lpi<LP.length;lpi++){
         if(LP[lpi].fr)continue; // skip DAO full range
         var lpv=v3(LP[lpi].b,LP[lpi].lo,LP[lpi].hi,Pw);
+        var lpSoldPos=Math.max(0,LP[lpi].b-lpv.left);
         lpBurnLeft+=lpv.left;
         lpBurnDeposited+=LP[lpi].b;
-        lpBurnSold+=Math.max(0,LP[lpi].b-lpv.left);
+        lpBurnSold+=lpSoldPos;
         lpUsdcValue+=lpv.usdc;
         lpCount++;
+        lpPositions.push({lo:LP[lpi].lo,hi:LP[lpi].hi,b:LP[lpi].b,left:lpv.left,sold:lpSoldPos,usdc:lpv.usdc,fill:LP[lpi].b>0?(lpSoldPos/LP[lpi].b*100):0});
       }
+      lpPositions.sort(function(a,b){return b.fill-a.fill;}); // vollste Position zuerst
     }
   }catch(e){}
-  window._lpDetail={left:lpBurnLeft,deposited:lpBurnDeposited,sold:lpBurnSold,usdc:lpUsdcValue,count:lpCount};
+  window._lpDetail={left:lpBurnLeft,deposited:lpBurnDeposited,sold:lpBurnSold,usdc:lpUsdcValue,count:lpCount,positions:lpPositions};
   var totalBurnEq=MY_BURN+(MY_STBURN*stR)+lpBurnLeft+MY_DEFI_BURN;
 
   // ─── Wallet Change Detection ───
@@ -709,6 +712,28 @@ function renderStrategy(burn,stburn,lpLeft,defiBurn){
   if(lpd.deposited>0||lpd.left>0){
     var lpFillPct=lpd.deposited>0?(lpd.sold/lpd.deposited*100):0;
     html+='<div style="font-size:9px;color:var(--mt);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💧 In Liquidity-Positionen ('+lpd.count+')</div>';
+    // Pro aktive Position: eigener Balken mit Range + Füllgrad (blau = BURN übrig, grün = zu USDC)
+    var _ppHtml='';var _pp=(lpd.positions||[]);
+    if(_pp.length){
+      _ppHtml='<div style="margin-top:11px;border-top:1px solid rgba(48,54,68,.4);padding-top:9px">'+
+        '<div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Pro Position ('+_pp.length+') · nach Füllgrad</div>';
+      for(var _pi=0;_pi<_pp.length;_pi++){
+        var _p=_pp[_pi];
+        var _rng=(_p.hi>9999)?"Full-Range":("$"+(+_p.lo).toFixed(3)+"–$"+(+_p.hi).toFixed(3));
+        var _fw=Math.max(0,Math.min(100,_p.fill));
+        _ppHtml+='<div style="margin-bottom:8px">'+
+          '<div style="display:flex;justify-content:space-between;font-size:8.5px;margin-bottom:3px">'+
+            '<span style="color:var(--tx);font-family:Geist Mono,monospace">'+_rng+'</span>'+
+            '<span style="color:var(--mt)">'+F(_p.b,0)+' BURN · <b style="color:'+(_fw>=99?"var(--g)":"var(--cy)")+'">'+_fw.toFixed(0)+'%</b> → '+fmtUsd(_p.usdc)+'</span>'+
+          '</div>'+
+          '<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
+            '<div style="width:'+(100-_fw).toFixed(1)+'%;background:linear-gradient(180deg,#60a5fa,#2563eb)" title="BURN übrig (verkaufbar)"></div>'+
+            '<div style="width:'+_fw.toFixed(1)+'%;background:linear-gradient(180deg,#34d399,#059669)" title="schon zu USDC"></div>'+
+          '</div>'+
+        '</div>';
+      }
+      _ppHtml+='</div>';
+    }
     html+='<div style="background:rgba(8,12,22,.55);border:1px solid rgba(96,165,250,.25);border-radius:10px;padding:12px;margin-bottom:16px">'+
       '<div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:7px"><span style="color:var(--mt)">Eingezahlt: <b style="color:var(--o)">'+F(lpd.deposited,0)+'</b> BURN</span><span style="color:var(--mt)">'+lpFillPct.toFixed(0)+'% gefüllt</span></div>'+
       '<div style="display:flex;height:20px;border-radius:6px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
@@ -719,6 +744,7 @@ function renderStrategy(burn,stburn,lpLeft,defiBurn){
         '<span style="color:#60a5fa">▮ '+F(lpd.left,0)+' BURN übrig</span>'+
         '<span style="color:var(--g)">verkauft → '+fmtUsd(lpd.usdc)+' ▮</span>'+
       '</div>'+
+      _ppHtml+
     '</div>';
   }
 
@@ -1959,6 +1985,24 @@ try{
 
 // Render cached LPs immediately when section is toggled open
 var _origTog=window.tog;
+// Bottom-Nav: springt zur passenden Sektion (öffnet sie, falls eingeklappt) und scrollt hin.
+function navJump(which,el){
+  try{
+    var tabs=document.querySelectorAll(".abar .it");
+    for(var i=0;i<tabs.length;i++)tabs[i].classList.remove("on");
+    if(el)el.classList.add("on");
+    var map={ueber:null,markt:"sec-mkt",steuer:"sec-tax",wallet:"sec-wt-wrap"};
+    var secId=map[which];
+    if(!secId){window.scrollTo({top:0,behavior:"smooth"});return;}
+    var sec=document.getElementById(secId);if(!sec)return;
+    var hdr=sec.previousElementSibling;
+    // Sektion öffnen, falls eingeklappt
+    if(sec.classList.contains("col-b")&&!sec.classList.contains("open")&&hdr&&hdr.classList.contains("col")){
+      try{hdr.click();}catch(e){}
+    }
+    setTimeout(function(){try{(hdr&&hdr.classList.contains("col")?hdr:sec).scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},90);
+  }catch(e){console.log("navJump err:",e&&e.message);}
+}
 function tog(el,id){
   // Call original toggle
   var body=$(id);if(!body)return;
@@ -2519,7 +2563,7 @@ async function scanLiqMap(){
     // the coarse bucket approximation. Lb (BURN-unit liquidity) = L_raw / 1e12.
     window._lmapRanges=ranges;window._lmapCurTick=curTick;
     // Pool reserves + price for the heatmap (BURN above price calibrates to aB, USDC below to aU).
-    try{window._poolAB=aB;window._poolAU=aU;window._lmapP=P;}catch(e){}
+    try{window._poolAB=aB;window._poolAU=aU;window._lmapP=P;localStorage.setItem("lmap_reserves",JSON.stringify({aB:aB,aU:aU,p:P,ts:Date.now()}));}catch(e){}
     // Cache closed LPs permanently (they never change)
     try{
       var closedLPs=[];
@@ -2746,8 +2790,24 @@ function renderDepthChart(buckets,targetId){
   var html='<div style="background:linear-gradient(180deg,rgba(15,20,34,.4),rgba(8,12,22,.15));border:1px solid rgba(48,54,68,.5);border-radius:10px;padding:11px 12px 10px">'+
     '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">'+
       '<span style="font-size:10px;color:#e2e8f0;text-transform:uppercase;letter-spacing:1.4px;font-weight:700">Liquidity Heatmap</span>'+
-      '<span style="font-size:7px;color:var(--dm);'+mono+'">on-chain · kalibriert</span></div>'+
+      '<span style="font-size:7px;color:'+((window._poolAB>0&&window._poolAU>0)?"var(--dm)":"var(--warn)")+';'+mono+'">'+((window._poolAB>0&&window._poolAU>0)?"on-chain · kalibriert":"relativ · Scan läuft…")+'</span></div>'+
     '<div style="font-size:7.5px;color:var(--dm);margin-bottom:2px">Intensit\u00e4t = Menge \u00b7 <span style="color:var(--cy)">\u2605 meine Range</span></div>';
+  // \u2500\u2500 Auf einen Blick: Widerstand (BURN $ \u00fcber Preis) vs. Support (USDC $ unter Preis) \u2500\u2500
+  var _resUsd=sumB*px,_supUsd=sumU,_totLiq=_resUsd+_supUsd;
+  var _resPct=_totLiq>0?(_resUsd/_totLiq*100):50;
+  html+='<div style="margin:7px 0 9px;padding:8px 10px;background:rgba(8,12,22,.5);border:1px solid rgba(48,54,68,.5);border-radius:8px">'+
+    '<div style="display:flex;justify-content:space-between;font-size:8.5px;margin-bottom:5px;'+mono+'">'+
+      '<span style="color:#fb923c;font-weight:700">\u25b2 Widerstand $'+F(_resUsd,0)+'</span>'+
+      '<span style="color:#34d399;font-weight:700">$'+F(_supUsd,0)+' Support \u25bc</span>'+
+    '</div>'+
+    '<div style="display:flex;height:9px;border-radius:5px;overflow:hidden;border:1px solid rgba(48,54,68,.5)">'+
+      '<div style="width:'+_resPct.toFixed(1)+'%;background:linear-gradient(90deg,#f97316,#fb923c)"></div>'+
+      '<div style="width:'+(100-_resPct).toFixed(1)+'%;background:linear-gradient(90deg,#34d399,#059669)"></div>'+
+    '</div>'+
+    '<div style="font-size:7.5px;color:var(--dm);text-align:center;margin-top:5px">'+
+      (_totLiq<=0?'Scan l\u00e4uft \u2014 noch keine kalibrierte Tiefe':(_resUsd>_supUsd*1.15?'\u2191 Mehr Verkaufsdruck \u00fcber dem Preis':(_supUsd>_resUsd*1.15?'\u2193 Mehr Kaufunterst\u00fctzung unter dem Preis':'\u2248 Ausgeglichen um den Preis')))+
+    '</div>'+
+  '</div>';
   html+=secHead("\u25b2 Widerstand \u2014 BURN-Verkaufsw\u00e4nde","#fb923c");
   var up=rowsUp.slice().reverse();
   for(i2=0;i2<up.length;i2++){
@@ -5626,6 +5686,12 @@ try{
       try{if(P>0&&typeof render==="function")render();}catch(e){}
     }
   }
+}catch(e){}
+// Restore cached pool reserves so the Liquidity-Heatmap is correctly calibrated at app start
+// (without this the bars fall back to relative scaling after every restart — Audit M7).
+try{
+  var rsvRaw=localStorage.getItem("lmap_reserves");
+  if(rsvRaw){var rsv=JSON.parse(rsvRaw);if(rsv&&rsv.aB>0&&rsv.aU>0){window._poolAB=rsv.aB;window._poolAU=rsv.aU;if(rsv.p>0)window._lmapP=rsv.p;}}
 }catch(e){}
 // Load cached buckets so V3 buyflow works immediately at app start (before scan completes)
 try{
