@@ -2050,6 +2050,7 @@ function renderLpEvents(){
   var ev=[];try{ev=JSON.parse(localStorage.getItem("lp_events")||"[]");}catch(e){}
   if(!ev.length){box.innerHTML='<tr><td colspan="5" style="color:var(--mt);text-align:center;font-size:10px;padding:10px">Noch keine Events — einmal die Liquidity Map scannen.</td></tr>';return;}
   var rows="",shown=0;
+  var _Pnow=(typeof P!=="undefined"&&P>0)?P:0; // BURN-Kurs für $-Wert des LP-Kapitals
   for(var i=0;i<ev.length&&shown<80;i++){
     var e=ev[i];shown++;
     var d=e.ts?new Date(e.ts):null;
@@ -2061,12 +2062,15 @@ function renderLpEvents(){
     var isMe=(e.owner||"").indexOf("0x9ffa19")===0||(e.owner||"").indexOf("0x505042")===0||(e.owner||"").indexOf("0x6e37cc")===0;
     var rangeTxt=(e.hi>9999)?"Full-Range":("$"+(+e.lo).toFixed(3)+"–"+(+e.hi).toFixed(3));
     var burnTxt=e.burn?(e.burn>=1000?(e.burn/1000).toFixed(1)+"k":Math.round(e.burn)):"—";
+    var usdVal=(e.burn&&_Pnow>0)?e.burn*_Pnow:0;
+    var usdTxt=usdVal>0?(e.type==="open"?"+":"−")+"$"+F(usdVal,0):"";
+    var usdClr=e.type==="open"?"#34d399":"#f87171"; // rein = grün, raus = rot
     rows+='<tr>'+
       '<td style="font-size:8.5px;line-height:1.3">'+when+'</td>'+
       '<td style="font-size:8.5px">'+badge+'</td>'+
       '<td style="font-size:9px;color:'+(isMe?"var(--cy)":"var(--tx)")+'">'+(isMe?"⭐ ":"")+name+'</td>'+
       '<td style="font-size:8.5px;font-family:Geist Mono,monospace">'+rangeTxt+'</td>'+
-      '<td style="font-size:8.5px;text-align:right;color:#fdba74;font-family:Geist Mono,monospace">'+burnTxt+'</td>'+
+      '<td style="font-size:8.5px;text-align:right;color:#fdba74;font-family:Geist Mono,monospace">'+burnTxt+' BURN'+(usdTxt?'<br><span style="color:'+usdClr+';font-size:8px;font-weight:600">'+usdTxt+'</span>':'')+'</td>'+
     '</tr>';
   }
   box.innerHTML=rows;
