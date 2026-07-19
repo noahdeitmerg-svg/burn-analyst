@@ -4262,22 +4262,34 @@ function ptfLoad(){try{
   if(a)ptfAssets=JSON.parse(a); else ptfAssets=JSON.parse(JSON.stringify(PTF_DEFAULTS));
   if(l)ptfLedger=JSON.parse(l);
   if(t)ptfSimTargets=JSON.parse(t);
+  // ── One-time cleanup: strip stray TEST test-data (asset + ledger) ──
+  try{
+    var _hadTest=false;
+    if(ptfAssets&&ptfAssets.length){var _na=ptfAssets.filter(function(a){var s=((a.symbol||a.id||"")+"").toUpperCase();if(s==="TEST"){_hadTest=true;return false;}return true;});if(_na.length!==ptfAssets.length)ptfAssets=_na;}
+    if(ptfLedger&&ptfLedger.length){var _nl=ptfLedger.filter(function(e){var s=((e.asset||"")+"").toUpperCase();if(s==="TEST"){_hadTest=true;return false;}return true;});if(_nl.length!==ptfLedger.length)ptfLedger=_nl;}
+    if(_hadTest){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}}
+  }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
-  // Merge server history (Hetzner collects data 24/7 even when app is closed)
+  // Merge server history (Hetzner collects data 24/7 even when app is closed).
+  // Server = source of truth: overwrite local values for matching timestamps so corrected
+  // history propagates. One-time full reset (RK) purges the old cached glitch dips once.
   setTimeout(function(){try{
     fetch("https://95-216-152-31.sslip.io/history").then(function(r){return r.json();}).then(function(data){
       if(!data||!data.length)return;
-      var existing={};
-      for(var mi=0;mi<ptfSnapshots.length;mi++){existing[ptfSnapshots[mi][0]]=true;}
-      var added=0;
-      for(var mj=0;mj<data.length;mj++){if(!existing[data[mj][0]]){ptfSnapshots.push(data[mj]);added++;}}
-      if(added>0){
-        ptfSnapshots.sort(function(a,b){return a[0]-b[0];});
-        if(ptfSnapshots.length>200000)ptfSnapshots=ptfSnapshots.slice(-200000);
-        try{localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));}catch(e2){}
-        console.log("PTF: merged "+added+" server snapshots (total: "+ptfSnapshots.length+")");
-        ptfRenderTimeline();
+      var RK="ptf_snap_srvwin1";
+      var byTs={};
+      if(localStorage.getItem(RK)==="1"){
+        for(var mi=0;mi<ptfSnapshots.length;mi++){byTs[ptfSnapshots[mi][0]]=ptfSnapshots[mi];}
       }
+      for(var mj=0;mj<data.length;mj++){byTs[data[mj][0]]=data[mj];}
+      var merged=[];for(var mk in byTs){if(byTs.hasOwnProperty(mk))merged.push(byTs[mk]);}
+      merged.sort(function(a,b){return a[0]-b[0];});
+      if(merged.length>200000)merged=merged.slice(-200000);
+      ptfSnapshots=merged;
+      try{localStorage.setItem("ptf_snapshots",JSON.stringify(ptfSnapshots));}catch(e2){}
+      localStorage.setItem(RK,"1");
+      console.log("PTF: synced "+data.length+" server snapshots (server-wins, total: "+ptfSnapshots.length+")");
+      ptfRenderTimeline();
     }).catch(function(){});
   }catch(e3){}},5000);
   try{var lb=localStorage.getItem("ptf_last_balances");if(lb)ptfLastBalances=JSON.parse(lb);}catch(e){}
