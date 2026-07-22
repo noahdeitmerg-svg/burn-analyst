@@ -5096,9 +5096,75 @@ function ptfFmtDate(ts,range){
   return mo[d.getMonth()]+" "+d.getFullYear().toString().slice(2);
 }
 
+/* ── v4: Dual-Linien Total-Chart (paper + real) + Alt-Subchart aus Server-Endpoint ── */
+var ptfTotPaper=[],ptfTotReal=[],ptfAltSeries=[],ptfTotLoaded=false;
+function ptfLoadTotalSeries(){
+  try{
+    fetch("https://95-216-152-31.sslip.io/history?scope=total").then(function(r){return r.json();}).then(function(d){
+      if(d&&d.paper&&d.paper.length&&d.real){ptfTotPaper=d.paper;ptfTotReal=d.real;ptfTotLoaded=true;try{ptfRenderTimeline();}catch(e){}try{if(document.getElementById("chartModal")&&document.getElementById("chartModal").style.display==="flex")ptfRenderFullscreen();}catch(e){}}
+    }).catch(function(){});
+    fetch("https://95-216-152-31.sslip.io/history?scope=byclass").then(function(r){return r.json();}).then(function(d){
+      if(d&&d.crypto){ptfAltSeries=d.crypto;try{ptfRenderTimeline();}catch(e){}}
+    }).catch(function(){});
+  }catch(e){}
+}
+function ptfTfFilter(series){
+  if(!series||series.length<2)return series||[];
+  var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000,"all":Date.now()};
+  var cut=Date.now()-(ranges[ptfChartRange]||604800000);
+  var f=[];for(var i=0;i<series.length;i++){if(series[i][0]>=cut)f.push(series[i]);}
+  if(f.length<2)f=series.slice();
+  if(f.length>400){var st=Math.ceil(f.length/400);var ds=[f[0]];for(var j=st;j<f.length-1;j+=st)ds.push(f[j]);ds.push(f[f.length-1]);f=ds;}
+  return f;
+}
+function ptfDualSvg(bigH){
+  var P=ptfTfFilter(ptfTotPaper),R=ptfTfFilter(ptfTotReal);
+  if(P.length<2)return "";
+  var minV=Infinity,maxV=-Infinity,t0=Infinity,t1=-Infinity,i,v,t,all=P.concat(R);
+  for(i=0;i<all.length;i++){v=all[i][1];if(v<minV)minV=v;if(v>maxV)maxV=v;t=all[i][0];if(t<t0)t0=t;if(t>t1)t1=t;}
+  if(!(maxV>minV))maxV=minV+1;
+  var pad=(maxV-minV)*0.05;minV=Math.max(0,minV-pad);maxV+=pad;var vR=maxV-minV||1,tR=t1-t0||1;
+  var W=700,H=bigH||230,px=55,py=16,cw=W-px-12,ch=H-54;
+  function lp(sr){var a=[];for(var k=0;k<sr.length;k++){var x=px+(sr[k][0]-t0)/tR*cw;var y=py+ch-(sr[k][1]-minV)/vR*ch;a.push(x.toFixed(1)+","+y.toFixed(1));}return a;}
+  var pa=lp(P),ra=lp(R),pathP="M"+pa.join("L"),pathR="M"+ra.join("L");
+  var fillP=pathP+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z";
+  var grid="";for(var g=0;g<=4;g++){var gy=py+ch-ch*g/4;var gv=minV+(maxV-minV)*g/4;grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-12)+'" y2="'+gy+'" stroke="rgba(30,41,59,.35)" stroke-dasharray="4,4"/>';grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#94a3b8" font-size="8" text-anchor="end">$'+Math.round(gv).toLocaleString()+'</text>';}
+  var xl="";for(var xi=0;xi<5;xi++){var idx=Math.round(xi/4*(P.length-1));var xx=px+(P[idx][0]-t0)/tR*cw;xl+='<text x="'+xx+'" y="'+(H-4)+'" fill="#94a3b8" font-size="8" text-anchor="middle">'+ptfFmtDate(P[idx][0],ptfChartRange==="all"?"1y":ptfChartRange)+'</text>';}
+  var lastP=P[P.length-1][1],lastR=R[R.length-1][1],lpp=pa[pa.length-1].split(","),rpp=ra[ra.length-1].split(",");
+  var leg='<text x="'+px+'" y="11" font-size="10"><tspan fill="#22d3ee">● Paper $'+Math.round(lastP).toLocaleString()+'</tspan>   <tspan fill="#f5b301">● Real $'+Math.round(lastR).toLocaleString()+'</tspan></text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
+    '<defs><linearGradient id="ptfPap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.14)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
+    grid+xl+leg+
+    '<path d="'+fillP+'" fill="url(#ptfPap)"/>'+
+    '<path d="'+pathR+'" fill="none" stroke="#f5b301" stroke-width="1.8"/>'+
+    '<path d="'+pathP+'" fill="none" stroke="#22d3ee" stroke-width="2"/>'+
+    '<circle cx="'+lpp[0]+'" cy="'+lpp[1]+'" r="3.5" fill="#22d3ee"/>'+
+    '<circle cx="'+rpp[0]+'" cy="'+rpp[1]+'" r="3.5" fill="#f5b301"/>'+
+    '</svg>';
+}
+function ptfAltSvg(){
+  var A=ptfTfFilter(ptfAltSeries);
+  if(A.length<2)return "";
+  var minV=Infinity,maxV=-Infinity,t0=A[0][0],t1=A[A.length-1][0];
+  for(var i=0;i<A.length;i++){var v=A[i][1];if(v<minV)minV=v;if(v>maxV)maxV=v;}
+  if(!(maxV>minV))maxV=minV+1;var pad=(maxV-minV)*0.08;minV=Math.max(0,minV-pad);maxV+=pad;var vR=maxV-minV||1,tR=(t1-t0)||1;
+  var W=700,H=96,px=55,py=14,cw=W-px-12,ch=64,a=[];
+  for(var k=0;k<A.length;k++){var x=px+(A[k][0]-t0)/tR*cw;var y=py+ch-(A[k][1]-minV)/vR*ch;a.push(x.toFixed(1)+","+y.toFixed(1));}
+  var path="M"+a.join("L"),fill=path+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z",last=A[A.length-1][1];
+  var grid="";for(var g=0;g<=2;g++){var gy=py+ch-ch*g/2;var gv=minV+(maxV-minV)*g/2;grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-12)+'" y2="'+gy+'" stroke="rgba(30,41,59,.3)" stroke-dasharray="4,4"/>';grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#94a3b8" font-size="8" text-anchor="end">$'+Math.round(gv).toLocaleString()+'</text>';}
+  return '<div style="font-size:10px;color:#94a3b8;margin:6px 0 2px 4px">Altcoins (ohne BURN/HOODIE) · $'+Math.round(last).toLocaleString()+'</div>'+
+    '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto"><defs><linearGradient id="ptfAltF" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(139,124,246,.16)"/><stop offset="100%" stop-color="rgba(139,124,246,0)"/></linearGradient></defs>'+grid+
+    '<path d="'+fill+'" fill="url(#ptfAltF)"/>'+
+    '<path d="'+path+'" fill="none" stroke="#8b7cf6" stroke-width="1.8"/></svg>';
+}
 function ptfRenderTimeline(){
   var el=$("ptfChartTimeline");if(!el)return;
   try{
+  if(ptfTotLoaded&&ptfTotPaper.length>=2){
+    var _h=ptfDualSvg();var _a=ptfAltSvg();
+    if(_a)_h+='<div style="border-top:1px solid rgba(30,41,59,.5);margin-top:8px;padding-top:2px"></div>'+_a;
+    el.innerHTML=_h;return;
+  }
   var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000,"all":Date.now()};
   var cutoff=Date.now()-(ranges[ptfChartRange]||604800000);
   var filtered=[];
@@ -5186,6 +5252,7 @@ function ptfModalRange(r){
 }
 function ptfRenderFullscreen(){
   var el=$("chartModalBody");if(!el)return;
+  if(ptfTotLoaded&&ptfTotPaper.length>=2){el.innerHTML='<div style="padding:6px">'+ptfDualSvg(360)+ptfAltSvg()+'</div>';return;}
   var info=$("chartModalInfo");
   var ranges={"1d":86400000,"7d":604800000,"1m":2592000000,"1y":31536000000,"all":Date.now()};
   var cutoff=Date.now()-(ranges[ptfChartRange]||604800000);
@@ -5522,6 +5589,7 @@ function updateSysStatus(){
 loadOffline();
 if(tradeCacheLoad()){try{renderTrades();}catch(e){}}
 ptfLoad();
+try{ptfLoadTotalSeries();setInterval(ptfLoadTotalSeries,300000);}catch(e){}
 // ── ONE-TIME ETH COST-BASIS FIX (v3 — verified against full timeline) ──
 // Reconstruction (verified to 4 decimals): app amount 1.401147 = code-default 0.856702 (which
 // ALREADY includes the May-3 buy) + the 4 ledger-tracked June buys (0.5112) + the small Jun-29
