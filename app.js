@@ -4357,7 +4357,9 @@ function ptfSyncServer(){
       var a=ptfAssets[i];
       assets.push({symbol:a.symbol,geckoId:a.geckoId,amount:a.amount,totalCost:a.totalCost||0,avgEntry:a.avgEntry||0});
     }
-    var data={assets:assets,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
+    var ledgerOut=[];
+    try{for(var _li=0;_li<ptfLedger.length;_li++){var _e=ptfLedger[_li];ledgerOut.push({asset:_e.asset,amount:_e.amount,price:_e.price,total:_e.total,date:_e.date,wallet:_e.wallet||"",note:_e.note||""});}}catch(e){}
+    var data={assets:assets,ledger:ledgerOut,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
     fetch("https://95-216-152-31.sslip.io/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
       var el=$("syncStat");
       if(r.ok){console.log("PTF synced to server");if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--g)">✓ '+new Date().toLocaleTimeString().slice(0,5)+"</span>";}
