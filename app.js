@@ -41,6 +41,8 @@ var W_DEFI="0x505042fF781eA1689e44e1d200eFD691C30Db86C";
 // When a known wallet trades / LPs / changes, the app shows the NAME instead of the hex.
 // Verify-Bot-confirmed addresses take priority (those are the user's current verified wallet).
 var ADDR_BOOK={
+  "0xeede6fdd60c4b0f52701af895d881eeeb9ba6eb4":"Irena",
+  "0x1e089ee228f08370e996fc135c4c23d40e0ae58b":"Philipp",
   "0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2":"Noah ⭐",
   "0x505042ff781ea1689e44e1d200efd691c30db86c":"Noah (DeFi) ⭐",
   "0x751de1df943f22b90468ed5d6b193549cd5bd4b8":"Lion",
