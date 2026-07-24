@@ -100,6 +100,7 @@ var ADDR_BOOK={
 try{var abExtra=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");for(var abk in abExtra){if(abExtra.hasOwnProperty(abk))ADDR_BOOK[abk.toLowerCase()]=abExtra[abk];}}catch(e){}
 // Merge cached server addressbook (instant, works offline). Refreshed from server on start.
 try{var abServerCache=JSON.parse(localStorage.getItem("addr_book_server")||"{}");for(var abs in abServerCache){if(abServerCache.hasOwnProperty(abs))ADDR_BOOK[abs.toLowerCase()]=abServerCache[abs];}}catch(e){}
+try{if(!localStorage.getItem("ab_key"))localStorage.setItem("ab_key","22a91cc2875cb00a1192");}catch(e){}
 // ─── SINGLE SOURCE OF TRUTH: fetch the addressbook from the server on start ───
 // The server (/root/addr_book.py) is the master list. The app pulls it so both stay in
 // sync automatically — add a name once on the server, the app picks it up next launch.
@@ -4462,6 +4463,18 @@ function ptfLoad(){try{
       localStorage.setItem("ptf_burnseed_v2","1");
       try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}
       if(_added){try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}console.log("PTF: "+_added+" verifizierte BURN-Kaeufe ins Ledger uebernommen");}
+    }
+    if(!localStorage.getItem("ptf_altseed_v1")){
+      var _as=[["link",32.0574,10.3],["ondo",650.7351,0.329],["rndr",63.9043,1.299],["mon",2931.1731,0.0201],["cfg",462.3868,0.1254],["fet",389.1441,0.2133],["aave",0.9077,179.59],["sky",852.1203,0.0645],["cro",655.7,0.093],["uni",9.8139,5.605],["arb",263.1431,0.209],["syrup",77.6098,0.425],["eigen",135.127,0.407],["ar",31.92,3.6],["tia",97.3909,0.5853],["tao",0.59,222.03],["akt",264,0.3702]];
+      var _hv3={};for(var _di=0;_di<ptfLedger.length;_di++){var _de=ptfLedger[_di];_hv3[((_de.asset||"")+"").toLowerCase()]=1;}
+      var _na=0;
+      for(var _dj=0;_dj<_as.length;_dj++){var _d=_as[_dj];
+        if(_hv3[_d[0]])continue;
+        ptfLedger.push({id:"ptx_altseed"+_dj,asset:_d[0],amount:_d[1],price:_d[2],total:Math.round(_d[1]*_d[2]*100)/100,date:"2026-05-01",wallet:"Kraken/Bitpanda",note:"Einstand aus App-Daten, Datum geschaetzt"});_na++;}
+      localStorage.setItem("ptf_altseed_v1","1");
+      if(_na){try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}
+        try{ptfSyncServer();}catch(e){}
+        console.log("PTF: "+_na+" Altcoin-Einstaende ins Ledger uebernommen");}
     }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
