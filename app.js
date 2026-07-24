@@ -144,6 +144,19 @@ function addrBookSet(addr,name){
     }).catch(function(){});
   }catch(e){}
 }
+// UI: Adresse benennen/umbenennen (Stift in der Trades-Liste). Speichert lokal
+// + auf dem Server (einmalige Key-Abfrage beim ersten Speichern).
+function abPrompt(addr){
+  if(!addr)return;
+  var low=(addr+"").toLowerCase();
+  var cur=(typeof ADDR_BOOK!=="undefined"&&ADDR_BOOK[low])?(ADDR_BOOK[low]+"").replace(" \u2b50",""):"";
+  var nm=prompt("Name f\u00fcr "+low.slice(0,10)+"\u2026"+low.slice(-6)+":",cur);
+  if(nm===null)return;
+  nm=nm.trim();
+  if(!nm)return;
+  addrBookSet(low,nm);
+  try{renderTrades();}catch(e){}
+}
 
 var TGT=[.20,.30,.50,1,2,5,10,20,30,50,100], SEL=[10000,50000,100000,180000];
 var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
@@ -1605,10 +1618,10 @@ function tradeRow(t){
   var wLink;
   if(isKnown){
     var nm=addrName(t.wallet);
-    wLink='<span onclick="filterTradesByWallet(\''+t.wallet+'\')" style="font-size:9px;color:var(--o);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" title="Alle Trades von '+nm+' zeigen">'+nm+'</span>';
+    wLink='<span onclick="filterTradesByWallet(\''+t.wallet+'\')" style="font-size:9px;color:var(--o);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" title="Alle Trades von '+nm+' zeigen">'+nm+'</span><span onclick="event.stopPropagation();abPrompt(\''+t.wallet+'\')" style="cursor:pointer;font-size:9px;opacity:.55" title="Namen \u00e4ndern"> \u270f\ufe0f</span>';
   }else if(t.wallet){
     var wS=t.wallet.slice(0,6)+"…"+t.wallet.slice(-4);
-    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)" onclick="event.stopPropagation()">'+wS+'</a>';
+    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)" onclick="event.stopPropagation()">'+wS+'</a><span onclick="event.stopPropagation();abPrompt(\''+t.wallet+'\')" style="cursor:pointer;font-size:9px;opacity:.55" title="Adresse benennen"> \u270f\ufe0f</span>';
   }else{
     wLink='<span style="font-size:9px;color:var(--dm)">—</span>';
   }
