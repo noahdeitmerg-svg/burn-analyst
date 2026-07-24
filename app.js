@@ -159,7 +159,7 @@ function abPrompt(addr){
 }
 
 var TGT=[.20,.30,.50,1,2,5,10,20,30,50,100], SEL=[10000,50000,100000,180000];
-var MY_BURN=0, MY_STBURN=0, INVESTED=3350, AVG_ENTRY=0.003682;
+var MY_BURN=0, MY_STBURN=0, INVESTED=3349, AVG_ENTRY=0.003685;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ PORTFOLIO TERMINAL ═══
@@ -4403,6 +4403,19 @@ function ptfLoad(){try{
     if(ptfAssets&&ptfAssets.length){var _na=ptfAssets.filter(function(a){var s=((a.symbol||a.id||"")+"").toUpperCase();if(s==="TEST"){_hadTest=true;return false;}return true;});if(_na.length!==ptfAssets.length)ptfAssets=_na;}
     if(ptfLedger&&ptfLedger.length){var _nl=ptfLedger.filter(function(e){var s=((e.asset||"")+"").toUpperCase();if(s==="TEST"){_hadTest=true;return false;}return true;});if(_nl.length!==ptfLedger.length)ptfLedger=_nl;}
     if(_hadTest){try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}}
+  }catch(e){}
+  // One-time: verifizierte BURN/stBURN-Kaeufe ins Cost-Basis-Ledger (on-chain belegt)
+  try{
+    if(!localStorage.getItem("ptf_burnseed_v1")){
+      var _bs=[["burn","2025-04-16",100163.21,0.001557,156.00],["stburn","2025-04-16",18269.4,0.001596,29.16],["burn","2025-04-19",182037.08,0.001843,335.49],["burn","2025-04-21",221782.31,0.00255,565.59],["burn","2025-04-23",101423.90,0.002772,281.10],["burn","2025-04-29",15516.4,0.003643,56.52],["stburn","2025-05-06",65858.3,0.003766,248.01],["burn","2025-05-13",52157,0.003815,199.00],["stburn","2025-05-29",96438,0.004354,419.93],["stburn","2025-06-01",15754,0.009459,149.01],["stburn","2025-06-17",23377.8,0.016487,385.42],["burn","2025-08-11",16026.5,0.032679,523.73]];
+      var _have={};for(var _bi=0;_bi<ptfLedger.length;_bi++){var _le=ptfLedger[_bi];_have[((_le.asset||"")+"").toLowerCase()+"|"+(_le.date||"")+"|"+Math.round(_le.amount||0)]=1;}
+      var _added=0;
+      for(var _bj=0;_bj<_bs.length;_bj++){var _b=_bs[_bj];
+        if(_have[_b[0]+"|"+_b[1]+"|"+Math.round(_b[2])])continue;
+        ptfLedger.push({id:"ptx_bseed"+_bj,asset:_b[0],amount:_b[2],price:_b[3],total:_b[4],date:_b[1],wallet:"Uniswap",note:"on-chain verifiziert"});_added++;}
+      localStorage.setItem("ptf_burnseed_v1","1");
+      if(_added){try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}console.log("PTF: "+_added+" verifizierte BURN-Kaeufe ins Ledger uebernommen");}
+    }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed).
