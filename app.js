@@ -115,7 +115,7 @@ async function syncAddrBookFromServer(){
       var n=0;
       for(var k in book){if(book.hasOwnProperty(k)&&k&&book[k]){ADDR_BOOK[k.toLowerCase()]=book[k];n++;}}
       try{localStorage.setItem("addr_book_server",JSON.stringify(book));}catch(e){}
-      console.log("ADDR_BOOK: synced "+n+" names from server");
+      console.log("ADDR_BOOK: synced "+n+" names from server");try{renderAddrBook();}catch(e){}
       // Re-render trades so freshly-known names show immediately.
       try{if(typeof renderTrades==="function")renderTrades();}catch(e){}
     }
@@ -155,6 +155,44 @@ function abPrompt(addr){
   nm=nm.trim();
   if(!nm)return;
   addrBookSet(low,nm);
+  try{renderTrades();}catch(e){}
+  try{renderAddrBook();}catch(e){}
+}
+// \u2500\u2500 Adressbuch-Card (unten, schmal): Liste + Hinzufuegen \u2500\u2500
+function abToggle(){
+  var b=$("abBody"),c=$("abChev");if(!b)return;
+  var open=b.style.display!=="none";
+  b.style.display=open?"none":"block";
+  if(c)c.textContent=open?"\u25b8":"\u25be";
+  if(!open)renderAddrBook();
+}
+function renderAddrBook(){
+  var cnt=$("abCount"),el=$("abList");
+  if(!cnt&&!el)return;
+  var keys=Object.keys(ADDR_BOOK||{}),items=[];
+  for(var i=0;i<keys.length;i++){var a=keys[i];var n=((ADDR_BOOK[a]||"")+"").replace(" \u2b50","");if(n)items.push([n,a]);}
+  items.sort(function(x,y){return x[0].toLowerCase()<y[0].toLowerCase()?-1:1;});
+  if(cnt)cnt.textContent="\u00b7 "+items.length;
+  if(!el)return;
+  var h="";
+  for(var j=0;j<items.length;j++){
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid rgba(30,41,59,.35)">'
+      +'<span style="color:var(--o);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%">'+items[j][0]+'</span>'
+      +'<span style="color:var(--dm);font-family:monospace;font-size:9px;white-space:nowrap">'+items[j][1].slice(0,8)+'\u2026'+items[j][1].slice(-6)
+      +' <span onclick="abPrompt(\''+items[j][1]+'\')" style="cursor:pointer;opacity:.65" title="umbenennen">\u270f\ufe0f</span></span></div>';
+  }
+  el.innerHTML=h||'<span style="color:var(--dm)">Noch keine Eintr\u00e4ge</span>';
+}
+function abAddFromCard(){
+  var ae=$("abAddr"),ne=$("abName"),m=$("abMsg");
+  var a=((ae&&ae.value)||"").trim().toLowerCase();
+  var n=((ne&&ne.value)||"").trim();
+  if(!/^0x[0-9a-f]{40}$/.test(a)){if(m)m.textContent="Ung\u00fcltige Adresse \u2014 0x + 40 Hex-Zeichen";return;}
+  if(!n){if(m)m.textContent="Name fehlt";return;}
+  addrBookSet(a,n);
+  if(ae)ae.value="";if(ne)ne.value="";
+  if(m)m.textContent="\u2713 gespeichert: "+n+" (lokal + Server)";
+  renderAddrBook();
   try{renderTrades();}catch(e){}
 }
 
@@ -1618,10 +1656,10 @@ function tradeRow(t){
   var wLink;
   if(isKnown){
     var nm=addrName(t.wallet);
-    wLink='<span onclick="filterTradesByWallet(\''+t.wallet+'\')" style="font-size:9px;color:var(--o);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" title="Alle Trades von '+nm+' zeigen">'+nm+'</span><span onclick="event.stopPropagation();abPrompt(\''+t.wallet+'\')" style="cursor:pointer;font-size:9px;opacity:.55" title="Namen \u00e4ndern"> \u270f\ufe0f</span>';
+    wLink='<span onclick="filterTradesByWallet(\''+t.wallet+'\')" style="font-size:9px;color:var(--o);font-weight:600;cursor:pointer;text-decoration:underline;text-decoration-style:dotted" title="Alle Trades von '+nm+' zeigen">'+nm+'</span>';
   }else if(t.wallet){
     var wS=t.wallet.slice(0,6)+"…"+t.wallet.slice(-4);
-    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)" onclick="event.stopPropagation()">'+wS+'</a><span onclick="event.stopPropagation();abPrompt(\''+t.wallet+'\')" style="cursor:pointer;font-size:9px;opacity:.55" title="Adresse benennen"> \u270f\ufe0f</span>';
+    wLink='<a href="https://arbiscan.io/address/'+t.wallet+'" target="_blank" rel="noopener" style="font-size:9px;color:var(--b)" onclick="event.stopPropagation()">'+wS+'</a>';
   }else{
     wLink='<span style="font-size:9px;color:var(--dm)">—</span>';
   }

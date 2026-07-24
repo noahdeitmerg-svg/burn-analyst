@@ -1203,6 +1203,23 @@ td{padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;
   <div id="chartModalInfo" style="padding:8px 16px;border-top:1px solid rgba(30,41,59,.4);font-size:10px;color:var(--dm);text-align:center"></div>
 </div>
 
+<!-- ── Adressbuch (schmale Card, unten) ── -->
+<div id="abCard" style="margin:10px 12px 2px;background:rgba(15,20,32,.6);border:1px solid rgba(30,41,59,.5);border-radius:10px;padding:8px 12px">
+  <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="abToggle()">
+    <span style="font-size:11px;font-weight:700">📇 Adressbuch <span id="abCount" style="color:var(--dm);font-weight:400"></span></span>
+    <span id="abChev" style="color:var(--dm);font-size:10px">▸</span>
+  </div>
+  <div id="abBody" style="display:none;margin-top:8px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+      <input class="inp" id="abAddr" placeholder="0x… (Wallet-Adresse)" style="flex:2;min-width:150px;font-size:10px">
+      <input class="inp" id="abName" placeholder="Name" style="flex:1;min-width:80px;font-size:10px">
+      <button class="btn" onclick="abAddFromCard()" style="font-size:10px;padding:4px 10px">Speichern</button>
+    </div>
+    <div id="abMsg" style="font-size:9px;color:var(--dm);margin-bottom:4px"></div>
+    <div id="abList" style="max-height:200px;overflow-y:auto;font-size:10px"></div>
+  </div>
+</div>
+
 <div style="text-align:center;padding:12px 0;font-size:9px;color:var(--mt)" id="foot">My Crypto Portfolio</div>
 
 <div class="abar">
@@ -1221,7 +1238,7 @@ document.addEventListener('DOMContentLoaded',()=>{_renderIcons();
   mo.observe(document.body,{childList:true,subtree:true});
 });
 </script>
-<script src="app.js?v=20260718c"></script>
+<script src="app.js?v=20260724a"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){
