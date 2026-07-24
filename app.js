@@ -159,7 +159,7 @@ function abPrompt(addr){
 }
 
 var TGT=[.20,.30,.50,1,2,5,10,20,30,50,100], SEL=[10000,50000,100000,180000];
-var MY_BURN=0, MY_STBURN=0, INVESTED=3349, AVG_ENTRY=0.003685;
+var MY_BURN=0, MY_STBURN=0, INVESTED=3876, AVG_ENTRY=0.004250;
 var wal={burn:0,st:0,prev:{burn:0,st:0},ok:false};
 
 // ═══ PORTFOLIO TERMINAL ═══
@@ -4414,6 +4414,15 @@ function ptfLoad(){try{
         if(_have[_b[0]+"|"+_b[1]+"|"+Math.round(_b[2])])continue;
         ptfLedger.push({id:"ptx_bseed"+_bj,asset:_b[0],amount:_b[2],price:_b[3],total:_b[4],date:_b[1],wallet:"Uniswap",note:"on-chain verifiziert"});_added++;}
       localStorage.setItem("ptf_burnseed_v1","1");
+    }
+    if(!localStorage.getItem("ptf_burnseed_v2")){
+      var _bs2=[["burn","2025-06-04",2967.2,0.012170,36.11],["burn","2025-10-16",89.9,0.111182,10.00]];
+      var _hv2={};for(var _ci=0;_ci<ptfLedger.length;_ci++){var _ce=ptfLedger[_ci];_hv2[((_ce.asset||"")+"").toLowerCase()+"|"+(_ce.date||"")+"|"+Math.round(_ce.amount||0)]=1;}
+      for(var _cj=0;_cj<_bs2.length;_cj++){var _c=_bs2[_cj];
+        if(_hv2[_c[0]+"|"+_c[1]+"|"+Math.round(_c[2])])continue;
+        ptfLedger.push({id:"ptx_bseed2_"+_cj,asset:_c[0],amount:_c[2],price:_c[3],total:_c[4],date:_c[1],wallet:"Uniswap",note:"on-chain verifiziert"});}
+      localStorage.setItem("ptf_burnseed_v2","1");
+      try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}
       if(_added){try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}console.log("PTF: "+_added+" verifizierte BURN-Kaeufe ins Ledger uebernommen");}
     }
   }catch(e){}
