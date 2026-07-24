@@ -3598,8 +3598,11 @@ function taxRender(){
             +'<span class="tx-tx-brl'+(c.tone==="count"?" tx-brl-count":"")+'">'+(r.brl!=null?txBRL0(r.brl):"—")+'</span></div>'
           +chip+'</div>';
       });
+      var hiddenN=Math.max((m.n||0)-rows.length,0);
+      if(hiddenN>0) h+='<div class="tx-none" style="opacity:.72">+ '+hiddenN+' weitere Bewegungen (neutral · Staub · &lt;5 US$) — vollständig in der Monatsakte gelistet.</div>';
+      var akteBtn=m.l2>0?'<button class="tx-mini tx-mini-akte" onclick="event.stopPropagation();window.open(\'https://95-216-152-31.sslip.io/steuer/monate/'+mk+'.pdf\',\'_blank\')">📄 Monatsakte</button>':'';
       h+='<div class="tx-card-foot"><span>Σ steuerbar <b style="color:'+mcol+'">'+txBRL0(m.l2)+'</b> · LP/Staking '+txBRL0(m.l1total)+'</span>'
-        +'<button class="tx-mini" onclick="event.stopPropagation();taxCsv(\''+mk+'\')">CSV kopieren</button></div>';
+        +akteBtn+'<button class="tx-mini" onclick="event.stopPropagation();taxCsv(\''+mk+'\')">CSV kopieren</button></div>';
     }
     h+='</div></div>';
   }
@@ -3608,6 +3611,8 @@ function taxRender(){
   // ── FUSS ──
   h+='<div class="tx-actions">'
     +'<button class="tx-btn" onclick="taxLoad(true)">Aktualisieren</button>'
+    +'<button class="tx-btn tx-btn-ghost" onclick="window.open(\'https://95-216-152-31.sslip.io/steuer/Steuer_Komplettdossier_Juni2026.pdf\',\'_blank\')">Komplett-Dossier</button>'
+    +'<button class="tx-btn tx-btn-ghost" onclick="window.open(\'https://95-216-152-31.sslip.io/steuer/Fristen-Kalender.pdf\',\'_blank\')">Fristen</button>'
     +'<button class="tx-btn tx-btn-ghost" onclick="window.open(\'https://95-216-152-31.sslip.io/dossier\',\'_blank\')">Grundsatz-Dossier</button></div>'
     +'<p class="tx-foot">Automatischer On-Chain-Extraktor · alle Wallets, beide Chains · 6-Stunden-Takt. <b>Zählt</b> = steuerbare Veräußerung (L2, Freigrenze R$ 35.000). <b>L1</b> = LP/Staking nach permuta-Lesart (SC COSIT 214/2021 analog, strittig). Beträge in BRL zum PTAX-venda (BCB). Jede Zeile mit Tx-Hash im CSV für die Steuerberatung. Stand '+(L.updated||"—")+' · Steuerresidenz '+(L.residenz||"—")+'.</p>';
 
