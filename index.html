@@ -557,6 +557,8 @@ tr:hover td{background:rgba(45,212,191,.04)!important}
 .acc>.col-b.open{padding:2px 16px 16px}
 .a-sub{font-size:11px;letter-spacing:.02em;color:#7f8b8c;font-weight:500}
 /* Tab-Bar unten */
+body.embed .abar,body.embed #foot{display:none!important}
+body.embed .w{padding-bottom:24px}
 .abar{position:sticky;bottom:0;display:flex;justify-content:space-around;align-items:center;padding:12px 18px 20px;background:linear-gradient(180deg,rgba(7,10,13,.4),rgba(7,10,13,.96) 40%);border-top:1px solid rgba(255,255,255,.06);margin:0 -14px -14px}
 .abar .it{display:flex;flex-direction:column;align-items:center;gap:4px;color:#6f7b7c;cursor:pointer;-webkit-tap-highlight-color:transparent;transition:color .15s}
 .abar .it:active{transform:scale(.92)}
@@ -606,6 +608,7 @@ td{padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;
 </style>
 </head>
 <body>
+<script>try{var _q=new URLSearchParams(location.search);if(_q.get("embed")==="1"||_q.get("embed")==="true"){document.documentElement.classList.add("embed");document.addEventListener("DOMContentLoaded",function(){document.body.classList.add("embed");});document.body&&document.body.classList.add("embed");}}catch(e){}</script>
 <div class="w">
 <div class="ptr" id="ptr">↓ Release to refresh</div>
 
@@ -1238,7 +1241,7 @@ document.addEventListener('DOMContentLoaded',()=>{_renderIcons();
   mo.observe(document.body,{childList:true,subtree:true});
 });
 </script>
-<script src="app.js?v=20260724a"></script>
+<script src="app.js?v=20260724b"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){
