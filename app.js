@@ -5195,15 +5195,15 @@ function ptfFmtDate(ts,range){
 var ptfTotPaper=[],ptfTotReal=[],ptfTotFlows=[],ptfTotFlowsReal=[],ptfAltSeries=[],ptfLiquidSeries=[],ptfTotLoaded=false;
 function ptfLoadTotalSeries(){
   try{
-    fetch("https://95-216-152-31.sslip.io/history?scope=total").then(function(r){return r.json();}).then(function(d){
+    fetch("https://95-216-152-31.sslip.io/history?scope=cryptototal").then(function(r){return r.json();}).then(function(d){
       if(d&&d.paper&&d.paper.length&&d.real){ptfTotPaper=d.paper;ptfTotReal=d.real;ptfTotFlows=d.flows||[];ptfTotFlowsReal=d.flowsReal||[];ptfTotLoaded=true;try{ptfRenderTimeline();}catch(e){}try{if(document.getElementById("chartModal")&&document.getElementById("chartModal").style.display==="flex")ptfRenderFullscreen();}catch(e){}}
     }).catch(function(){});
     fetch("https://95-216-152-31.sslip.io/history?scope=byclass").then(function(r){return r.json();}).then(function(d){
       if(d&&d.crypto){ptfAltSeries=d.crypto;
         try{
-          var _lq=[],_cs=d.crypto,_es=d.etf||[],_us=d.usdc||[],_tss=d.tesouro||[];
+          var _lq=[],_cs=d.crypto,_us=d.usdc||[];
           for(var _lqi=0;_lqi<_cs.length;_lqi++){
-            var _lv=_cs[_lqi][1]+((_es[_lqi]||[0,0])[1]||0)+((_us[_lqi]||[0,0])[1]||0)+((_tss[_lqi]||[0,0])[1]||0);
+            var _lv=_cs[_lqi][1]+((_us[_lqi]||[0,0])[1]||0);
             _lq.push([_cs[_lqi][0],Math.round(_lv*100)/100]);
           }
           ptfLiquidSeries=_lq;
@@ -5247,7 +5247,7 @@ function ptfDualSvg(bigH){
   var dPp=lastP-P[0][1]-dFl, dRr=lastR-R[0][1]-dFr;
   var pPp=P[0][1]>0?dPp/P[0][1]*100:0, pRr=R[0][1]>0?dRr/R[0][1]*100:0;
   var _sg=function(n){return (n>=0?"+$":"-$")+Math.abs(Math.round(n)).toLocaleString();};
-  var leg2='<text x="'+px+'" y="23" font-size="9"><tspan fill="#22d3ee">Paper '+_sg(dPp)+' · '+(pPp>=0?"+":"")+pPp.toFixed(1)+'%</tspan>  <tspan fill="#f5b301">Real '+_sg(dRr)+' · '+(pRr>=0?"+":"")+pRr.toFixed(1)+'%</tspan>'+(Math.abs(dFl)>1?'  <tspan fill="#94a3b8">o. Einzahlungen ('+_sg(dFl)+')</tspan>':'')+(hasLiq?'  <tspan fill="#34d399">Ziel \$100k liquide: '+Math.min(999,Math.round(lastL/1000))+'%</tspan>':'')+'</text>';
+  var leg2='<text x="'+px+'" y="23" font-size="9"><tspan fill="#22d3ee">Paper '+_sg(dPp)+' · '+(pPp>=0?"+":"")+pPp.toFixed(1)+'%</tspan>  <tspan fill="#f5b301">Real '+_sg(dRr)+' · '+(pRr>=0?"+":"")+pRr.toFixed(1)+'%</tspan>'+(Math.abs(dFl)>1?'  <tspan fill="#94a3b8">o. Einzahlungen ('+_sg(dFl)+')</tspan>':'')+(hasLiq?'  <tspan fill="#34d399">Krypto-Anteil am \$100k-Ziel: '+Math.min(999,Math.round(lastL/1000))+'%</tspan>':'')+'</text>';
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
     '<defs><linearGradient id="ptfPap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.14)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
     grid+xl+leg+leg2+
