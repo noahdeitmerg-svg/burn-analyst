@@ -5192,14 +5192,23 @@ function ptfFmtDate(ts,range){
 }
 
 /* ── v4: Dual-Linien Total-Chart (paper + real) + Alt-Subchart aus Server-Endpoint ── */
-var ptfTotPaper=[],ptfTotReal=[],ptfTotFlows=[],ptfTotFlowsReal=[],ptfAltSeries=[],ptfTotLoaded=false;
+var ptfTotPaper=[],ptfTotReal=[],ptfTotFlows=[],ptfTotFlowsReal=[],ptfAltSeries=[],ptfLiquidSeries=[],ptfTotLoaded=false;
 function ptfLoadTotalSeries(){
   try{
     fetch("https://95-216-152-31.sslip.io/history?scope=total").then(function(r){return r.json();}).then(function(d){
       if(d&&d.paper&&d.paper.length&&d.real){ptfTotPaper=d.paper;ptfTotReal=d.real;ptfTotFlows=d.flows||[];ptfTotFlowsReal=d.flowsReal||[];ptfTotLoaded=true;try{ptfRenderTimeline();}catch(e){}try{if(document.getElementById("chartModal")&&document.getElementById("chartModal").style.display==="flex")ptfRenderFullscreen();}catch(e){}}
     }).catch(function(){});
     fetch("https://95-216-152-31.sslip.io/history?scope=byclass").then(function(r){return r.json();}).then(function(d){
-      if(d&&d.crypto){ptfAltSeries=d.crypto;try{ptfRenderTimeline();}catch(e){}}
+      if(d&&d.crypto){ptfAltSeries=d.crypto;
+        try{
+          var _lq=[],_cs=d.crypto,_es=d.etf||[],_us=d.usdc||[],_tss=d.tesouro||[];
+          for(var _lqi=0;_lqi<_cs.length;_lqi++){
+            var _lv=_cs[_lqi][1]+((_es[_lqi]||[0,0])[1]||0)+((_us[_lqi]||[0,0])[1]||0)+((_tss[_lqi]||[0,0])[1]||0);
+            _lq.push([_cs[_lqi][0],Math.round(_lv*100)/100]);
+          }
+          ptfLiquidSeries=_lq;
+        }catch(e){}
+        try{ptfRenderTimeline();}catch(e){}}
     }).catch(function(){});
   }catch(e){}
 }
@@ -5215,18 +5224,22 @@ function ptfTfFilter(series){
 function ptfDualSvg(bigH){
   var P=ptfTfFilter(ptfTotPaper),R=ptfTfFilter(ptfTotReal);
   if(P.length<2)return "";
+  var L=ptfTfFilter(ptfLiquidSeries||[]);var hasLiq=L.length>=2;
   var minV=Infinity,maxV=-Infinity,t0=Infinity,t1=-Infinity,i,v,t,all=P.concat(R);
+  if(hasLiq)all=all.concat(L);
   for(i=0;i<all.length;i++){v=all[i][1];if(v<minV)minV=v;if(v>maxV)maxV=v;t=all[i][0];if(t<t0)t0=t;if(t>t1)t1=t;}
   if(!(maxV>minV))maxV=minV+1;
   var pad=(maxV-minV)*0.05;minV=Math.max(0,minV-pad);maxV+=pad;var vR=maxV-minV||1,tR=t1-t0||1;
   var W=700,H=bigH||230,px=55,py=16,cw=W-px-12,ch=H-54;
   function lp(sr){var a=[];for(var k=0;k<sr.length;k++){var x=px+(sr[k][0]-t0)/tR*cw;var y=py+ch-(sr[k][1]-minV)/vR*ch;a.push(x.toFixed(1)+","+y.toFixed(1));}return a;}
   var pa=lp(P),ra=lp(R),pathP="M"+pa.join("L"),pathR="M"+ra.join("L");
+  var la=hasLiq?lp(L):[],pathL=hasLiq?("M"+la.join("L")):"";
   var fillP=pathP+"L"+(px+cw)+","+(py+ch)+"L"+px+","+(py+ch)+"Z";
   var grid="";for(var g=0;g<=4;g++){var gy=py+ch-ch*g/4;var gv=minV+(maxV-minV)*g/4;grid+='<line x1="'+px+'" y1="'+gy+'" x2="'+(W-12)+'" y2="'+gy+'" stroke="rgba(30,41,59,.35)" stroke-dasharray="4,4"/>';grid+='<text x="'+(px-4)+'" y="'+(gy+3)+'" fill="#94a3b8" font-size="8" text-anchor="end">$'+Math.round(gv).toLocaleString()+'</text>';}
   var xl="";for(var xi=0;xi<5;xi++){var idx=Math.round(xi/4*(P.length-1));var xx=px+(P[idx][0]-t0)/tR*cw;xl+='<text x="'+xx+'" y="'+(H-4)+'" fill="#94a3b8" font-size="8" text-anchor="middle">'+ptfFmtDate(P[idx][0],ptfChartRange==="all"?"1y":ptfChartRange)+'</text>';}
   var lastP=P[P.length-1][1],lastR=R[R.length-1][1],lpp=pa[pa.length-1].split(","),rpp=ra[ra.length-1].split(",");
-  var leg='<text x="'+px+'" y="11" font-size="10"><tspan fill="#22d3ee">● Paper $'+Math.round(lastP).toLocaleString()+'</tspan>   <tspan fill="#f5b301">● Real $'+Math.round(lastR).toLocaleString()+'</tspan></text>';
+  var lastL=hasLiq?L[L.length-1][1]:null;
+  var leg='<text x="'+px+'" y="11" font-size="10"><tspan fill="#22d3ee">● Paper $'+Math.round(lastP).toLocaleString()+'</tspan>   <tspan fill="#f5b301">● Real $'+Math.round(lastR).toLocaleString()+'</tspan>'+(hasLiq?'   <tspan fill="#34d399">● Liquide $'+Math.round(lastL).toLocaleString()+'</tspan>':'')+'</text>';
   var F=ptfTfFilter(ptfTotFlows||[]);
   var FR=ptfTfFilter((ptfTotFlowsReal&&ptfTotFlowsReal.length)?ptfTotFlowsReal:(ptfTotFlows||[]));
   var dFl=(F.length>=2)?(F[F.length-1][1]-F[0][1]):0;
@@ -5234,11 +5247,12 @@ function ptfDualSvg(bigH){
   var dPp=lastP-P[0][1]-dFl, dRr=lastR-R[0][1]-dFr;
   var pPp=P[0][1]>0?dPp/P[0][1]*100:0, pRr=R[0][1]>0?dRr/R[0][1]*100:0;
   var _sg=function(n){return (n>=0?"+$":"-$")+Math.abs(Math.round(n)).toLocaleString();};
-  var leg2='<text x="'+px+'" y="23" font-size="9"><tspan fill="#22d3ee">Paper '+_sg(dPp)+' · '+(pPp>=0?"+":"")+pPp.toFixed(1)+'%</tspan>  <tspan fill="#f5b301">Real '+_sg(dRr)+' · '+(pRr>=0?"+":"")+pRr.toFixed(1)+'%</tspan>'+(Math.abs(dFl)>1?'  <tspan fill="#94a3b8">o. Einzahlungen ('+_sg(dFl)+')</tspan>':'')+'</text>';
+  var leg2='<text x="'+px+'" y="23" font-size="9"><tspan fill="#22d3ee">Paper '+_sg(dPp)+' · '+(pPp>=0?"+":"")+pPp.toFixed(1)+'%</tspan>  <tspan fill="#f5b301">Real '+_sg(dRr)+' · '+(pRr>=0?"+":"")+pRr.toFixed(1)+'%</tspan>'+(Math.abs(dFl)>1?'  <tspan fill="#94a3b8">o. Einzahlungen ('+_sg(dFl)+')</tspan>':'')+(hasLiq?'  <tspan fill="#34d399">Ziel \$100k liquide: '+Math.min(999,Math.round(lastL/1000))+'%</tspan>':'')+'</text>';
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
     '<defs><linearGradient id="ptfPap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.14)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
     grid+xl+leg+leg2+
     '<path d="'+fillP+'" fill="url(#ptfPap)"/>'+
+    (hasLiq?'<path d="'+pathL+'" fill="none" stroke="#34d399" stroke-width="1.6"/>':'')+
     '<path d="'+pathR+'" fill="none" stroke="#f5b301" stroke-width="1.8"/>'+
     '<path d="'+pathP+'" fill="none" stroke="#22d3ee" stroke-width="2"/>'+
     '<circle cx="'+lpp[0]+'" cy="'+lpp[1]+'" r="3.5" fill="#22d3ee"/>'+
