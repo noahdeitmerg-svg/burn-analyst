@@ -136,6 +136,13 @@ function addrBookSet(addr,name){
   var low=(addr+"").toLowerCase();
   ADDR_BOOK[low]=name;
   try{var ex=JSON.parse(localStorage.getItem("addr_book_extra")||"{}");ex[low]=name;localStorage.setItem("addr_book_extra",JSON.stringify(ex));}catch(e){}
+  try{
+    var _abp=function(k){return fetch("https://95-216-152-31.sslip.io/addressbook",{method:"POST",mode:"cors",body:JSON.stringify({addr:low,name:name,key:k})});};
+    _abp(localStorage.getItem("ab_key")||"").then(function(r){
+      if(r.status===403&&!window.__abAsked){window.__abAsked=1;var nk=prompt("Adressbuch-Schl\u00fcssel (einmalig, steht im Cowork-Chat):");if(nk){localStorage.setItem("ab_key",nk.trim());_abp(nk.trim());}}
+      else if(r.ok){console.log("ADDR_BOOK: auf Server gespeichert");}
+    }).catch(function(){});
+  }catch(e){}
 }
 
 var TGT=[.20,.30,.50,1,2,5,10,20,30,50,100], SEL=[10000,50000,100000,180000];
@@ -4361,7 +4368,7 @@ function ptfSyncServer(){
     }
     var ledgerOut=[];
     try{for(var _li=0;_li<ptfLedger.length;_li++){var _e=ptfLedger[_li];ledgerOut.push({asset:_e.asset,amount:_e.amount,price:_e.price,total:_e.total,date:_e.date,wallet:_e.wallet||"",note:_e.note||""});}}catch(e){}
-    var data={assets:assets,ledger:ledgerOut,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
+    var data={ptfKey:"43dcb5719607e92861ff",assets:assets,ledger:ledgerOut,burnPrice:P||0,stRatio:stR||1,myBurn:MY_BURN||0,myStburn:MY_STBURN||0,ts:Date.now()};
     fetch("https://95-216-152-31.sslip.io/ptf",{method:"POST",mode:"cors",body:JSON.stringify(data)}).then(function(r){ // 8082 = aus der APK bewiesener Kanal; kein Content-Type → kein CORS-Preflight
       var el=$("syncStat");
       if(r.ok){console.log("PTF synced to server");if(el)el.innerHTML="v"+APP_V+' · Server-Sync <span style="color:var(--g)">✓ '+new Date().toLocaleTimeString().slice(0,5)+"</span>";}
@@ -5099,11 +5106,11 @@ function ptfFmtDate(ts,range){
 }
 
 /* ── v4: Dual-Linien Total-Chart (paper + real) + Alt-Subchart aus Server-Endpoint ── */
-var ptfTotPaper=[],ptfTotReal=[],ptfAltSeries=[],ptfTotLoaded=false;
+var ptfTotPaper=[],ptfTotReal=[],ptfTotFlows=[],ptfTotFlowsReal=[],ptfAltSeries=[],ptfTotLoaded=false;
 function ptfLoadTotalSeries(){
   try{
     fetch("https://95-216-152-31.sslip.io/history?scope=total").then(function(r){return r.json();}).then(function(d){
-      if(d&&d.paper&&d.paper.length&&d.real){ptfTotPaper=d.paper;ptfTotReal=d.real;ptfTotLoaded=true;try{ptfRenderTimeline();}catch(e){}try{if(document.getElementById("chartModal")&&document.getElementById("chartModal").style.display==="flex")ptfRenderFullscreen();}catch(e){}}
+      if(d&&d.paper&&d.paper.length&&d.real){ptfTotPaper=d.paper;ptfTotReal=d.real;ptfTotFlows=d.flows||[];ptfTotFlowsReal=d.flowsReal||[];ptfTotLoaded=true;try{ptfRenderTimeline();}catch(e){}try{if(document.getElementById("chartModal")&&document.getElementById("chartModal").style.display==="flex")ptfRenderFullscreen();}catch(e){}}
     }).catch(function(){});
     fetch("https://95-216-152-31.sslip.io/history?scope=byclass").then(function(r){return r.json();}).then(function(d){
       if(d&&d.crypto){ptfAltSeries=d.crypto;try{ptfRenderTimeline();}catch(e){}}
@@ -5134,9 +5141,17 @@ function ptfDualSvg(bigH){
   var xl="";for(var xi=0;xi<5;xi++){var idx=Math.round(xi/4*(P.length-1));var xx=px+(P[idx][0]-t0)/tR*cw;xl+='<text x="'+xx+'" y="'+(H-4)+'" fill="#94a3b8" font-size="8" text-anchor="middle">'+ptfFmtDate(P[idx][0],ptfChartRange==="all"?"1y":ptfChartRange)+'</text>';}
   var lastP=P[P.length-1][1],lastR=R[R.length-1][1],lpp=pa[pa.length-1].split(","),rpp=ra[ra.length-1].split(",");
   var leg='<text x="'+px+'" y="11" font-size="10"><tspan fill="#22d3ee">● Paper $'+Math.round(lastP).toLocaleString()+'</tspan>   <tspan fill="#f5b301">● Real $'+Math.round(lastR).toLocaleString()+'</tspan></text>';
+  var F=ptfTfFilter(ptfTotFlows||[]);
+  var FR=ptfTfFilter((ptfTotFlowsReal&&ptfTotFlowsReal.length)?ptfTotFlowsReal:(ptfTotFlows||[]));
+  var dFl=(F.length>=2)?(F[F.length-1][1]-F[0][1]):0;
+  var dFr=(FR.length>=2)?(FR[FR.length-1][1]-FR[0][1]):0;
+  var dPp=lastP-P[0][1]-dFl, dRr=lastR-R[0][1]-dFr;
+  var pPp=P[0][1]>0?dPp/P[0][1]*100:0, pRr=R[0][1]>0?dRr/R[0][1]*100:0;
+  var _sg=function(n){return (n>=0?"+$":"-$")+Math.abs(Math.round(n)).toLocaleString();};
+  var leg2='<text x="'+px+'" y="23" font-size="9"><tspan fill="#22d3ee">Paper '+_sg(dPp)+' · '+(pPp>=0?"+":"")+pPp.toFixed(1)+'%</tspan>  <tspan fill="#f5b301">Real '+_sg(dRr)+' · '+(pRr>=0?"+":"")+pRr.toFixed(1)+'%</tspan>'+(Math.abs(dFl)>1?'  <tspan fill="#94a3b8">o. Einzahlungen ('+_sg(dFl)+')</tspan>':'')+'</text>';
   return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto">'+
     '<defs><linearGradient id="ptfPap" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(34,211,238,.14)"/><stop offset="100%" stop-color="rgba(34,211,238,0)"/></linearGradient></defs>'+
-    grid+xl+leg+
+    grid+xl+leg+leg2+
     '<path d="'+fillP+'" fill="url(#ptfPap)"/>'+
     '<path d="'+pathR+'" fill="none" stroke="#f5b301" stroke-width="1.8"/>'+
     '<path d="'+pathP+'" fill="none" stroke="#22d3ee" stroke-width="2"/>'+
@@ -5491,7 +5506,7 @@ var ptfPendingImport=null;
 function ptfExport(){
   var st=$("ptfImportErr");
   try{
-    var data={version:PTF_VERSION,exportDate:new Date().toISOString(),assets:ptfAssets,ledger:ptfLedger,targets:ptfSimTargets,snapshots:ptfSnapshots||[]};
+    var data={ptfKey:"43dcb5719607e92861ff",version:PTF_VERSION,exportDate:new Date().toISOString(),assets:ptfAssets,ledger:ptfLedger,targets:ptfSimTargets,snapshots:ptfSnapshots||[]};
     var json=JSON.stringify(data,null,2);
     if(st)st.innerHTML='<span style="color:var(--dm)">Sichere…</span>';
     // 1) Server-Backup (bewiesener Kanal — APK blockt Blob-Downloads)
