@@ -226,7 +226,7 @@ var PTF_DEFAULTS=[
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
-  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:1.531305,avgEntry:2000,totalCost:3062.61,source:"ledger",decimals:6,contract:null}
+  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:1.531305,avgEntry:2082.50,totalCost:3188.94,source:"ledger",decimals:6,contract:null}
 ];
 var PTF_VERSION=5;
 
@@ -4519,14 +4519,14 @@ function ptfLoad(){try{
         try{ptfSyncServer();}catch(e){}
         console.log("PTF: "+_na+" Altcoin-Einstaende ins Ledger uebernommen");}
     }
-    // One-time: ETH auf Ledger-Balance 1,53130508 + Ø-Einstand ~$2.000 (Noah-Angabe; kein Verkauf → keine Steuerwirkung), 25.07.2026
-    if(!localStorage.getItem("ptf_ethfix_v3")){
-      for(var _ei=0;_ei<ptfAssets.length;_ei++){if(ptfAssets[_ei].id==="eth"){ptfAssets[_ei].amount=1.531305;ptfAssets[_ei].avgEntry=2000;ptfAssets[_ei].totalCost=3062.61;break;}}
+    // One-time: ETH 1,53130508 + Ø-Einstand $2.082,50 (gewichteter Durchschnitt aus 23 on-chain-Zugaengen zum ETH-Tageskurs), 25.07.2026
+    if(!localStorage.getItem("ptf_ethfix_v4")){
+      for(var _ei=0;_ei<ptfAssets.length;_ei++){if(ptfAssets[_ei].id==="eth"){ptfAssets[_ei].amount=1.531305;ptfAssets[_ei].avgEntry=2082.50;ptfAssets[_ei].totalCost=3188.94;break;}}
       try{var _pp=JSON.parse(localStorage.getItem("pending_prices")||"[]");_pp=_pp.filter(function(x){return ((x.symbol||"")+"").toUpperCase()!=="ETH";});localStorage.setItem("pending_prices",JSON.stringify(_pp));if(typeof pendingPrices!=="undefined"&&pendingPrices){for(var _pi=pendingPrices.length-1;_pi>=0;_pi--){if(((pendingPrices[_pi].symbol||"")+"").toUpperCase()==="ETH")pendingPrices.splice(_pi,1);}}}catch(e){}
-      localStorage.setItem("ptf_ethfix_v1","1");localStorage.setItem("ptf_ethfix_v2","1");localStorage.setItem("ptf_ethfix_v3","1");
+      localStorage.setItem("ptf_ethfix_v1","1");localStorage.setItem("ptf_ethfix_v2","1");localStorage.setItem("ptf_ethfix_v3","1");localStorage.setItem("ptf_ethfix_v4","1");
       try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
       try{ptfSyncServer();}catch(e){}
-      console.log("PTF: ETH auf 1,531305 @ Ø $2.000 korrigiert");
+      console.log("PTF: ETH auf 1,531305 @ Ø $2.082,50 korrigiert (aus 23 Zugaengen berechnet)");
     }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
