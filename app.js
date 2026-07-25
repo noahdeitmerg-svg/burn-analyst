@@ -3601,8 +3601,10 @@ function taxRender(){
       var hiddenN=Math.max((m.n||0)-rows.length,0);
       if(hiddenN>0) h+='<div class="tx-none" style="opacity:.72">+ '+hiddenN+' weitere Bewegungen (neutral · Staub · &lt;5 US$) — vollständig in der Monatsakte gelistet.</div>';
       var akteBtn=m.l2>0?'<button class="tx-mini tx-mini-akte" onclick="event.stopPropagation();window.open(\'https://95-216-152-31.sslip.io/steuer/monate/'+mk+'.pdf\',\'_blank\')">📄 Monatsakte</button>':'';
+      var detBtn=(m.l2>0||m.l1total>0)?'<button class="tx-mini tx-mini-akte" onclick="event.stopPropagation();taxDetail(\''+mk+'\')">⚖ Verteidigung</button>':'';
       h+='<div class="tx-card-foot"><span>Σ steuerbar <b style="color:'+mcol+'">'+txBRL0(m.l2)+'</b> · LP/Staking '+txBRL0(m.l1total)+'</span>'
-        +akteBtn+'<button class="tx-mini" onclick="event.stopPropagation();taxCsv(\''+mk+'\')">CSV kopieren</button></div>';
+        +detBtn+akteBtn+'<button class="tx-mini" onclick="event.stopPropagation();taxCsv(\''+mk+'\')">CSV kopieren</button></div>'
+        +'<div class="tx-detail" id="txdetail-'+mk+'" style="display:none"></div>';
     }
     h+='</div></div>';
   }
@@ -3636,6 +3638,42 @@ function taxCsv(mon){
   var csv="Datum;Chain;Wallet;Typ;Menge;Token;Kurs;USD;PTAX;BRL;L2_BRL;L1_BRL;Ganho_BRL;Custo_BRL;AvgEinstand_USD;Gegenpartei;TxHash;Notiz\n";
   rows.forEach(function(r){csv+=[r.dt,r.chain,r.wallet,r.typ,r.amt,r.tok,r.kurs||"",r.usd||"",r.ptax||"",r.brl||"",r.l2||"",r.l1||"",r.ganho||"",r.custo||"",r.avgUSD||"",r.cp,r.tx,(r.note||"").replace(/;/g,",")].join(";")+"\n";});
   var _mm=(_taxL.months||{})[cur]||{};csv+="\nMONAT;"+cur+";;;;;;;;;L2="+(_mm.l2||0)+";L1total="+(_mm.l1total||0)+";Ganho="+(_mm.ganho||0)+";Custo="+(_mm.custo||0)+";DARF="+(_mm.darf||0)+"\n";try{navigator.clipboard.writeText(csv);alert("CSV "+cur+" ("+rows.length+" Zeilen + Monats-DARF) kopiert — an die Steuerberatung mailen.");}catch(e){alert("Zwischenablage nicht verfügbar.");}
+}
+
+// ── Verteidigungsansicht pro Monat (live aus /taxdetail) ──
+function txEsc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function taxDetailStyle(){
+  if(document.getElementById("txDetailCss"))return;
+  var s=document.createElement("style");s.id="txDetailCss";
+  s.textContent=".tx-detail{padding:6px 10px 10px;border-top:1px solid rgba(148,163,184,.2);margin-top:4px}.tx-detail-h{font-weight:700;font-size:11.5px;margin:10px 0 4px;color:#1f3a5f}.tx-dtable{width:100%;border-collapse:collapse;font-size:10.5px;margin-bottom:2px}.tx-dtable th{text-align:left;background:#1f3a5f;color:#fff;padding:3px 5px;font-weight:600}.tx-dtable td{padding:3px 5px;border-bottom:1px solid rgba(148,163,184,.18);vertical-align:top}.tx-detail-p{font-size:10.5px;line-height:1.5;margin:6px 0}";
+  document.head.appendChild(s);
+}
+function taxDetail(mk){
+  var box=document.getElementById("txdetail-"+mk);if(!box)return;
+  taxDetailStyle();
+  if(box.getAttribute("data-loaded")==="1"){box.style.display=box.style.display==="none"?"block":"none";return;}
+  box.style.display="block";box.innerHTML='<div class="tx-none">Lade Verteidigungsansicht…</div>';
+  fetch("https://95-216-152-31.sslip.io/taxdetail?month="+encodeURIComponent(mk),{mode:"cors"}).then(function(r){return r.json();}).then(function(d){
+    var h='';
+    h+='<div class="tx-detail-h">Szenario-Matrix (Schalter B4 / LP-Fills)</div>';
+    h+='<table class="tx-dtable"><tr><th>Reading</th><th style="text-align:right">Volumen</th><th style="text-align:right">Gewinn</th><th style="text-align:right">DARF</th></tr>';
+    ["11","10","01","00"].forEach(function(k){var s=(d.scenarios||{})[k];if(!s)return;var rec=k===d.recommended;
+      var dc=s.darf===0?"#177245":(s.darf>6000?"#9c2b2b":"#1a1a1a");
+      h+='<tr'+(rec?' style="background:#fff7e6"':'')+'><td>'+txEsc(s.label)+'</td><td style="text-align:right">'+txBRL0(s.vol)+'</td><td style="text-align:right">'+txBRL0(s.gain)+'</td><td style="text-align:right;font-weight:700;color:'+dc+'">'+txBRL(s.darf)+'</td></tr>';});
+    h+='</table>';
+    var tx=d.transactions||[];
+    h+='<div class="tx-detail-h">Transaktionen ('+tx.length+')</div>';
+    h+='<table class="tx-dtable"><tr><th>Datum</th><th>Asset</th><th>Vorgang</th><th style="text-align:right">BRL</th><th style="text-align:center">35k</th><th>DeCripto</th><th>Ref</th></tr>';
+    tx.forEach(function(t){h+='<tr><td>'+txEsc((t.dt||"").slice(0,10))+'</td><td>'+txEsc(t.tok)+'</td><td>'+txEsc((t.typ||"").slice(0,22))+'</td><td style="text-align:right">'+(t.brl!=null?txBRL0(t.brl):"—")+'</td><td style="text-align:center">'+(t.zaehlt?'<b>J</b>':'n')+'</td><td>'+txEsc(t.reg)+'</td><td><b>'+txEsc(t.ref)+'</b></td></tr>';});
+    h+='</table>';
+    if(d.footnotes&&d.footnotes.length){h+='<div class="tx-detail-h">Rechtsgrundlagen &amp; Entscheidungen (Steuerberater)</div>';
+      h+='<table class="tx-dtable"><tr><th>Ref</th><th>Entscheidung — warum so</th><th>Rechtsgrundlage</th></tr>';
+      d.footnotes.forEach(function(f){h+='<tr><td><b>'+txEsc(f.ref)+'</b></td><td>'+txEsc(f.decision)+'</td><td>'+txEsc(f.law)+'</td></tr>';});h+='</table>';}
+    if(d.handlung){h+='<div class="tx-detail-h">Handlungsbedarf — muss ich zahlen? was melden?</div>';
+      h+='<div class="tx-detail-p"><b>Zahlen:</b> '+txEsc(d.handlung.zahlen)+'<br><b>Melden:</b> '+txEsc(d.handlung.melden)+'</div>';}
+    h+='<div class="tx-detail-p" style="opacity:.68">Live aus dem On-Chain-Ledger berechnet · Basis Consulta Mychel Mendes (CRC 28007/O-DF) · keine offizielle RFB-Position. Vollständige Monatsakte als PDF oben.</div>';
+    box.innerHTML=h;box.setAttribute("data-loaded","1");
+  }).catch(function(e){box.innerHTML='<div class="tx-none">Verteidigungsansicht nicht verfügbar (Server nicht erreichbar).</div>';});
 }
 
 
