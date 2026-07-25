@@ -226,7 +226,7 @@ var PTF_DEFAULTS=[
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
-  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:0.856702,avgEntry:2344.42,totalCost:2008.50,source:"ledger",decimals:6,contract:null}
+  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:1.532241,avgEntry:2344.42,totalCost:3592.24,source:"ledger",decimals:6,contract:null}
 ];
 var PTF_VERSION=5;
 
@@ -4518,6 +4518,15 @@ function ptfLoad(){try{
       if(_na){try{localStorage.setItem("ptf_ledger",JSON.stringify(ptfLedger));}catch(e){}
         try{ptfSyncServer();}catch(e){}
         console.log("PTF: "+_na+" Altcoin-Einstaende ins Ledger uebernommen");}
+    }
+    // One-time: ETH-Bestand on-chain-korrigiert auf 1,532241 (Ledger-Mainnet 1,5313 + Gas beide Chains, verifiziert 25.07.2026)
+    if(!localStorage.getItem("ptf_ethfix_v1")){
+      for(var _ei=0;_ei<ptfAssets.length;_ei++){if(ptfAssets[_ei].id==="eth"){ptfAssets[_ei].amount=1.532241;ptfAssets[_ei].avgEntry=2344.42;ptfAssets[_ei].totalCost=3592.24;break;}}
+      try{var _pp=JSON.parse(localStorage.getItem("pending_prices")||"[]");_pp=_pp.filter(function(x){return ((x.symbol||"")+"").toUpperCase()!=="ETH";});localStorage.setItem("pending_prices",JSON.stringify(_pp));if(typeof pendingPrices!=="undefined"&&pendingPrices){for(var _pi=pendingPrices.length-1;_pi>=0;_pi--){if(((pendingPrices[_pi].symbol||"")+"").toUpperCase()==="ETH")pendingPrices.splice(_pi,1);}}}catch(e){}
+      localStorage.setItem("ptf_ethfix_v1","1");
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      console.log("PTF: ETH-Bestand auf 1,532241 korrigiert (on-chain verifiziert)");
     }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
