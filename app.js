@@ -267,7 +267,7 @@ var CL=[
   {d:"26.01.26",b:10195,lo:.138,hi:.14,u:1420,n:"Filled"},
   {d:"25.04.26",b:10043,lo:.149,hi:.20,u:1630,n:"Partial (10K BURN returned)"}
 ];
-var MS=[{d:"05.12.25",b:10500,u:1196,n:"Market"}];
+var MS=[{d:"05.12.25",b:10500,u:1196,n:"Market"},{d:"01.08.26",b:200000,u:24000,n:"OTC Björn (191.709 stBURN = 200k BURN-eq)",id:"otc-bjoern-20260801"}];
 // Load persisted manual/OTC sells from localStorage and merge into MS.
 // These flow automatically into: Closed Positions, Realized Profit (TS/TR),
 // LP P&L, BR Tax backfill, and CSV exports — because everything reads from MS.
@@ -276,7 +276,7 @@ try{
   if(Array.isArray(msExtra)){
     for(var mex=0;mex<msExtra.length;mex++){
       var me=msExtra[mex];
-      if(me&&me.b>0&&me.u>=0&&me.d)MS.push({d:me.d,b:me.b,u:me.u,n:me.n||"OTC"});
+      if(!(me&&me.b>0&&me.u>=0&&me.d))continue; var dup=false; for(var ci2=0;ci2<MS.length;ci2++){var mm=MS[ci2]; if((me.id&&mm.id&&me.id===mm.id)||(Math.abs((mm.b||0)-me.b)<1000&&mm.d===me.d)){dup=true;break;}} if(!dup)MS.push({d:me.d,b:me.b,u:me.u,n:me.n||"OTC"});
     }
   }
 }catch(e){console.log("MS extra load err:",e);}
