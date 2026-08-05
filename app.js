@@ -988,8 +988,21 @@ async function fetchLPs(){
         var bDep=wtLiqToBurn(Number(liq),tL,tU);
         if(bDep<=0)continue;
         newLP.push({b:Math.round(bDep),lo:Math.round(pLo*1000000)/1000000,hi:Math.round(pHi*1000000)/1000000,label:"Sell"}); // COHERENCE v3: tick-exact bounds (4-dec rounding shifted fill by up to 5% in 0.1-cent ranges)
-      }catch(e2){continue;}
+      }catch(e2){window._lpScanErrs=(window._lpScanErrs||0)+1;continue;}
     }
+    // Leeres Ergebnis zaehlt, wenn der Scan fehlerfrei lief (kein RPC-Fehler):
+    // dann sind wirklich alle eigenen Positionen zu -> Anzeige leeren statt einfrieren.
+    if(newLP.length===0&&!window._lpScanErrs){
+      try{detectClosedLPs(newLP);}catch(e){}
+      var daoOnly=null;for(var d0=0;d0<LP.length;d0++){if(LP[d0].fr)daoOnly=LP[d0];}
+      LP=daoOnly?[daoOnly]:[];ALP=0;lpLive=true;
+      lpPrevious=[];
+      try{localStorage.setItem("lp_cache",JSON.stringify({lps:[],ts:Date.now()}));}catch(e){}
+      try{localStorage.setItem("lp_previous","[]");}catch(e){}
+      console.log("LP[] cleared: keine eigenen aktiven Positionen mehr");
+      if(P>0)render();
+    }
+    window._lpScanErrs=0;
     if(newLP.length>0){
       // Detect closed LPs before overwriting LP[]
       try{detectClosedLPs(newLP);}catch(e){console.log("detectClose err:",e);}
@@ -1166,7 +1179,8 @@ function render(){
           '<b style="color:var(--g)">$'+nfV.usdc.toLocaleString("en",{maximumFractionDigits:0})+'</b> '+
           '<span style="color:var(--dm)">('+F(LP[bestNf].b,0)+' BURN Position)</span></div>'+
       '</div>';}}
-  $("nextFill").innerHTML=nxtFill||'<span style="color:var(--g)">All active positions filled ✓</span>';
+  var _ownLp=0;for(var _ol=0;_ol<LP.length;_ol++)if(!LP[_ol].fr)_ownLp++;
+  $("nextFill").innerHTML=nxtFill||(_ownLp===0?'<span style="color:var(--dm)">🪜 Keine aktiven LPs — Leiter legen, wenn der nächste Zyklus startet</span>':'<span style="color:var(--g)">All active positions filled ✓</span>');
 
   // P&L ACTIVE (compute early, needed by portfolio + P&L section)
   var Pux=pxUnified(); // COHERENCE: same price as LP table & renderLpPnl (was: spot P)
@@ -2677,10 +2691,13 @@ async function scanLiqMap(){
         if(!(burnIn>0))continue;
         myLPs.push({b:Math.round(burnIn),lo:Math.round(lo3.lo*1000000)/1000000,hi:Math.round(lo3.hi*1000000)/1000000,label:"Sell"}); // COHERENCE v3: tick-exact bounds
       }
-      if(myLPs.length>0){
+      if(lpOwners.length>0){
+        // WICHTIG: auch bei 0 eigenen Positionen LP[] neu setzen — sonst bleiben
+        // rausgezogene Positionen (Next Fill / My Active LPs) fuer immer stehen.
         myLPs.sort(function(a,b){return a.lo-b.lo;});
         var daoKeep=null;for(var dk=0;dk<LP.length;dk++){if(LP[dk].fr)daoKeep=LP[dk];}
-        LP=myLPs;if(daoKeep)LP.push(daoKeep);
+        try{detectClosedLPs(myLPs);}catch(e){console.log("detectClose(lmap) err:",e);}
+        LP=myLPs.slice();if(daoKeep)LP.push(daoKeep);
         LP.sort(function(a,b){if(a.fr)return 1;if(b.fr)return-1;return a.lo-b.lo;});
         ALP=0;for(var al=0;al<LP.length;al++)if(!LP[al].fr)ALP+=LP[al].b;
         lpLive=true;
@@ -2689,6 +2706,12 @@ async function scanLiqMap(){
           var slimMy=[];for(var sm=0;sm<myLPs.length;sm++)slimMy.push(myLPs[sm]);
           localStorage.setItem("lp_cache",JSON.stringify({lps:slimMy,ts:Date.now()}));
         }catch(e){}
+        var _ppPrev2=0;try{_ppPrev2=poolPriceExact();}catch(e){}
+        lpPrevious=myLPs.map(function(lp){
+          var cv3=_ppPrev2>0?v3(lp.b,lp.lo,lp.hi,_ppPrev2):{left:lp.b,usdc:0,pct:0};
+          return{b:lp.b,lo:lp.lo,hi:lp.hi,left:cv3.left,usdc:cv3.usdc,pct:cv3.pct,ts:Date.now()};
+        });
+        try{localStorage.setItem("lp_previous",JSON.stringify(lpPrevious));}catch(e){}
         try{render();}catch(e){}
       }
     }catch(e){console.log("LP sync err:",e.message);}
@@ -6726,6 +6749,7 @@ function _invRows(m,balMap,curId){
     var g=m[w],net=g.out-g.inv;
     var b=balMap[w];
     var balTxt=b&&b.v!==undefined?F(b.v,0):"—";
+    if(b&&(b.st||0)>0.5)balTxt=F(b.v,0)+'<br><span style="color:var(--dm);font-size:8.5px">'+F(b.burn||0,0)+' B + '+F(b.st,0)+' stB</span>';
     var lpTxt=g.lpUsd>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
     var tokTxt=((g.tokIn||0)>0.5||(g.tokOut||0)>0.5)?('<span style="color:var(--g)">+'+F(g.tokIn||0,0)+'</span><br><span style="color:var(--r)">−'+F(g.tokOut||0,0)+'</span>'):"—";
     r+='<tr><td style="font-size:10px">'+addrName(w)+'</td>'
@@ -6742,12 +6766,12 @@ function renderInvestors(){
   var b=$("invBody");if(!b)return;
   var a=_invAgg();
   b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'hd\')" style="margin:6px 0;background:rgba(52,211,153,.12);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Robinhood)</button>'
     +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=2?', Swaps+LP-Flows ✓)':', inkl. LP-Entnahmen)')+'</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
     +'<button onclick="invLoadBal(\'burn\')" style="margin:6px 0;background:rgba(251,146,60,.12);border:1px solid var(--o);color:var(--o);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Arbitrum)</button>'
-    +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
+    +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain = BURN + stBURN×Ratio (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
 }
 async function invLoadBal(which){
   try{
@@ -6762,7 +6786,12 @@ async function invLoadBal(which){
         var v=null;
         if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
         else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-             if(hx&&hx!=="0x")v=Number(BigInt(hx))/1e18;}
+             var hx2=await rpcCall(STBURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+             var vb=(hx&&hx!=="0x")?Number(BigInt(hx))/1e18:0;
+             var vs=(hx2&&hx2!=="0x")?Number(BigInt(hx2))/1e18:0;
+             var rt=(typeof stR!=="undefined"&&stR>1)?stR:1.048;
+             v=vb+vs*rt;
+             if(isFinite(v)){bm[w]={v:v,burn:vb,st:vs,ts:Date.now()};v=null;}}
         if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
       }catch(e){}
       if(i%5===4)renderInvestors();
@@ -6793,7 +6822,12 @@ async function invAutoBal(){
           var v=null;
           if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
           else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-               if(hx&&hx!=="0x")v=Number(BigInt(hx))/1e18;}
+               var hx2=await rpcCall(STBURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+               var vb=(hx&&hx!=="0x")?Number(BigInt(hx))/1e18:0;
+               var vs=(hx2&&hx2!=="0x")?Number(BigInt(hx2))/1e18:0;
+               var rt=(typeof stR!=="undefined"&&stR>1)?stR:1.048;
+               v=vb+vs*rt;
+               if(isFinite(v)){bm[w]={v:v,burn:vb,st:vs,ts:Date.now()};v=null;}}
           if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
         }catch(e){}
       }
@@ -6803,7 +6837,7 @@ async function invAutoBal(){
 }
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260718c"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260804b"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
