@@ -6742,63 +6742,102 @@ function _invAgg(){
   }
   return {hd:hd,burn:burn};
 }
+var _INV_EXCL={"0xd049a54c8f8757ae7392f0c6f65a487f82ddfde9":1,"0xe7d324bfb30f7b6e314a1698cea57ac8eec4d366":1,"0x7ca7d7da54bbf2dd3bdcd12268154423d6e2eaaf":1,"0x0000000000000000000000000000000000000000":1,"0x000000000000000000000000000000000000dead":1,"0xdbde256870eb8fc3e7aeff5bbcbda1e00a640b37":1,"0xc36442b4a4522e871399cd717abdd847ab11fe88":1,"0xbfc6620459762a6e485ebf1cf7e532e06253b62f":1,"0xd36701e8cfe1c8edd993fa67b90134671c8f8424":1};
+var _MY_W=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd691c30db86c","0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2"];
+function _invWallets(m){
+  // ALLE relevanten Wallets: Scan-Daten + Adressbuch + eigene — Boersen/Contracts raus.
+  var set={};
+  Object.keys(m||{}).forEach(function(w){set[(w||"").toLowerCase()]=1;});
+  _MY_W.forEach(function(w){set[w]=1;});
+  try{Object.keys(ADDR_BOOK).forEach(function(w){set[(w||"").toLowerCase()]=1;});}catch(e){}
+  delete set[""];
+  return Object.keys(set).filter(function(w){return !_INV_EXCL[w]&&w.length===42;});
+}
+window._invPg={hd:0,burn:0};
+function invPg(which,d){window._invPg[which]=Math.max(0,(window._invPg[which]||0)+d);renderInvestors();}
 function _invRows(m,balMap,curId){
-  var ks=Object.keys(m).sort(function(a,b){return (m[b].inv+m[b].out)-(m[a].inv+m[a].out);}).slice(0,25);
+  var ks=_invWallets(m).sort(function(a,b){
+    var ba=(balMap[a]&&balMap[a].v)||0,bb=(balMap[b]&&balMap[b].v)||0;
+    if(bb!==ba)return bb-ba;                              // primaer: Token-Bestand
+    var ga=m[a]?((m[a].inv||0)+(m[a].out||0)):0,gb=m[b]?((m[b].inv||0)+(m[b].out||0)):0;
+    return gb-ga;                                          // sekundaer: Cash-Flow
+  });
+  var per=15,pg=window._invPg[curId]||0,maxPg=Math.max(0,Math.ceil(ks.length/per)-1);
+  if(pg>maxPg){pg=maxPg;window._invPg[curId]=pg;}
+  var page=ks.slice(pg*per,pg*per+per);
   var r="";
-  ks.forEach(function(w){
-    var g=m[w],net=g.out-g.inv;
+  page.forEach(function(w){
+    var g=m[w]||{inv:0,out:0,lpTok:0,lpUsd:0};
+    var net=(g.out||0)-(g.inv||0);
     var b=balMap[w];
-    var balTxt=b&&b.v!==undefined?F(b.v,0):"—";
+    var balTxt=b&&b.v!==undefined?F(b.v,0):"…";
     if(b&&(b.st||0)>0.5)balTxt=F(b.v,0)+'<br><span style="color:var(--dm);font-size:8.5px">'+F(b.burn||0,0)+' B + '+F(b.st,0)+' stB</span>';
-    var lpTxt=g.lpUsd>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
+    var lpTxt=(g.lpUsd||0)>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
     var tokTxt=((g.tokIn||0)>0.5||(g.tokOut||0)>0.5)?('<span style="color:var(--g)">+'+F(g.tokIn||0,0)+'</span><br><span style="color:var(--r)">−'+F(g.tokOut||0,0)+'</span>'):"—";
     r+='<tr><td style="font-size:10px">'+addrName(w)+'</td>'
-      +'<td style="color:var(--r)">$'+F(g.inv,0)+'</td>'
-      +'<td style="color:var(--g)">$'+F(g.out,0)+'</td>'
+      +'<td style="color:var(--r)">$'+F(g.inv||0,0)+'</td>'
+      +'<td style="color:var(--g)">$'+F(g.out||0,0)+'</td>'
       +'<td style="color:'+(net>=0?"var(--g)":"var(--warn)")+'">'+(net>=0?"+":"−")+"$"+F(Math.abs(net),0)+'</td>'
       +'<td style="font-size:9px;line-height:1.4">'+tokTxt+'</td>'
       +'<td style="font-size:10px">'+lpTxt+'</td>'
       +'<td style="font-size:10px">'+balTxt+'</td></tr>';
   });
-  return r||'<tr><td colspan="7" style="color:var(--dm)">keine Daten — '+(curId==="hd"?"HOODIE-Scan":"BURN-Trades/Scan")+' erst laufen lassen</td></tr>';
+  return {rows:r||('<tr><td colspan="7" style="color:var(--dm)">keine Daten — '+(curId==="hd"?"HOODIE-Scan":"BURN-Scan")+' erst laufen lassen</td></tr>'),pg:pg,maxPg:maxPg,total:ks.length};
+}
+function _invPager(which,info){
+  var bs='background:rgba(96,165,250,.12);border:1px solid var(--cy);color:var(--cy);border-radius:7px;padding:4px 12px;font-family:inherit;font-size:10px;cursor:pointer';
+  var bd='background:none;border:1px solid rgba(96,165,250,.2);color:var(--dm);border-radius:7px;padding:4px 12px;font-family:inherit;font-size:10px;opacity:.4';
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin:5px 0 12px">'
+    +'<button onclick="invPg(\''+which+'\',-1)" style="'+(info.pg<=0?bd:bs)+'" '+(info.pg<=0?'disabled':'')+'>← zurück</button>'
+    +'<span style="font-size:9px;color:var(--dm)">Seite '+(info.pg+1)+'/'+(info.maxPg+1)+' · '+info.total+' Wallets · nach Bestand sortiert</span>'
+    +'<button onclick="invPg(\''+which+'\',1)" style="'+(info.pg>=info.maxPg?bd:bs)+'" '+(info.pg>=info.maxPg?'disabled':'')+'>weiter →</button></div>';
 }
 function renderInvestors(){
   var b=$("invBody");if(!b)return;
   var a=_invAgg();
+  var ih=_invRows(a.hd,_invBal.hd,"hd");
+  var ib=_invRows(a.burn,_invBal.burn,"burn");
   b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+_invRows(a.hd,_invBal.hd,"hd")+'</tbody></table></div>'
-    +'<button onclick="invLoadBal(\'hd\')" style="margin:6px 0;background:rgba(52,211,153,.12);border:1px solid var(--g);color:var(--g);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Robinhood)</button>'
-    +'<div class="lb" style="margin-top:12px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=2?', Swaps+LP-Flows ✓)':', inkl. LP-Entnahmen)')+'</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+_invRows(a.burn,_invBal.burn,"burn")+'</tbody></table></div>'
-    +'<button onclick="invLoadBal(\'burn\')" style="margin:6px 0;background:rgba(251,146,60,.12);border:1px solid var(--o);color:var(--o);border-radius:8px;padding:6px 12px;font-family:inherit;font-size:10px">Bestände laden (Arbitrum)</button>'
-    +'<div style="font-size:9px;color:var(--dm);margin-top:6px">Investiert = Käufe + LP-Einzahlungen ($-Seite) · Rausgezogen = Verkäufe + LP-Entnahmen ($-Seite) · Netto = realisierter Cash-Flow · Bestand on-chain = BURN + stBURN×Ratio (Button, 10-min-Cache) · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+ih.rows+'</tbody></table></div>'
+    +_invPager("hd",ih)
+    +'<div class="lb" style="margin-top:6px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=4?', inkl. OTC/Transfers ✓)':')')+'</div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+ib.rows+'</tbody></table></div>'
+    +_invPager("burn",ib)
+    +'<div style="font-size:9px;color:var(--dm);margin-top:2px">Investiert = Käufe + LP-Einzahlungen + OTC-Zahlungen · Rausgezogen = Verkäufe + LP-Entnahmen + erhaltene $ · Bestand on-chain: BURN + stBURN×Ratio bzw. HOODIE (lädt automatisch, 10-min-Cache) · "…" = lädt noch · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
 }
-async function invLoadBal(which){
+async function _invLoadAll(force){
+  if(window._invBalBusy)return;window._invBalBusy=true;
   try{
     var a=_invAgg();
-    var m=which==="hd"?a.hd:a.burn;
-    var bm=_invBal[which];
-    var ks=Object.keys(m).sort(function(x,y){return (m[y].inv+m[y].out)-(m[x].inv+m[x].out);}).slice(0,25);
-    for(var i=0;i<ks.length;i++){
-      var w=ks[i];
-      if(bm[w]&&Date.now()-bm[w].ts<600000)continue;
-      try{
-        var v=null;
-        if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
-        else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-             var hx2=await rpcCall(STBURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-             var vb=(hx&&hx!=="0x")?Number(BigInt(hx))/1e18:0;
-             var vs=(hx2&&hx2!=="0x")?Number(BigInt(hx2))/1e18:0;
-             var rt=(typeof stR!=="undefined"&&stR>1)?stR:1.048;
-             v=vb+vs*rt;
-             if(isFinite(v)){bm[w]={v:v,burn:vb,st:vs,ts:Date.now()};v=null;}}
-        if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
-      }catch(e){}
-      if(i%5===4)renderInvestors();
+    var jobs=[["burn",a.burn],["hd",a.hd]];
+    for(var j=0;j<jobs.length;j++){
+      var which=jobs[j][0],bm=_invBal[which];
+      var ks=_invWallets(jobs[j][1]);
+      for(var i=0;i<ks.length;i++){
+        var w=ks[i];
+        if(!force&&bm[w]&&Date.now()-bm[w].ts<600000)continue;
+        try{
+          if(which==="hd"){
+            var vh=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+            if(vh!==null&&isFinite(vh))bm[w]={v:vh,ts:Date.now()};
+          }else{
+            var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+            var hx2=await rpcCall(STBURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
+            var vb=(hx&&hx!=="0x")?Number(BigInt(hx))/1e18:0;
+            var vs=(hx2&&hx2!=="0x")?Number(BigInt(hx2))/1e18:0;
+            var rt=(typeof stR!=="undefined"&&stR>1)?stR:1.048;
+            var v=vb+vs*rt;
+            if(isFinite(v))bm[w]={v:v,burn:vb,st:vs,ts:Date.now()};
+          }
+        }catch(e){}
+        if(i%6===5&&window._invOpen)renderInvestors();
+      }
     }
-    renderInvestors();
-  }catch(e){console.log("invLoadBal err:",e&&e.message);}
+    if(window._invOpen)renderInvestors();
+  }catch(e){console.log("invLoadAll err:",e&&e.message);}
+  window._invBalBusy=false;
 }
+function invLoadBal(which){_invLoadAll(true);}
 var _burnStats=null,_burnStatsTs=0;
 async function invLoadBurnStats(){
   if(_burnStats&&Date.now()-_burnStatsTs<600000)return;
@@ -6808,36 +6847,10 @@ async function invLoadBurnStats(){
     if(j&&j.wallets&&j.lastBlk>0){_burnStats=j;_burnStatsTs=Date.now();renderInvestors();}
   }catch(e){console.log("burnstats err:",e&&e.message);}
 }
-async function invAutoBal(){
-  try{
-    var a=_invAgg();
-    var jobs=[["hd",a.hd],["burn",a.burn]];
-    for(var j=0;j<jobs.length;j++){
-      var which=jobs[j][0],m=jobs[j][1],bm=_invBal[which];
-      var ks=Object.keys(m).sort(function(x,y){return (m[y].inv+m[y].out)-(m[x].inv+m[x].out);}).slice(0,10);
-      for(var i=0;i<ks.length;i++){
-        var w=ks[i];
-        if(bm[w]&&Date.now()-bm[w].ts<600000)continue;
-        try{
-          var v=null;
-          if(which==="hd"){v=await hdCall(HOODIE_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));}
-          else{var hx=await rpcCall(BURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-               var hx2=await rpcCall(STBURN_TK,"0x70a08231"+w.slice(2).toLowerCase().padStart(64,"0"));
-               var vb=(hx&&hx!=="0x")?Number(BigInt(hx))/1e18:0;
-               var vs=(hx2&&hx2!=="0x")?Number(BigInt(hx2))/1e18:0;
-               var rt=(typeof stR!=="undefined"&&stR>1)?stR:1.048;
-               v=vb+vs*rt;
-               if(isFinite(v)){bm[w]={v:v,burn:vb,st:vs,ts:Date.now()};v=null;}}
-          if(v!==null&&isFinite(v))bm[w]={v:v,ts:Date.now()};
-        }catch(e){}
-      }
-    }
-    renderInvestors();
-  }catch(e){}
-}
+async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260804b"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260805inv2"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
