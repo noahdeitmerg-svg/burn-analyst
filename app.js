@@ -6773,12 +6773,10 @@ function _invRows(m,balMap,curId){
     var balTxt=b&&b.v!==undefined?F(b.v,0):"…";
     if(b&&(b.st||0)>0.5)balTxt=F(b.v,0)+'<br><span style="color:var(--dm);font-size:8.5px">'+F(b.burn||0,0)+' B + '+F(b.st,0)+' stB</span>';
     var lpTxt=(g.lpUsd||0)>0.5?(F(g.lpTok,0)+' <span style="color:var(--cy)">$'+F(g.lpUsd,0)+'</span>'):"—";
-    var tokTxt=((g.tokIn||0)>0.5||(g.tokOut||0)>0.5)?('<span style="color:var(--g)">+'+F(g.tokIn||0,0)+'</span><br><span style="color:var(--r)">−'+F(g.tokOut||0,0)+'</span>'):"—";
     r+='<tr><td style="font-size:10px">'+addrName(w)+'</td>'
       +'<td style="color:var(--r)">$'+F(g.inv||0,0)+'</td>'
       +'<td style="color:var(--g)">$'+F(g.out||0,0)+'</td>'
       +'<td style="color:'+(net>=0?"var(--g)":"var(--warn)")+'">'+(net>=0?"+":"−")+"$"+F(Math.abs(net),0)+'</td>'
-      +'<td style="font-size:9px;line-height:1.4">'+tokTxt+'</td>'
       +'<td style="font-size:10px">'+lpTxt+'</td>'
       +'<td style="font-size:10px">'+balTxt+'</td></tr>';
   });
@@ -6798,12 +6796,12 @@ function renderInvestors(){
   var ih=_invRows(a.hd,_invBal.hd,"hd");
   var ib=_invRows(a.burn,_invBal.burn,"burn");
   b.innerHTML='<div class="lb">🧥 HOODIE (komplett ab Pool-Geburt)</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+ih.rows+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand</th></tr></thead><tbody>'+ih.rows+'</tbody></table></div>'
     +_invPager("hd",ih)
     +'<div class="lb" style="margin-top:6px">🔥 BURN ('+(_burnStats?'Allzeit ✓ bis Block '+F(_burnStats.lastBlk,0):'seit Log-Beginn — Allzeit lädt…')+(_burnStats&&_burnStats.v>=4?', inkl. OTC/Transfers ✓)':')')+'</div>'
-    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>Token ±</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+ib.rows+'</tbody></table></div>'
+    +'<div class="ov"><table class="mkt-tbl"><thead><tr><th>Wallet</th><th>Investiert</th><th>Rausgezogen</th><th>Netto</th><th>In LP (Token·$)</th><th>Bestand (BURN-eq)</th></tr></thead><tbody>'+ib.rows+'</tbody></table></div>'
     +_invPager("burn",ib)
-    +'<div style="font-size:9px;color:var(--dm);margin-top:2px">Investiert = Käufe + LP-Einzahlungen + OTC-Zahlungen · Rausgezogen = Verkäufe + LP-Entnahmen + erhaltene $ · Bestand on-chain: BURN + stBURN×Ratio bzw. HOODIE (lädt automatisch, 10-min-Cache) · "…" = lädt noch · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
+    +'<div style="font-size:9px;color:var(--dm);margin-top:2px">Investiert = Käufe + LP-Einzahlungen + OTC-Zahlungen ($) · Rausgezogen = Verkäufe + LP-Entnahmen + erhaltene $ · Netto = realisierter Cash-Flow · <b>Bestand</b> = echter aktueller On-Chain-Bestand (BURN + stBURN×Ratio bzw. HOODIE, lädt automatisch, 10-min-Cache) · "…" = lädt noch · Token in aktiven LPs zählen nicht zum Wallet-Bestand</div>';
 }
 async function _invLoadAll(force){
   if(window._invBalBusy)return;window._invBalBusy=true;
@@ -6850,7 +6848,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260805inv2"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260805inv3"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
