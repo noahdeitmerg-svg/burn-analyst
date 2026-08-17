@@ -4551,6 +4551,21 @@ function ptfLoad(){try{
       try{ptfSyncServer();}catch(e){}
       console.log("PTF: ETH auf 1,531305 @ Ø $2.082,50 korrigiert (aus 23 Zugaengen berechnet)");
     }
+    // v5: ETH-Einstand ON-CHAIN VERIFIZIERT setzen + haengenden "Einkaufspreis eintragen"-Prompt raeumen.
+    // Ledger 0x9fFa19..871D2: 25 Zugaenge = 2.008479 ETH, kein Abgang. Jeder Zugang zum ETH-Kurs am Zugangstag
+    // bewertet -> Kosten $4.086,99, Ø $2.034,87. Vor heute 1,561 ETH @ ~$2.081; heute +0,447 ETH @ $1.874 -> Ø faellt.
+    if(!localStorage.getItem("ptf_ethfix_v5")){
+      var _ETHAMT=2.008479,_ETHAVG=2034.87,_ETHCOST=4086.99;
+      try{for(var _q5=0;_q5<ptfAssets.length;_q5++){if(ptfAssets[_q5].id==="eth"){ptfAssets[_q5].amount=_ETHAMT;ptfAssets[_q5].avgEntry=_ETHAVG;ptfAssets[_q5].totalCost=_ETHCOST;break;}}}catch(e){}
+      try{var _p5=JSON.parse(localStorage.getItem("pending_prices")||"[]");_p5=_p5.filter(function(x){return ((x.symbol||"")+"").toUpperCase()!=="ETH";});localStorage.setItem("pending_prices",JSON.stringify(_p5));}catch(e){}
+      try{if(typeof pendingPrices!=="undefined"&&pendingPrices){for(var _pj=pendingPrices.length-1;_pj>=0;_pj--){if(((pendingPrices[_pj].symbol||"")+"").toUpperCase()==="ETH")pendingPrices.splice(_pj,1);}}}catch(e){}
+      try{if(typeof ptfPendingDetection!=="undefined"&&ptfPendingDetection&&((ptfPendingDetection.symbol||"")+"").toLowerCase()==="eth"){ptfPendingDetection=null;var _dd5=document.getElementById("ptfDetectDiv");if(_dd5)_dd5.innerHTML="";}}catch(e){}
+      try{var _lb5=JSON.parse(localStorage.getItem("ptf_last_balances")||"{}");_lb5.eth=_ETHAMT;if(!(_lb5.btc>0)){for(var _r5=0;_r5<ptfAssets.length;_r5++){if(ptfAssets[_r5].id==="btc"){_lb5.btc=ptfAssets[_r5].amount;break;}}}localStorage.setItem("ptf_last_balances",JSON.stringify(_lb5));if(typeof ptfLastBalances!=="undefined"){ptfLastBalances.eth=_ETHAMT;if(_lb5.btc>0)ptfLastBalances.btc=_lb5.btc;}}catch(e){}
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      localStorage.setItem("ptf_ethfix_v5","1");
+      console.log("PTF: v5 — ETH auf Ø $2.005 (2.008479, Kosten $4.027) gesetzt, haengender Preis-Prompt geraeumt");
+    }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed).
@@ -5093,7 +5108,8 @@ function ptfRenderTable(){
       }
       var actH=a.source==="ledger"?'<span class="tg" style="background:rgba(34,211,238,.1);color:var(--cy)">ledger</span>':'<span style="cursor:pointer;color:var(--r);font-size:10px" onclick="ptfRemoveAsset(\''+a.id+'\')" title="Delete">×</span>';
       var costH=a.totalCost>0?'$'+F(a.totalCost,2):"—";
-      rows.push('<tr><td class="bld">'+a.symbol+failBadge+'<div style="font-size:8px;color:'+srcClr+'">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--dm)">'+costH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
+      var accent=a.totalCost>0?(pnl>=0?"var(--g)":"var(--r)"):"var(--dm)";
+      rows.push('<tr><td class="bld" style="border-left:3px solid '+accent+';padding:13px 10px 13px 9px"><div style="font-size:15px;font-weight:800;letter-spacing:.4px;color:#fff;line-height:1.1">'+a.symbol+failBadge+'</div><div style="font-size:9px;font-weight:500;color:'+srcClr+';margin-top:2px">'+a.name+'</div></td><td>'+F(a.amount,a.decimals)+'</td><td>'+entryH+'</td><td>'+(price>0?"$"+ptfFP(price):"—")+' '+chgH+'</td><td style="color:var(--dm)">'+costH+'</td><td style="color:var(--g)">$'+F(val,2)+'</td><td>'+pnlH+'</td><td>'+pctH+'</td><td>'+actH+'</td></tr>');
     }
     $("ptfTableB").innerHTML=rows.join("")||'<tr><td colspan="9" style="color:var(--dm);text-align:center">No assets</td></tr>';
     ptfTotalDisplay=totVal;
@@ -6848,7 +6864,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260805inv3"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260817eth5ui"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
@@ -6862,3 +6878,20 @@ setTimeout(function(){try{_ptfLastSync=0;ptfSyncServer();}catch(e){}},6000);
 setTimeout(function(){try{refreshPoolTick();}catch(e){}},4000);
 setInterval(function(){if(!document.hidden){try{refreshPoolTick();}catch(e){}}},60000);
 document.addEventListener("visibilitychange",function(){if(!document.hidden){go();fetchSt();fetchTrades();fetchWal();startRefresh();try{refreshPoolTick();}catch(e){}try{fetchHoodie();}catch(e){}}});
+// ═══ UI: Altcoin-Card direkt unter die G/V-Card ziehen + Zeilen-Abstand/Trenner in der Asset-Tabelle ═══
+(function(){try{
+  var _mv=function(){try{
+    var p=document.getElementById("sec-ptf"),g=document.getElementById("sec-pnl");
+    if(!p||!g)return;
+    var pc=p.closest(".acc"),gc=g.closest(".acc");
+    if(pc&&gc&&pc!==gc&&gc.nextSibling!==pc){gc.parentNode.insertBefore(pc,gc.nextSibling);}
+  }catch(e){}};
+  var _st=function(){try{
+    if(document.getElementById("ptfRowStyle"))return;
+    var s=document.createElement("style");s.id="ptfRowStyle";
+    s.textContent="#ptfTableB td{padding-top:11px;padding-bottom:11px;border-bottom:1px solid rgba(60,80,110,.14)}#ptfTableB tr:last-child td{border-bottom:none}";
+    document.head.appendChild(s);
+  }catch(e){}};
+  if(document.readyState!=="loading"){_st();_mv();}
+  window.addEventListener("load",function(){_st();setTimeout(_mv,250);setTimeout(_mv,1200);});
+}catch(e){}})();
