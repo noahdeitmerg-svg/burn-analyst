@@ -4564,7 +4564,17 @@ function ptfLoad(){try{
       try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
       try{ptfSyncServer();}catch(e){}
       localStorage.setItem("ptf_ethfix_v5","1");
-      console.log("PTF: v5 — ETH auf Ø $2.005 (2.008479, Kosten $4.027) gesetzt, haengender Preis-Prompt geraeumt");
+      console.log("PTF: v5 — ETH auf Ø $2.034,87 (2.008479 ETH, Kosten $4.086,99) gesetzt, haengender Preis-Prompt geraeumt");
+    }
+    // v6: Einstand aus Bitpanda-Daten korrigiert (voll verifiziert). Nur diese 4 sind 100% belegt;
+    // BTC/LINK (teilweise) + die 12 Kraken-Coins bleiben bis zum Kraken/DEX-Export unangetastet.
+    if(!localStorage.getItem("ptf_altfix_v6")){
+      var _CB6={uni:5.9315,arb:0.2207,eigen:0.4316,ar:3.6691};
+      try{for(var _v6=0;_v6<ptfAssets.length;_v6++){var _a6=ptfAssets[_v6];var _k6=((_a6.id||"")+"").toLowerCase();if(_CB6[_k6]!=null&&_a6.amount>0){_a6.avgEntry=_CB6[_k6];_a6.totalCost=Math.round(_a6.amount*_CB6[_k6]*100)/100;}}}catch(e){}
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      localStorage.setItem("ptf_altfix_v6","1");
+      console.log("PTF: v6 — UNI/ARB/EIGEN/AR Einstand aus Bitpanda korrigiert");
     }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
@@ -6864,7 +6874,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260817eth5ui"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260817eth6alt"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
