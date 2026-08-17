@@ -4586,6 +4586,15 @@ function ptfLoad(){try{
       localStorage.setItem("ptf_altfix_v7","1");
       console.log("PTF: v7 — TIA/AKT/TAO/CFG/BTC Einstand aus Kraken verifiziert");
     }
+    // v8: aus On-Chain-DEX-Käufen (bb500/Wallet2) verifiziert. RNDR/FET waren bereits exakt.
+    if(!localStorage.getItem("ptf_altfix_v8")){
+      var _CB8={rndr:1.299,fet:0.2133,aave:180.95,link:10.387,ondo:0.3533};
+      try{for(var _v8=0;_v8<ptfAssets.length;_v8++){var _a8=ptfAssets[_v8];var _k8=((_a8.id||"")+"").toLowerCase();if(_CB8[_k8]!=null&&_a8.amount>0){_a8.avgEntry=_CB8[_k8];_a8.totalCost=Math.round(_a8.amount*_CB8[_k8]*100)/100;}}}catch(e){}
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      localStorage.setItem("ptf_altfix_v8","1");
+      console.log("PTF: v8 — RNDR/FET/AAVE/LINK/ONDO Einstand aus DEX-Käufen verifiziert");
+    }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed).
@@ -6884,7 +6893,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260817kraken7"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260817dex8"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}

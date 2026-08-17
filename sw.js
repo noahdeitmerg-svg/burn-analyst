@@ -1,4 +1,4 @@
-var CACHE_NAME = 'burn-v7';
+var CACHE_NAME = 'burn-v8';
 
 self.addEventListener('install', function(e) {
   self.skipWaiting();
