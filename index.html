@@ -793,6 +793,17 @@ td{padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;
       </div>
     </div>
     <div class="sep" style="margin:10px 0"></div>
+    <div class="col" onclick="tog(this,'sec-exch-cash');exchCashLoad()" style="font-size:10px">💵 Börsen-Cash (Kraken / Binance)</div>
+    <div id="sec-exch-cash" class="col-b" style="padding:8px 0">
+      <div style="font-size:9px;color:var(--dm);margin-bottom:8px">Cash das auf Investment wartet — fließt in den Gesamtwert. Manuell, da Börsen on-chain nicht auslesbar sind.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end">
+        <div><div style="font-size:8px;color:var(--dm)">KRAKEN $</div><input class="inp" id="exchKraken" placeholder="6000" style="width:90px;font-size:10px" type="number" step="any"></div>
+        <div><div style="font-size:8px;color:var(--dm)">BINANCE $</div><input class="inp" id="exchBinance" placeholder="3500" style="width:90px;font-size:10px" type="number" step="any"></div>
+        <button class="btn" onclick="exchCashSave()" style="font-size:10px">Speichern</button>
+      </div>
+      <div id="exchCashMsg" style="font-size:9px;color:var(--g);margin-top:4px"></div>
+    </div>
+    <div class="sep" style="margin:10px 0"></div>
     <div class="col" onclick="tog(this,'sec-ptf-ledger')" style="font-size:10px">📒 Cost Basis Ledger</div>
     <div id="sec-ptf-ledger" class="col-b">
       <div class="ov">
@@ -1241,7 +1252,7 @@ document.addEventListener('DOMContentLoaded',()=>{_renderIcons();
   mo.observe(document.body,{childList:true,subtree:true});
 });
 </script>
-<script src="app.js?v=20260822hd10"></script>
+<script src="app.js?v=20260822hd11"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

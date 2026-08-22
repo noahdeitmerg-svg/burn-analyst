@@ -5313,6 +5313,31 @@ function ptfFmtDate(ts,range){
 
 /* ── v4: Dual-Linien Total-Chart (paper + real) + Alt-Subchart aus Server-Endpoint ── */
 var ptfTotPaper=[],ptfTotReal=[],ptfTotFlows=[],ptfTotFlowsReal=[],ptfAltSeries=[],ptfLiquidSeries=[],ptfTotLoaded=false;
+// ═══ Börsen-Cash (Kraken/Binance) — manuell gepflegt, fließt in den Server-Gesamtwert ═══
+var EXCH_CASH_URL="https://95-216-152-31.sslip.io/exchangecash";
+function exchCashLoad(){
+  try{
+    fetch(EXCH_CASH_URL).then(function(r){return r.json();}).then(function(d){
+      if(!d)return;
+      var k=$("exchKraken"),b=$("exchBinance");
+      if(k&&document.activeElement!==k)k.value=(d.kraken!=null?d.kraken:"");
+      if(b&&document.activeElement!==b)b.value=(d.binance!=null?d.binance:"");
+    }).catch(function(){});
+  }catch(e){}
+}
+function exchCashSave(){
+  try{
+    var k=parseFloat(($("exchKraken")||{}).value)||0, b=parseFloat(($("exchBinance")||{}).value)||0;
+    var msg=$("exchCashMsg"); if(msg){msg.style.color="var(--dm)";msg.textContent="Speichere…";}
+    fetch(EXCH_CASH_URL,{method:"POST",mode:"cors",body:JSON.stringify({kraken:k,binance:b,ptfKey:"43dcb5719607e92861ff"})})
+      .then(function(r){return r.text();}).then(function(t){
+        var m=$("exchCashMsg");
+        if(m){var ok=t.indexOf("ok")>=0;m.style.color=ok?"var(--g)":"var(--r)";m.textContent=ok?("Gespeichert ✓ — $"+F(k+b,0)+" im Gesamt"):("Fehler: "+t);}
+        setTimeout(function(){try{ptfLoadTotalSeries();}catch(e){}},1500);
+      }).catch(function(e){var m=$("exchCashMsg");if(m){m.style.color="var(--r)";m.textContent="Fehler: "+(e&&e.message);}});
+  }catch(e){}
+}
+try{setTimeout(exchCashLoad,3000);}catch(e){}
 function ptfLoadTotalSeries(){
   try{
     fetch("https://95-216-152-31.sslip.io/history?scope=cryptototal").then(function(r){return r.json();}).then(function(d){
@@ -6905,7 +6930,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260822hd10"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260822hd11"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
