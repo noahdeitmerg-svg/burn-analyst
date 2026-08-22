@@ -6286,6 +6286,18 @@ async function fetchHoodie(){
         var ep=parseFloat(at.quote_token_price_usd);if(ep>0)_hd.ethUsd=ep;
       }
     }catch(e){console.log("HD GT err:",e&&e.message);}
+    // LIVE-PREIS on-chain: Uniswap-V4 slot0 (sqrtPriceX96) × Live-ETH. GeckoTerminal-Kurs lagt
+    // (stale WETH-$) und der Robinhood-Pool wird oft rate-limitiert (429) — on-chain ist Echtzeit.
+    try{
+      var _s0=await hdRpc("eth_call",[{to:HD_PM,data:"0x1e2eaeafca84f784a2cb352b80f590c4ed7b76f2eb66f866ced0ee049c95b0dafaf8a615"},"latest"]);
+      if(_s0&&_s0!=="0x"){
+        var _sq=BigInt(_s0)&((1n<<160n)-1n);
+        var _ratio=Math.pow(Number(_sq)/Math.pow(2,96),2); // HOODIE pro ETH (beide 18 dec)
+        var _eU=_hd.ethUsd||0;
+        try{var _er=await fetch("https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd");var _ej=await _er.json();var _ev=_ej&&_ej.ethereum&&_ej.ethereum.usd;if(_ev>0){_eU=_ev;_hd.ethUsd=_ev;}}catch(e){}
+        if(_ratio>0&&_eU>0){_hd.px=_eU/_ratio;_hd.pxSrc="onchain";}
+      }
+    }catch(e){console.log("HD slot0 err:",e&&e.message);}
     try{
       try{
         var dd=await hdCall(HOODIE_TK,"0x70a08231"+"000000000000000000000000000000000000dEaD".toLowerCase().padStart(64,"0"));
@@ -6893,7 +6905,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260817dex8"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260822hd9"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
