@@ -4603,7 +4603,7 @@ function ptfLoad(){try{
   setTimeout(function(){try{
     fetch("https://95-216-152-31.sslip.io/history").then(function(r){return r.json();}).then(function(data){
       if(!data||!data.length)return;
-      var RK="ptf_snap_srvwin1";
+      var RK="ptf_snap_srvwin2";
       var byTs={};
       if(localStorage.getItem(RK)==="1"){
         for(var mi=0;mi<ptfSnapshots.length;mi++){byTs[ptfSnapshots[mi][0]]=ptfSnapshots[mi];}
@@ -6905,7 +6905,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260822hd9"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260822hd10"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
