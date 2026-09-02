@@ -4743,10 +4743,12 @@ function ptfDetectLedgerBalances(){
         .then(function(j){if(j.result){ptfFetchFails.eth=0;cb(parseInt(j.result,16)/1e18);}else{fetchEth(cb);}})
         .catch(function(){clearTimeout(tm);fetchEth(cb);});
     }
-    // Step 2: BTC-Live-Bestand = Summe ALLER belegten Empfangsadressen (Ledger rotiert Adressen).
-    // Pro Adresse mempool.space -> blockstream Fallback. ALL-OR-NOTHING: schlaegt EINE Adresse
-    // an beiden Hosts fehl, wird der komplette Zyklus verworfen (cb(0)) und der gecachte Wert
-    // behalten — so kann eine Teil-Summe den Bestand nie faelschlich reduzieren.
+    // Step 2: BTC-Live-Bestand.
+    // BEVORZUGT der Server-Scanner (/btcbalance): leitet aus dem xpub per Gap-Limit ALLE Adressen ab
+    // und erkennt dadurch AUTOMATISCH neue Empfangs-/Wechseladressen (xpub bleibt privat auf dem Server).
+    // FALLBACK (Server nicht erreichbar): Client summiert die bekannten Empfangsadressen direkt.
+    // Adress-Summe ist ALL-OR-NOTHING: schlaegt EINE Adresse an beiden Hosts fehl, wird der Zyklus
+    // verworfen (cb(0)) und der gecachte Wert behalten — eine Teil-Summe senkt den Bestand nie faelschlich.
     function fetchBtc(cb){
       var addrs=(typeof PTF_LEDGER_BTC_ADDRS!=="undefined"&&PTF_LEDGER_BTC_ADDRS&&PTF_LEDGER_BTC_ADDRS.length)?PTF_LEDGER_BTC_ADDRS:[PTF_LEDGER_BTC_ADDR];
       var sumSat=0,idx=0,anyFail=false;
@@ -4786,7 +4788,20 @@ function ptfDetectLedgerBalances(){
         }
         oneAddr(addrs[idx],function(ok,sat){if(!ok){anyFail=true;}else{sumSat+=(sat||0);}idx++;next();});
       }
-      next();
+      // Zuerst Server-Scanner versuchen (erkennt neue Adressen automatisch), sonst Client-Adress-Summe.
+      var _srvBtc="https://95-216-152-31.sslip.io/btcbalance";
+      var _acS=new AbortController();var _tmS=setTimeout(function(){_acS.abort();},9000);
+      fetch(_srvBtc,{signal:_acS.signal})
+        .then(function(r){clearTimeout(_tmS);return r.json();})
+        .then(function(j){
+          if(j&&typeof j.btc==="number"&&j.btc>0&&!j.error){
+            ptfFetchFails.btc=0;
+            console.log("PTF detect: BTC vom Server-Scanner = "+j.btc.toFixed(8)+" ("+(j.funded||"?")+" belegte Adressen, Gap-Limit-Scan)");
+            cb(j.btc);return;
+          }
+          next(); // Server ohne gueltigen Wert -> Client-Summe
+        })
+        .catch(function(){clearTimeout(_tmS);next();}); // Server nicht erreichbar -> Client-Summe
     }
     fetchEth(function(newEth){
       fetchBtc(function(newBtc){
@@ -6973,7 +6988,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260902btc9"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260902btc10"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
