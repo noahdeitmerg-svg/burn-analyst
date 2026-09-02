@@ -206,6 +206,9 @@ var ptfAssets=[],ptfLedger=[],ptfPrices={},ptfLastFetch=0,ptfSimTargets={},ptfSn
 var ptfSortCol="value",ptfSortAsc=false,ptfTotalDisplay=0;
 var PTF_LEDGER_WALLET="0x9fFa190b0d2543F35DFa1A2955BC2F4C544871D2";
 var PTF_LEDGER_BTC_ADDR="bc1qj79tmeql5m8wqxac5wvsdkwnkns7ztyehyv5t4";
+// BTC-Ledger: alle belegten Empfangsadressen (BIP84, per xpub-Scan verifiziert). Live-Bestand = Summe dieser Adressen (mempool.space). Summe aktuell 0.01027315 BTC.
+var PTF_LEDGER_BTC_ADDRS=["bc1qta870jxejlmczzcxm24q4ad8dajft2d3sulgg5","bc1qxmnyxsgt2hyzgjpgj8289kel55xqhnrsn4e430","bc1qnt2q0a9xw7gsc3pyglr732j4eazjzn78w9ltz7","bc1qj79tmeql5m8wqxac5wvsdkwnkns7ztyehyv5t4","bc1qclpfe9neuzcd5uvq895z657pdv99tlvjhhl2cl","bc1qj7dmpmz0nd8kgh8jmrguumza4j7jnvz9krkmex","bc1qhyvevdksxhhduhuq29syr9a5huv0956gklfg4g"];
+var PTF_ICP_SCAM="0x5c3fa1f5dddc102b7f734a92bd5a7c6665bd7279"; // Fake-Airdrop-Token ("ICP") — wertlos, NIE tracken/interagieren
 var ptfLastBalances={eth:0,btc:0},ptfPendingDetection=null;
 var PTF_DEFAULTS=[
   {id:"link",symbol:"LINK",name:"Chainlink",geckoId:"chainlink",amount:32.0574,avgEntry:10.30,totalCost:330,source:"ledger",decimals:4,contract:"0xf97f4df75117a78c1A5a0DBb814Af92458539FB4"},
@@ -222,7 +225,7 @@ var PTF_DEFAULTS=[
   {id:"syrup",symbol:"SYRUP",name:"Syrup",geckoId:"syrup",amount:77.6098,avgEntry:0.425,totalCost:33,source:"ledger",decimals:4,contract:null},
   {id:"eigen",symbol:"EIGEN",name:"EigenLayer",geckoId:"eigenlayer",amount:135.127,avgEntry:0.407,totalCost:55,source:"manual",decimals:2,contract:null},
   {id:"ar",symbol:"AR",name:"Arweave",geckoId:"arweave",amount:31.920,avgEntry:3.60,totalCost:115,source:"manual",decimals:2,contract:null},
-  {id:"btc",symbol:"BTC",name:"Bitcoin",geckoId:"bitcoin",amount:0.00692908,avgEntry:68000,totalCost:471.18,source:"ledger",decimals:8,contract:null},
+  {id:"btc",symbol:"BTC",name:"Bitcoin",geckoId:"bitcoin",amount:0.01027315,avgEntry:69950,totalCost:718.61,source:"ledger",decimals:8,contract:null},
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
@@ -4595,6 +4598,24 @@ function ptfLoad(){try{
       localStorage.setItem("ptf_altfix_v8","1");
       console.log("PTF: v8 — RNDR/FET/AAVE/LINK/ONDO Einstand aus DEX-Käufen verifiziert");
     }
+    // v9: BTC-Bestand auf 0.01027315 korrigiert (Summe der 7 belegten Empfangsadressen, per xpub-Scan
+    // verifiziert; alter Wert 0.00692908 = nur die ersten 3 Adressen). Kostenbasis Ø $69.950 (Kraken, v7).
+    // Zusaetzlich: Fake-Airdrop "ICP" (0x5c3f..7279) aus dem Tracking entfernen — wertlos, nie interagieren.
+    if(!localStorage.getItem("ptf_btcfix_v9")){
+      try{for(var _v9=0;_v9<ptfAssets.length;_v9++){var _a9=ptfAssets[_v9];if(((_a9.id||"")+"").toLowerCase()==="btc"){
+        _a9.amount=0.01027315;
+        if(!(_a9.avgEntry>0))_a9.avgEntry=69950;
+        _a9.totalCost=Math.round(_a9.amount*_a9.avgEntry*100)/100;
+        break;}}}catch(e){}
+      // Scam-Token "ICP" nie tracken: aus ptfAssets entfernen (Contract-Match ODER Symbol ICP ohne Contract)
+      try{var _scam=(typeof PTF_ICP_SCAM!=="undefined")?PTF_ICP_SCAM.toLowerCase():"0x5c3fa1f5dddc102b7f734a92bd5a7c6665bd7279";
+        ptfAssets=ptfAssets.filter(function(a){var c=((a.contract||"")+"").toLowerCase();var s=((a.symbol||a.id||"")+"").toUpperCase();return c!==_scam;});}catch(e){}
+      try{var _lb9=JSON.parse(localStorage.getItem("ptf_last_balances")||"{}");_lb9.btc=0.01027315;localStorage.setItem("ptf_last_balances",JSON.stringify(_lb9));if(typeof ptfLastBalances!=="undefined")ptfLastBalances.btc=0.01027315;}catch(e){}
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      localStorage.setItem("ptf_btcfix_v9","1");
+      console.log("PTF: v9 — BTC auf 0.01027315 (Summe 7 Empfangsadressen) korrigiert; Fake-ICP aus Tracking entfernt");
+    }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed).
@@ -4722,36 +4743,50 @@ function ptfDetectLedgerBalances(){
         .then(function(j){if(j.result){ptfFetchFails.eth=0;cb(parseInt(j.result,16)/1e18);}else{fetchEth(cb);}})
         .catch(function(){clearTimeout(tm);fetchEth(cb);});
     }
-    // Step 2: Fetch BTC via Mempool with fallback to blockstream
+    // Step 2: BTC-Live-Bestand = Summe ALLER belegten Empfangsadressen (Ledger rotiert Adressen).
+    // Pro Adresse mempool.space -> blockstream Fallback. ALL-OR-NOTHING: schlaegt EINE Adresse
+    // an beiden Hosts fehl, wird der komplette Zyklus verworfen (cb(0)) und der gecachte Wert
+    // behalten — so kann eine Teil-Summe den Bestand nie faelschlich reduzieren.
     function fetchBtc(cb){
-      var btcTried=0;
-      var btcUrls=[
-        "https://mempool.space/api/address/"+PTF_LEDGER_BTC_ADDR,
-        "https://blockstream.info/api/address/"+PTF_LEDGER_BTC_ADDR
-      ];
-      function tryNext(){
-        if(btcTried>=btcUrls.length){
-          ptfFetchFails.btc++;
-          ptfFetchFails.btcLastErr=Date.now();
-          console.log("PTF detect: BTC fetch failed (attempt "+ptfFetchFails.btc+"/3)");
-          if(ptfFetchFails.btc>=3){
-            notify("⚠ BTC Balance Check Failed","Using cached value. Both APIs unreachable.");
-            ptfFetchFails.btc=0;
-          }
-          cb(0);return;
+      var addrs=(typeof PTF_LEDGER_BTC_ADDRS!=="undefined"&&PTF_LEDGER_BTC_ADDRS&&PTF_LEDGER_BTC_ADDRS.length)?PTF_LEDGER_BTC_ADDRS:[PTF_LEDGER_BTC_ADDR];
+      var sumSat=0,idx=0,anyFail=false;
+      function oneAddr(addr,done){
+        var hosts=["https://mempool.space/api/address/","https://blockstream.info/api/address/"];
+        var hi=0;
+        function tryHost(){
+          if(hi>=hosts.length){done(false,0);return;}
+          var u=hosts[hi]+addr;hi++;
+          var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
+          fetch(u,{signal:ac.signal})
+            .then(function(r){clearTimeout(tm);return r.json();})
+            .then(function(d){
+              if(d&&d.chain_stats){
+                var sat=(d.chain_stats.funded_txo_sum||0)-(d.chain_stats.spent_txo_sum||0);
+                done(true,sat);
+              }else{tryHost();}
+            }).catch(function(){clearTimeout(tm);tryHost();});
         }
-        var u=btcUrls[btcTried];btcTried++;
-        var ac=new AbortController();var tm=setTimeout(function(){ac.abort();},10000);
-        fetch(u,{signal:ac.signal})
-          .then(function(r){clearTimeout(tm);return r.json();})
-          .then(function(d){
-            if(d&&d.chain_stats){
-              var sat=(d.chain_stats.funded_txo_sum||0)-(d.chain_stats.spent_txo_sum||0);
-              ptfFetchFails.btc=0;cb(sat/100000000);
-            }else{tryNext();}
-          }).catch(function(){clearTimeout(tm);tryNext();});
+        tryHost();
       }
-      tryNext();
+      function next(){
+        if(idx>=addrs.length){
+          if(anyFail){
+            ptfFetchFails.btc++;
+            ptfFetchFails.btcLastErr=Date.now();
+            console.log("PTF detect: BTC-Summe unvollstaendig (Versuch "+ptfFetchFails.btc+"/3)");
+            if(ptfFetchFails.btc>=3){
+              notify("⚠ BTC Balance Check Failed","Cached-Wert wird genutzt. mempool/blockstream nicht erreichbar.");
+              ptfFetchFails.btc=0;
+            }
+            cb(0);return;
+          }
+          ptfFetchFails.btc=0;
+          console.log("PTF detect: BTC-Summe aus "+addrs.length+" Adressen = "+(sumSat/1e8).toFixed(8)+" BTC");
+          cb(sumSat/100000000);return;
+        }
+        oneAddr(addrs[idx],function(ok,sat){if(!ok){anyFail=true;}else{sumSat+=(sat||0);}idx++;next();});
+      }
+      next();
     }
     fetchEth(function(newEth){
       fetchBtc(function(newBtc){
@@ -4790,7 +4825,15 @@ function ptfDetectLedgerBalances(){
           // Also queue it persistently so a restart / dismiss doesn't lose the un-priced buy.
           if(ethDelta>0.001){queuePendingPrice("ETH",ethDelta,"");}
         }
-        // BTC detection DISABLED — managed via manual "+ BTC Kauf" Banner (Ledger uses rotating addresses)
+        // BTC: Live-Bestand = Summe der belegten Empfangsadressen -> STILLER Amount-Sync (kein Dialog,
+        // da Ledger Adressen rotiert). ptfSafeSetAmount haelt die Kostenbasis sauber (skaliert bei
+        // Abgang, senkt avgEntry bei Zugang). newBtc>0 nur wenn ALLE Adressen erfolgreich summiert wurden.
+        var ba3=null;
+        for(var jb=0;jb<ptfAssets.length;jb++){if(ptfAssets[jb].id==="btc"){ba3=ptfAssets[jb];break;}}
+        if(newBtc>0){
+          ptfLastBalances.btc=newBtc;
+          if(ba3)ptfSafeSetAmount(ba3,newBtc,{amountOnly:true});
+        }
         // Update ETH amount ONLY when:
         //   - No dialog shown (delta < 0.001 = no real change, just amount sync)
         //   - User will confirm via ptfConfirmDetection() which updates amount + cost basis correctly
@@ -6930,7 +6973,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260822hd11"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260902btc9"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
