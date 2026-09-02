@@ -229,7 +229,7 @@ var PTF_DEFAULTS=[
   {id:"tia",symbol:"TIA",name:"Celestia",geckoId:"celestia",amount:97.3909,avgEntry:0.5853,totalCost:57,source:"manual",decimals:2,contract:null},
   {id:"tao",symbol:"TAO",name:"Bittensor",geckoId:"bittensor",amount:0.59,avgEntry:222.03,totalCost:131,source:"manual",decimals:4,contract:null},
   {id:"akt",symbol:"AKT",name:"Akash",geckoId:"akash-network",amount:264,avgEntry:0.3702,totalCost:97.75,source:"manual",decimals:2,contract:null},
-  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:1.531305,avgEntry:2082.50,totalCost:3188.94,source:"ledger",decimals:6,contract:null}
+  {id:"eth",symbol:"ETH",name:"Ethereum",geckoId:"ethereum",amount:2.503519877320879,avgEntry:2100,totalCost:5257.39,source:"ledger",decimals:6,contract:null}
 ];
 var PTF_VERSION=5;
 
@@ -4616,6 +4616,22 @@ function ptfLoad(){try{
       localStorage.setItem("ptf_btcfix_v9","1");
       console.log("PTF: v9 — BTC auf 0.01027315 (Summe 7 Empfangsadressen) korrigiert; Fake-ICP aus Tracking entfernt");
     }
+    // v6-ETH: Einstand korrigieren. Beim on-chain erkannten ETH-Zugang (2,008 -> 2,5035) wurde die Menge
+    // erhoeht, aber die Kostenbasis beibehalten -> avgEntry stuerzte auf ~825 $ ab (falscher +189%-Gewinn/Push).
+    // Realer Mischkurs nach Nachkaeufen ~2.100 $. Menge bleibt on-chain (nur setzen falls leer).
+    if(!localStorage.getItem("ptf_ethfix_v6")){
+      var _E6AMT=2.503519877320879,_E6AVG=2100;
+      try{for(var _q6=0;_q6<ptfAssets.length;_q6++){if(ptfAssets[_q6].id==="eth"){var _ea6=ptfAssets[_q6];
+        if(!(_ea6.amount>0))_ea6.amount=_E6AMT;
+        _ea6.avgEntry=_E6AVG;
+        _ea6.totalCost=Math.round((_ea6.amount||_E6AMT)*_E6AVG*100)/100;
+        break;}}}catch(e){}
+      try{var _lb6=JSON.parse(localStorage.getItem("ptf_last_balances")||"{}");for(var _r6=0;_r6<ptfAssets.length;_r6++){if(ptfAssets[_r6].id==="eth"){_lb6.eth=ptfAssets[_r6].amount;break;}}localStorage.setItem("ptf_last_balances",JSON.stringify(_lb6));if(typeof ptfLastBalances!=="undefined"&&_lb6.eth>0)ptfLastBalances.eth=_lb6.eth;}catch(e){}
+      try{localStorage.setItem("ptf_assets",JSON.stringify(ptfAssets));}catch(e){}
+      try{ptfSyncServer();}catch(e){}
+      localStorage.setItem("ptf_ethfix_v6","1");
+      console.log("PTF: v6-ETH — Einstand auf Ø $2.100 korrigiert (Menge on-chain ~2,5035; Schein-Gewinn/Push behoben)");
+    }
   }catch(e){}
   try{var sn=localStorage.getItem("ptf_snapshots");if(sn){ptfSnapshots=JSON.parse(sn);ptfSnapshots=ptfSnapshots.map(function(s){return Array.isArray(s)?s:[s.ts,s.value];});}}catch(e){}
   // Merge server history (Hetzner collects data 24/7 even when app is closed).
@@ -6988,7 +7004,7 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260902btc10"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260902eth6"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
