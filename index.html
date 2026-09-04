@@ -905,6 +905,14 @@ td{padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.05);font-size:12px;
   </div>
 </div>
 
+<!-- ═══ COLLAPSIBLE: Elite Dashboard ═══ -->
+<div class="acc">
+  <div class="col" onclick="tog(this,'sec-elite');eliteLoad()"><span class="ic"><i data-lucide="crown"></i></span><div style="flex:1"><div class="t">🏛️ Elite Dashboard</div><div class="a-sub">DAO-Safe, Pool & Signer · ETH+ARB</div></div><i data-lucide="chevron-right" class="chv"></i></div>
+  <div id="sec-elite" class="col-b">
+    <div id="eliteBody"><div style="color:var(--mt);font-size:11px;padding:10px">Zum Laden öffnen…</div></div>
+  </div>
+</div>
+
 <!-- ═══ COLLAPSIBLE: Market Analysis ═══ -->
 <div class="acc">
   <div class="col" onclick="tog(this,'sec-mkt')"><span class="ic"><i data-lucide="search-code"></i></span><div style="flex:1"><div class="t">Markt-Analyse</div><div class="a-sub">Buyflow · Sell-Impact · Simulator</div></div><i data-lucide="chevron-right" class="chv"></i></div>
@@ -1252,7 +1260,7 @@ document.addEventListener('DOMContentLoaded',()=>{_renderIcons();
   mo.observe(document.body,{childList:true,subtree:true});
 });
 </script>
-<script src="app.js?v=20260902eth6"></script>
+<script src="app.js?v=20260904elite1"></script>
 <script>
 var VAPID_PUBLIC='BE8YGIu3brLvXRrOac97QFU02yxnBZ3QUvrzmvUw1yVJo_xKyNsHDZHzj6JLxFQMql3wtMpaSYsmkrTA5TeIK5I';
 if('serviceWorker' in navigator){

@@ -7004,7 +7004,45 @@ async function invLoadBurnStats(){
 async function invAutoBal(){_invLoadAll(false);}
 function invOpen(){window._invOpen=true;try{renderInvestors();}catch(e){console.log("invOpen err:",e);}try{invLoadBurnStats();}catch(e){}try{invAutoBal();}catch(e){}}
 startRefresh();
-var APP_V="20260902eth6"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+// ═══ ELITE DASHBOARD (Card) — liest /elite vom Server ═══
+var ELITE_URL="https://95-216-152-31.sslip.io/elite";
+function eliteFmtUsd(v){if(v===null||v===undefined)return "—";if(v>=1000)return "$"+Math.round(v).toLocaleString("de-DE");return "$"+(v||0).toFixed(2);}
+function eliteFmtAmt(v){v=v||0;if(v>=1e6)return (v/1e6).toFixed(2)+"M";if(v>=1000)return Math.round(v).toLocaleString("de-DE");if(v>=1)return v.toFixed(2);return v.toFixed(4);}
+function eliteDate(ts){return ts?ts.slice(0,10):"";}
+function eliteMethod(m){if(!m)return "Transfer";if(m.indexOf("0x")===0)return "Safe-Exec";var d={exactinput:"Swap",swap:"Swap",unoswap:"Swap",execute:"Swap",exectransaction:"Safe-Exec",borrow:"Aave Borrow",repay:"Aave Repay",withdraw:"Aave Withdraw",stake:"Stake",depositnative:"Bridge",depositv3:"Bridge",depositerc20:"Bridge",transfer:"Transfer",approve:"Approve",calldiamondwitheip2612signature:"Swap(LiFi)",transferandmulticall:"Bridge",claimrewards:"Claim",redeem:"Redeem"};return d[m.toLowerCase()]||m.slice(0,14);}
+function eliteLoad(){var el=$("eliteBody");if(!el)return;el.innerHTML='<div style="color:var(--mt);font-size:11px;padding:10px">Lädt Elite-Daten…</div>';
+  fetch(ELITE_URL).then(function(r){return r.json();}).then(function(d){eliteRender(d);}).catch(function(e){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Elite-Daten nicht erreichbar: '+((e&&e.message)||"Fehler")+'</div>';});}
+function eliteRender(d){var el=$("eliteBody");if(!el)return;
+  if(!d||!d.addresses){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Keine Daten.</div>';return;}
+  var kc={safe:"#5ab0e0",pool:"#a78bfa",whale:"#f7931a",signer:"var(--mt)",bot:"#f87171"};
+  var gen=d.generated?new Date(d.generated*1000):null;var h="";
+  h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:6px 0 10px">';
+  h+='<div style="background:rgba(52,211,153,.08);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Bekannter Wert</div><div style="font-size:17px;font-weight:800;color:var(--g)">'+eliteFmtUsd(d.totalUsd)+'</div></div>';
+  h+='<div style="background:rgba(247,147,26,.06);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">ELITE gehalten</div><div style="font-size:17px;font-weight:800;color:#f7931a;font-family:Geist Mono,monospace">'+eliteFmtAmt(d.eliteTotal)+'</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:9px;color:var(--dm);margin-bottom:10px">BURN gesamt '+eliteFmtAmt(d.burnTotal)+' · ELITE ohne Marktpreis (illiquide, 8 Holder) · Stand '+(gen?gen.toLocaleString("de-DE"):"—")+'</div>';
+  var acts=[];
+  d.addresses.forEach(function(a){var clr=kc[a.kind]||"var(--mt)";
+    h+='<div style="background:rgba(13,20,32,.6);border:1px solid var(--bd);border-left:3px solid '+clr+';border-radius:10px;padding:10px;margin-bottom:8px">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-weight:700;font-size:13px">'+a.label+'</span><span style="font-size:12px;font-weight:700;color:var(--g)">'+eliteFmtUsd(a.totalUsd)+'</span></div>';
+    var mb="";["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&((c.txCount&&c.txCount!=="0")||(c.holdings&&c.holdings.length)))mb+='<span style="margin-right:10px">'+cn+': '+c.type+' · Tx '+(c.txCount||"0")+'</span>';});
+    h+='<div style="font-size:9px;color:var(--mt);margin:3px 0 6px">'+mb+'</div>';
+    var hs=[];["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&c.holdings)c.holdings.forEach(function(x){hs.push({sym:x.sym,amt:x.amt,usd:x.usd,cn:cn});});});
+    hs.sort(function(x,y){return (y.usd||0)-(x.usd||0);});
+    hs.slice(0,5).forEach(function(x){h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--mt)">'+x.sym+' <span style="color:var(--dm);font-size:9px">'+x.cn+'</span></span><span><span style="font-family:Geist Mono,monospace">'+eliteFmtAmt(x.amt)+'</span> · <span style="color:'+(x.usd?"var(--g)":"var(--dm)")+'">'+(x.usd?eliteFmtUsd(x.usd):"—")+'</span></span></div>';});
+    if(a.elite>0)h+='<div style="margin-top:5px"><span style="font-size:9px;background:rgba(247,147,26,.12);color:#f7931a;padding:2px 7px;border-radius:20px">ELITE '+eliteFmtAmt(a.elite)+'</span></div>';
+    h+='</div>';
+    ["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&c.lastTx)c.lastTx.forEach(function(t){acts.push({ts:t.ts,nm:a.label,cn:cn,lab:eliteMethod(t.method),to:t.to,val:t.val});});});
+  });
+  acts.sort(function(x,y){return (y.ts||"").localeCompare(x.ts||"");});
+  h+='<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--cy);margin:12px 0 6px">Letzte Aktivität</div>';
+  h+='<div class="ov"><table class="mkt-tbl" style="font-size:11px"><thead><tr><th>Datum</th><th>Wallet</th><th>Chain</th><th>Aktion</th><th>Ziel</th></tr></thead><tbody>';
+  var shown=0;for(var i=0;i<acts.length&&shown<18;i++){var t=acts[i];if(t.lab==="Approve")continue;shown++;h+='<tr><td>'+eliteDate(t.ts)+'</td><td>'+t.nm+'</td><td>'+t.cn+'</td><td>'+t.lab+'</td><td style="font-family:Geist Mono,monospace;color:var(--mt)">'+((t.to||"")+"").slice(0,18)+'</td></tr>';}
+  h+='</tbody></table></div>';
+  h+='<div style="font-size:8px;color:var(--dm);margin-top:8px">Quelle: on-chain (Blockscout ETH+ARB), Auto-Update alle 30 Min · nur Beobachtung. Signer D/E = aktivste Bot-Kandidaten; neue verbundene Wallets werden per Push gemeldet.</div>';
+  el.innerHTML=h;}
+
+var APP_V="20260904elite1"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
