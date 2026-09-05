@@ -7018,9 +7018,10 @@ function eliteRender(d){var el=$("eliteBody");if(!el)return;
   var gen=d.generated?new Date(d.generated*1000):null;var h="";
   h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:6px 0 10px">';
   h+='<div style="background:rgba(52,211,153,.08);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Bekannter Wert</div><div style="font-size:17px;font-weight:800;color:var(--g)">'+eliteFmtUsd(d.totalUsd)+'</div></div>';
-  h+='<div style="background:rgba(247,147,26,.06);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">ELITE gehalten</div><div style="font-size:17px;font-weight:800;color:#f7931a;font-family:Geist Mono,monospace">'+eliteFmtAmt(d.eliteTotal)+'</div></div>';
+  h+='<div style="background:rgba(247,147,26,.06);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">ELITE-Wert (Crew)</div><div style="font-size:17px;font-weight:800;color:#f7931a">'+eliteFmtUsd(d.eliteUsdTotal)+'</div><div style="font-size:8px;color:var(--dm)">'+eliteFmtAmt(d.eliteTotal)+' ELITE · $'+(d.eliteUsd?d.eliteUsd.toFixed(4):"—")+'</div></div>';
   h+='</div>';
-  h+='<div style="font-size:9px;color:var(--dm);margin-bottom:10px">BURN gesamt '+eliteFmtAmt(d.burnTotal)+' · ELITE ohne Marktpreis (illiquide, 8 Holder) · Stand '+(gen?gen.toLocaleString("de-DE"):"—")+'</div>';
+  var _bk=d.eliteBacking||{};
+  h+='<div style="font-size:9px;color:var(--dm);margin-bottom:10px">1 ELITE ≈ <b style="color:#f7931a">$'+(d.eliteUsd?d.eliteUsd.toFixed(4):"—")+'</b> — durch stBURN gedeckt ('+(_bk.stPerElite||"?")+' stBURN/ELITE, Pool '+eliteFmtAmt(_bk.poolStburn||0)+' stBURN) · BURN gesamt '+eliteFmtAmt(d.burnTotal)+' · Stand '+(gen?gen.toLocaleString("de-DE"):"—")+'</div>';
   var acts=[];
   d.addresses.forEach(function(a){var clr=kc[a.kind]||"var(--mt)";
     h+='<div style="background:rgba(13,20,32,.6);border:1px solid var(--bd);border-left:3px solid '+clr+';border-radius:10px;padding:10px;margin-bottom:8px">';
@@ -7042,7 +7043,7 @@ function eliteRender(d){var el=$("eliteBody");if(!el)return;
   h+='<div style="font-size:8px;color:var(--dm);margin-top:8px">Quelle: on-chain (Blockscout ETH+ARB), Auto-Update alle 30 Min · nur Beobachtung. Signer D/E = aktivste Bot-Kandidaten; neue verbundene Wallets werden per Push gemeldet.</div>';
   el.innerHTML=h;}
 
-var APP_V="20260904elite1"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260904elite2"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
