@@ -7015,8 +7015,8 @@ function eliteLoad(){var el=$("eliteBody");if(!el)return;el.innerHTML='<div styl
   fetch(ELITE_URL).then(function(r){return r.json();}).then(function(d){eliteRender(d);}).catch(function(e){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Elite-Daten nicht erreichbar: '+((e&&e.message)||"Fehler")+'</div>';});}
 function eliteRender(d){var el=$("eliteBody");if(!el)return;
   if(!d||!d.addresses){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Keine Daten.</div>';return;}
-  var kc={safe:"#5ab0e0",pool:"#a78bfa",whale:"#f7931a",signer:"#8fa3bd",bot:"#f87171"};
-  var kl={safe:"DAO Safe",pool:"Staking Pool",whale:"Founder",signer:"Signer",bot:"Bot-Kandidat"};
+  var kc={safe:"#5ab0e0",pool:"#a78bfa",whale:"#8fa3bd",signer:"#8fa3bd",bot:"#8fa3bd"};
+  var kl={safe:"DAO Safe",pool:"Staking Pool",whale:"Signer",signer:"Signer",bot:"Signer"};
   var _bk=d.eliteBacking||{};
   var gen=d.generated?new Date(d.generated*1000):null;
   var bkr=(_bk.stPerElite!==undefined&&_bk.stPerElite!==null)?(+_bk.stPerElite).toFixed(3):"?";
@@ -7058,7 +7058,7 @@ function eliteRender(d){var el=$("eliteBody");if(!el)return;
     var x='<div style="display:flex;justify-content:space-between;align-items:baseline;margin:10px 0 6px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--cy)">'+title+'</span><span style="font-size:10px;color:var(--dm)">'+eliteFmtUsd(sum)+'</span></div>';
     arr.forEach(function(a){x+=card(a);});return x;}
   h+=sect('🏛️ Elite-Kern',['safe','pool']);
-  h+=sect('👥 Team &amp; Signer',['whale','signer','bot']);
+  h+=sect('👥 Signer (live aus getOwners)',['whale','signer','bot']);
   // ── Letzte relevante Aktivität ──
   acts.sort(function(x,y){return (y.ts||"").localeCompare(x.ts||"");});
   h+='<div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--cy);margin:14px 0 6px">Letzte relevante Aktivität</div>';
@@ -7066,10 +7066,10 @@ function eliteRender(d){var el=$("eliteBody");if(!el)return;
   var shown=0,seen={};for(var i=0;i<acts.length&&shown<16;i++){var t=acts[i];if(!eliteRelevant(t.lab,t.val))continue;var k=t.ts+t.nm+t.lab;if(seen[k])continue;seen[k]=1;shown++;var vtx=(t.val&&t.val>=0.001)?' · '+(+t.val).toFixed(3):'';h+='<tr><td>'+eliteDate(t.ts)+'</td><td>'+t.nm+'</td><td>'+t.cn+'</td><td>'+t.lab+'</td><td style="font-family:Geist Mono,monospace;color:var(--mt)">'+((t.to||"")+"").slice(0,16)+vtx+'</td></tr>';}
   if(!shown)h+='<tr><td colspan="5" style="color:var(--dm);text-align:center;padding:8px">Keine relevanten Trades im aktuellen Fenster.</td></tr>';
   h+='</tbody></table></div>';
-  h+='<div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">Quelle: on-chain (Blockscout ETH+ARB) · nur Beobachtung, keine Transaktionen. Feste Beobachtungsliste ('+d.addresses.length+' Kern-Wallets) — Push nur bei relevanten Trades (Swap / Bridge / Aave / Stake / LP / Safe-Governance). Signer D/E = aktivste Bot-Kandidaten.</div>';
+  h+='<div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">Quelle: on-chain (Blockscout ETH+ARB) · nur Beobachtung, keine Transaktionen. Signer werden live aus <b>getOwners()</b> beider Safes gelesen'+((d.signerCount)?(' ('+d.signerCount+' aktuell)'):'')+' — wächst automatisch mit, wenn sich das Signer-Set ändert. Push nur bei relevanten Trades (Swap / Bridge / Aave / Stake / LP / Safe-Governance).</div>';
   el.innerHTML=h;}
 
-var APP_V="20260905elite3"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260905elite4"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
