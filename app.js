@@ -7009,41 +7009,67 @@ var ELITE_URL="https://95-216-152-31.sslip.io/elite";
 function eliteFmtUsd(v){if(v===null||v===undefined)return "—";if(v>=1000)return "$"+Math.round(v).toLocaleString("de-DE");return "$"+(v||0).toFixed(2);}
 function eliteFmtAmt(v){v=v||0;if(v>=1e6)return (v/1e6).toFixed(2)+"M";if(v>=1000)return Math.round(v).toLocaleString("de-DE");if(v>=1)return v.toFixed(2);return v.toFixed(4);}
 function eliteDate(ts){return ts?ts.slice(0,10):"";}
-function eliteMethod(m){if(!m)return "Transfer";if(m.indexOf("0x")===0)return "Safe-Exec";var d={exactinput:"Swap",swap:"Swap",unoswap:"Swap",execute:"Swap",exectransaction:"Safe-Exec",borrow:"Aave Borrow",repay:"Aave Repay",withdraw:"Aave Withdraw",stake:"Stake",depositnative:"Bridge",depositv3:"Bridge",depositerc20:"Bridge",transfer:"Transfer",approve:"Approve",calldiamondwitheip2612signature:"Swap(LiFi)",transferandmulticall:"Bridge",claimrewards:"Claim",redeem:"Redeem"};return d[m.toLowerCase()]||m.slice(0,14);}
+function eliteMethod(m){if(!m)return "Transfer";if(m.indexOf("0x")===0)return "Safe-Exec";var d={exactinput:"Swap",swap:"Swap",unoswap:"Swap",execute:"Swap",fillorder:"Swap",exectransaction:"Safe-Exec",borrow:"Aave Borrow",repay:"Aave Repay",withdraw:"Aave Withdraw",supply:"Aave Supply",stake:"Stake",mint:"LP mint",increaseliquidity:"LP+",decreaseliquidity:"LP−",depositnative:"Bridge",depositv3:"Bridge",depositerc20:"Bridge",transfer:"Transfer",approve:"Approve",calldiamondwitheip2612signature:"Swap(LiFi)",transferandmulticall:"Bridge",claimrewards:"Claim",claim:"Claim",redeem:"Redeem",cooldown:"Cooldown"};return d[m.toLowerCase()]||m.slice(0,14);}
+function eliteRelevant(lab,val){if(!lab||lab==="Approve")return false;if(lab==="Transfer")return (val||0)>=0.02;if(lab==="Safe-Exec")return true;return true;}
 function eliteLoad(){var el=$("eliteBody");if(!el)return;el.innerHTML='<div style="color:var(--mt);font-size:11px;padding:10px">Lädt Elite-Daten…</div>';
   fetch(ELITE_URL).then(function(r){return r.json();}).then(function(d){eliteRender(d);}).catch(function(e){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Elite-Daten nicht erreichbar: '+((e&&e.message)||"Fehler")+'</div>';});}
 function eliteRender(d){var el=$("eliteBody");if(!el)return;
   if(!d||!d.addresses){el.innerHTML='<div style="color:var(--r);font-size:11px;padding:10px">Keine Daten.</div>';return;}
-  var kc={safe:"#5ab0e0",pool:"#a78bfa",whale:"#f7931a",signer:"var(--mt)",bot:"#f87171"};
-  var gen=d.generated?new Date(d.generated*1000):null;var h="";
-  h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:6px 0 10px">';
-  h+='<div style="background:rgba(52,211,153,.08);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Bekannter Wert</div><div style="font-size:17px;font-weight:800;color:var(--g)">'+eliteFmtUsd(d.totalUsd)+'</div></div>';
-  h+='<div style="background:rgba(247,147,26,.06);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">ELITE-Wert (Crew)</div><div style="font-size:17px;font-weight:800;color:#f7931a">'+eliteFmtUsd(d.eliteUsdTotal)+'</div><div style="font-size:8px;color:var(--dm)">'+eliteFmtAmt(d.eliteTotal)+' ELITE · $'+(d.eliteUsd?d.eliteUsd.toFixed(4):"—")+'</div></div>';
-  h+='</div>';
+  var kc={safe:"#5ab0e0",pool:"#a78bfa",whale:"#f7931a",signer:"#8fa3bd",bot:"#f87171"};
+  var kl={safe:"DAO Safe",pool:"Staking Pool",whale:"Founder",signer:"Signer",bot:"Bot-Kandidat"};
   var _bk=d.eliteBacking||{};
-  h+='<div style="font-size:9px;color:var(--dm);margin-bottom:10px">1 ELITE ≈ <b style="color:#f7931a">$'+(d.eliteUsd?d.eliteUsd.toFixed(4):"—")+'</b> — durch stBURN gedeckt ('+(_bk.stPerElite||"?")+' stBURN/ELITE, Pool '+eliteFmtAmt(_bk.poolStburn||0)+' stBURN) · BURN gesamt '+eliteFmtAmt(d.burnTotal)+' · Stand '+(gen?gen.toLocaleString("de-DE"):"—")+'</div>';
+  var gen=d.generated?new Date(d.generated*1000):null;
+  var bkr=(_bk.stPerElite!==undefined&&_bk.stPerElite!==null)?(+_bk.stPerElite).toFixed(3):"?";
+  var bratio=(_bk.stRatio!==undefined&&_bk.stRatio!==null)?(+_bk.stRatio).toFixed(3):"?";
+  var h="";
+  // ── ELITE-Preis Hero ──
+  h+='<div style="background:linear-gradient(135deg,rgba(247,147,26,.14),rgba(167,139,250,.08));border:1px solid var(--bd);border-radius:12px;padding:11px 13px;margin:6px 0 9px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:9px;color:var(--dm);text-transform:uppercase;letter-spacing:1.2px">ELITE-Preis</span><span style="font-size:8px;color:#f7931a;background:rgba(247,147,26,.12);padding:2px 7px;border-radius:20px">durch stBURN gedeckt</span></div>';
+  h+='<div style="font-size:26px;font-weight:800;color:#f7931a;line-height:1.15">$'+(d.eliteUsd?d.eliteUsd.toFixed(4):"—")+'</div>';
+  h+='<div style="font-size:9px;color:var(--mt);margin-top:1px">'+bkr+' stBURN je ELITE · Pool '+eliteFmtAmt(_bk.poolStburn||0)+' stBURN · stBURN/BURN '+bratio+'× · BURN $'+(d.burnUsd?(+d.burnUsd).toFixed(4):"—")+'</div>';
+  h+='</div>';
+  // ── 2 KPIs ──
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px">';
+  h+='<div style="background:rgba(52,211,153,.08);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">Beobachtet gesamt</div><div style="font-size:17px;font-weight:800;color:var(--g)">'+eliteFmtUsd(d.totalUsd)+'</div><div style="font-size:8px;color:var(--dm)">'+d.addresses.length+' Wallets · ETH+ARB</div></div>';
+  h+='<div style="background:rgba(247,147,26,.06);border:1px solid var(--bd);border-radius:10px;padding:9px 11px"><div style="font-size:8px;color:var(--dm);text-transform:uppercase;letter-spacing:1px">ELITE-Bestand (Crew)</div><div style="font-size:17px;font-weight:800;color:#f7931a">'+eliteFmtUsd(d.eliteUsdTotal)+'</div><div style="font-size:8px;color:var(--dm)">'+eliteFmtAmt(d.eliteTotal)+' ELITE · BURN '+eliteFmtAmt(d.burnTotal)+'</div></div>';
+  h+='</div>';
+  h+='<div style="font-size:8px;color:var(--dm);margin:0 0 12px;text-align:right">Stand '+(gen?gen.toLocaleString("de-DE"):"—")+' · Auto-Update alle 30 Min</div>';
+  // ── Wallet-Karte ──
   var acts=[];
-  d.addresses.forEach(function(a){var clr=kc[a.kind]||"var(--mt)";
-    h+='<div style="background:rgba(13,20,32,.6);border:1px solid var(--bd);border-left:3px solid '+clr+';border-radius:10px;padding:10px;margin-bottom:8px">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-weight:700;font-size:13px">'+a.label+'</span><span style="font-size:12px;font-weight:700;color:var(--g)">'+eliteFmtUsd(a.totalUsd)+'</span></div>';
-    var mb="";["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&((c.txCount&&c.txCount!=="0")||(c.holdings&&c.holdings.length)))mb+='<span style="margin-right:10px">'+cn+': '+c.type+' · Tx '+(c.txCount||"0")+'</span>';});
-    h+='<div style="font-size:9px;color:var(--mt);margin:3px 0 6px">'+mb+'</div>';
-    var hs=[];["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&c.holdings)c.holdings.forEach(function(x){hs.push({sym:x.sym,amt:x.amt,usd:x.usd,cn:cn});});});
+  function card(a){var clr=kc[a.kind]||"var(--mt)";var s="";
+    s+='<div style="background:rgba(13,20,32,.6);border:1px solid var(--bd);border-left:3px solid '+clr+';border-radius:10px;padding:10px;margin-bottom:8px">';
+    s+='<div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="display:flex;align-items:center;gap:6px"><span style="font-weight:700;font-size:13px">'+a.label+'</span><span style="font-size:8px;color:'+clr+';background:rgba(255,255,255,.05);padding:1px 6px;border-radius:20px">'+(kl[a.kind]||a.kind)+'</span></span><span style="font-size:13px;font-weight:800;color:var(--g)">'+eliteFmtUsd(a.totalUsd)+'</span></div>';
+    var mb=[];["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&((c.txCount&&c.txCount!=="0")||(c.holdings&&c.holdings.length))){var ens=c.ens?' · '+c.ens:'';mb.push(cn+' '+c.type+' · '+(c.txCount||"0")+' Tx'+ens);}});
+    if(mb.length)s+='<div style="font-size:9px;color:var(--mt);margin:4px 0 6px">'+mb.join('&nbsp;&nbsp;|&nbsp;&nbsp;')+'</div>';
+    // Token-Badges (BURN/ELITE/stBURN)
+    var bd=[];if(a.burn>0)bd.push('<span style="font-size:9px;background:rgba(52,211,153,.12);color:var(--g);padding:2px 7px;border-radius:20px">'+eliteFmtAmt(a.burn)+' BURN</span>');
+    if(a.elite>0)bd.push('<span style="font-size:9px;background:rgba(247,147,26,.14);color:#f7931a;padding:2px 7px;border-radius:20px">'+eliteFmtAmt(a.elite)+' ELITE ≈ '+eliteFmtUsd(a.elite*(d.eliteUsd||0))+'</span>');
+    if(a.stburn>0)bd.push('<span style="font-size:9px;background:rgba(167,139,250,.14);color:#a78bfa;padding:2px 7px;border-radius:20px">'+eliteFmtAmt(a.stburn)+' stBURN</span>');
+    if(bd.length)s+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px">'+bd.join('')+'</div>';
+    // sonstige Holdings (ohne BURN/ELITE/stBURN, die stehen oben als Badge)
+    var hs=[];["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&c.holdings)c.holdings.forEach(function(x){var S=(x.sym||"").toUpperCase();if(S==="BURN"||S==="ELITE"||S==="STBURN")return;hs.push({sym:x.sym,amt:x.amt,usd:x.usd,cn:cn});});});
     hs.sort(function(x,y){return (y.usd||0)-(x.usd||0);});
-    hs.slice(0,5).forEach(function(x){h+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0"><span style="color:var(--mt)">'+x.sym+' <span style="color:var(--dm);font-size:9px">'+x.cn+'</span></span><span><span style="font-family:Geist Mono,monospace">'+eliteFmtAmt(x.amt)+'</span> · <span style="color:'+(x.usd?"var(--g)":"var(--dm)")+'">'+(x.usd?eliteFmtUsd(x.usd):"—")+'</span></span></div>';});
-    if(a.elite>0)h+='<div style="margin-top:5px"><span style="font-size:9px;background:rgba(247,147,26,.12);color:#f7931a;padding:2px 7px;border-radius:20px">ELITE '+eliteFmtAmt(a.elite)+'</span></div>';
-    h+='</div>';
+    hs.slice(0,4).forEach(function(x){s+='<div style="display:flex;justify-content:space-between;font-size:11px;padding:1px 0"><span style="color:var(--mt)">'+x.sym+' <span style="color:var(--dm);font-size:9px">'+x.cn+'</span></span><span><span style="font-family:Geist Mono,monospace">'+eliteFmtAmt(x.amt)+'</span> · <span style="color:'+(x.usd?"var(--g)":"var(--dm)")+'">'+(x.usd?eliteFmtUsd(x.usd):"—")+'</span></span></div>';});
+    s+='</div>';
     ["ETH","ARB"].forEach(function(cn){var c=a.chains[cn];if(c&&c.lastTx)c.lastTx.forEach(function(t){acts.push({ts:t.ts,nm:a.label,cn:cn,lab:eliteMethod(t.method),to:t.to,val:t.val});});});
-  });
+    return s;}
+  function sect(title,kinds){var arr=d.addresses.filter(function(a){return kinds.indexOf(a.kind)>=0;});if(!arr.length)return "";
+    var sum=arr.reduce(function(s,a){return s+(a.totalUsd||0);},0);
+    var x='<div style="display:flex;justify-content:space-between;align-items:baseline;margin:10px 0 6px"><span style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--cy)">'+title+'</span><span style="font-size:10px;color:var(--dm)">'+eliteFmtUsd(sum)+'</span></div>';
+    arr.forEach(function(a){x+=card(a);});return x;}
+  h+=sect('🏛️ Elite-Kern',['safe','pool']);
+  h+=sect('👥 Team &amp; Signer',['whale','signer','bot']);
+  // ── Letzte relevante Aktivität ──
   acts.sort(function(x,y){return (y.ts||"").localeCompare(x.ts||"");});
-  h+='<div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--cy);margin:12px 0 6px">Letzte Aktivität</div>';
-  h+='<div class="ov"><table class="mkt-tbl" style="font-size:11px"><thead><tr><th>Datum</th><th>Wallet</th><th>Chain</th><th>Aktion</th><th>Ziel</th></tr></thead><tbody>';
-  var shown=0;for(var i=0;i<acts.length&&shown<18;i++){var t=acts[i];if(t.lab==="Approve")continue;shown++;h+='<tr><td>'+eliteDate(t.ts)+'</td><td>'+t.nm+'</td><td>'+t.cn+'</td><td>'+t.lab+'</td><td style="font-family:Geist Mono,monospace;color:var(--mt)">'+((t.to||"")+"").slice(0,18)+'</td></tr>';}
+  h+='<div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--cy);margin:14px 0 6px">Letzte relevante Aktivität</div>';
+  h+='<div class="ov"><table class="mkt-tbl" style="font-size:11px"><thead><tr><th>Datum</th><th>Wallet</th><th>Ch</th><th>Aktion</th><th>Ziel</th></tr></thead><tbody>';
+  var shown=0,seen={};for(var i=0;i<acts.length&&shown<16;i++){var t=acts[i];if(!eliteRelevant(t.lab,t.val))continue;var k=t.ts+t.nm+t.lab;if(seen[k])continue;seen[k]=1;shown++;var vtx=(t.val&&t.val>=0.001)?' · '+(+t.val).toFixed(3):'';h+='<tr><td>'+eliteDate(t.ts)+'</td><td>'+t.nm+'</td><td>'+t.cn+'</td><td>'+t.lab+'</td><td style="font-family:Geist Mono,monospace;color:var(--mt)">'+((t.to||"")+"").slice(0,16)+vtx+'</td></tr>';}
+  if(!shown)h+='<tr><td colspan="5" style="color:var(--dm);text-align:center;padding:8px">Keine relevanten Trades im aktuellen Fenster.</td></tr>';
   h+='</tbody></table></div>';
-  h+='<div style="font-size:8px;color:var(--dm);margin-top:8px">Quelle: on-chain (Blockscout ETH+ARB), Auto-Update alle 30 Min · nur Beobachtung. Signer D/E = aktivste Bot-Kandidaten; neue verbundene Wallets werden per Push gemeldet.</div>';
+  h+='<div style="font-size:8px;color:var(--dm);margin-top:8px;line-height:1.5">Quelle: on-chain (Blockscout ETH+ARB) · nur Beobachtung, keine Transaktionen. Feste Beobachtungsliste ('+d.addresses.length+' Kern-Wallets) — Push nur bei relevanten Trades (Swap / Bridge / Aave / Stake / LP / Safe-Governance). Signer D/E = aktivste Bot-Kandidaten.</div>';
   el.innerHTML=h;}
 
-var APP_V="20260904elite2"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
+var APP_V="20260905elite3"; // sichtbare Versions-/Sync-Anzeige — beendet das Versions-Rätselraten
 try{var _ss=$("syncStat");if(_ss)_ss.textContent="v"+APP_V+" · Server-Sync: wartet…";}catch(e){}
 // HOODIE: cached paint instantly, live fetch shortly after boot, then every 90s (GT limit 30/min).
 try{renderHoodie();}catch(e){}
