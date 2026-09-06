@@ -29,7 +29,8 @@ SWAP_V4="0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
 MODLIQ_V4="0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec"
 W=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd691c30db86c","0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2"]
 WSET=set(W); WT=["0x000000000000000000000000"+w[2:] for w in W]
-DEAD="0x000000000000000000000000000000000000dead"
+DEAD="0x1dead0000000000000000000000000000000dead"  # echte BURN-Burn-Adresse (Vanity)
+DEADSET={DEAD,"0x000000000000000000000000000000000000dead"}  # Vanity + Standard-0x..dead
 KRAKEN="0xd049a54c8f8757ae7392f0c6f65a487f82ddfde9"  # Noahs Kraken-Einzahladresse: USDC OUT dorthin = Off-Ramp (USDC->EUR->Bank) = Veraeusserung (L2), Transfertag als Naeherung
 CRYPTOCOM="0xe7d324bfb30f7b6e314a1698cea57ac8eec4d366"  # Noahs Crypto.com-Einzahladresse: USDC OUT dorthin = Off-Ramp = Veraeusserung (L2)
 OFFRAMPS={KRAKEN,CRYPTOCOM}  # Boersen-Auszahladressen: jeder USDC-OUT = Veraeusserung
@@ -166,7 +167,7 @@ def process(chain,url,raw,tokname_fn):
                 elif COLLECT_V3 in m["tops"]:
                     typ="LP-COLLECT (Fills/Entnahme)" if (tok=="USDC" and direction=="IN") else "LP-COLLECT (Token zurück)"
                 else: typ="POOL-Interaktion"
-            elif cp==DEAD: typ="BURN (neutral)";note=(note+" · " if note else "")+"kein Tausch, kein Erwerber · §Dossier B/Burn"
+            elif cp in DEADSET: typ="BURN (neutral)";note=(note+" · " if note else "")+"kein Tausch, kein Erwerber · §Dossier B/Burn"
             elif cp in WSET: typ="INTERN"
             else: typ="TRANSFER "+("AN Dritte" if direction=="OUT" else "VON Dritten")
         else: # RH / HOODIE
@@ -184,7 +185,7 @@ def process(chain,url,raw,tokname_fn):
                         kurs=hp;usd=r["amt"]*hp;l1v=usd
                         note=(note+" · " if note else "")+"L1: Näherungskurs (Beleganlage), Lesart strittig · §Dossier B/LP"
                 else: typ="POOL-Interaktion"
-            elif cp==DEAD: typ="BURN (neutral)";note=(note+" · " if note else "")+"kein Tausch"
+            elif cp in DEADSET: typ="BURN (neutral)";note=(note+" · " if note else "")+"kein Tausch"
             elif cp in WSET: typ="INTERN"
             else:
                 typ="ERHALT (Airdrop/Zuwendung)" if direction=="IN" else "TRANSFER AN Dritte"
