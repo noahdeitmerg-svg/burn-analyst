@@ -8,7 +8,7 @@ import json,urllib.request,time,datetime,os,sys
 sys.path.insert(0,'/root')
 try:
     import addr_book
-    def NAME(a): return addr_book.addr_name(a)
+    def NAME(a): return addr_book.ADDR_BOOK.get((a or '').lower(), (a or '')[:10])
 except Exception:
     def NAME(a): return a[:10]
 
@@ -27,10 +27,10 @@ MINT_V3="0x7a53080ba414158be7ec69b987b5fb7d07dee101fe85488f0853ae16239d0bde"
 COLLECT_V3="0x70935338e69775456a85ddef226c395fb668b63fa0115f5f20610b388e6ca9c0"
 SWAP_V4="0x40e9cecb9f5f1f1c5b9c97dec2917b7ee92e57ba5563708daca94dd84ad7112f"
 MODLIQ_V4="0xf208f4912782fd25c7f114ca3723a2d5dd6f3bcc3ac8db5af63baa85f711d5ec"
-W=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd691c30db86c","0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2"]
+W=["0x6e37cc7d415466909db6102b6dc34473ac1bb500","0x505042ff781ea1689e44e1d200efd691c30db86c","0x9ffa190b0d2543f35dfa1a2955bc2f4c544871d2","0x642e117a8ed9ee3f34596ec7fad05499f2e834ed"]  # Gamble-Wallet (nur Steuer-Tracking, nicht oeffentlich)
 WSET=set(W); WT=["0x000000000000000000000000"+w[2:] for w in W]
-DEAD="0x1dead0000000000000000000000000000000dead"  # echte BURN-Burn-Adresse (Vanity)
-DEADSET={DEAD,"0x000000000000000000000000000000000000dead"}  # Vanity + Standard-0x..dead
+DEAD="0x1dead0000000000000000000000000000000dead"  # echte Vanity-Burn-Adresse
+DEADSET={DEAD,"0x000000000000000000000000000000000000dead"}  # Vanity + Standard
 KRAKEN="0xd049a54c8f8757ae7392f0c6f65a487f82ddfde9"  # Noahs Kraken-Einzahladresse: USDC OUT dorthin = Off-Ramp (USDC->EUR->Bank) = Veraeusserung (L2), Transfertag als Naeherung
 CRYPTOCOM="0xe7d324bfb30f7b6e314a1698cea57ac8eec4d366"  # Noahs Crypto.com-Einzahladresse: USDC OUT dorthin = Off-Ramp = Veraeusserung (L2)
 OFFRAMPS={KRAKEN,CRYPTOCOM}  # Boersen-Auszahladressen: jeder USDC-OUT = Veraeusserung
@@ -64,9 +64,9 @@ today=datetime.date.today().isoformat()
 if st.get("ptaxDay")!=today or not st["ptax"]:
     try:
         url=("https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/"
-             "CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)"
-             "?@dataInicial='04-01-2025'&@dataFinalCotacao='"+datetime.date.today().strftime("%m-%d-%Y")+"'"
-             "&$top=3000&$format=json&$select=cotacaoVenda,dataHoraCotacao")
+            "CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)"
+            "?@dataInicial='04-01-2025'&@dataFinalCotacao='"+datetime.date.today().strftime("%m-%d-%Y")+"'"
+            "&$top=3000&$format=json&$select=cotacaoVenda,dataHoraCotacao")
         req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0"})
         for row in json.loads(urllib.request.urlopen(req,timeout=40).read())["value"]:
             st["ptax"][row["dataHoraCotacao"][:10]]=row["cotacaoVenda"]
@@ -308,6 +308,24 @@ for o in outs:
             else:
                 o["typ"]=f"PERMUTA ({o['tok']}→{i['tok']}, {o['cp']})"
                 i["typ"]=f"PERMUTA-Erhalt ({i['tok']}, {i['cp']})"
+# (3c) Effektiver OTC-Preis: gepaarte USDC-Summe / Token-Summe je Gegenpartei.
+# Ohne das wurde die OTC-Lieferung zum MARKTPREIS bewertet -> ganho massiv zu hoch
+# (Block-Deal mit Abschlag muss zum tatsaechlich erhaltenen Erloes bewertet werden, RIR 134 I).
+_otc_o={};_otc_u={}
+for o in outs:
+    if o["typ"]=="OTC-VERKAUF (Token-Lieferung)": _otc_o.setdefault((o.get("cpa") or "").lower(),[]).append(o)
+for i in ins_u:
+    if i["typ"]=="OTC-VERKAUF (Erlös)":
+        k=(i.get("cpa") or "").lower(); _otc_u[k]=_otc_u.get(k,0.0)+(i["amt"] or 0)
+for _k,_os in _otc_o.items():
+    _is=[i for i in ins_u if i["typ"]=="OTC-VERKAUF (Erlös)" and (i.get("cpa") or "").lower()==_k]
+    for x in _os:
+        # Deal-Fenster: nur Ein-/Ausgaenge derselben Gegenpartei innerhalb ±14 Tagen
+        # (sonst mischen sich getrennte Deals, z.B. Juni- und August-OTC mit Björn)
+        _usd=sum((i["amt"] or 0) for i in _is if abs(i["ts"]-x["ts"])<14*86400)
+        _tok=sum((y["amt"] or 0) for y in _os if abs(y["ts"]-x["ts"])<14*86400)
+        if _tok>0 and _usd>0: x["otcPx"]=_usd/_tok
+
 # (3b) HOODIE-Tagespreise aus eigenen Market-Swaps; LP-Zeilen (RH) idempotent bewerten
 hdDayPx={}
 for r in rowsL:
@@ -356,7 +374,7 @@ for r in rowsL:
         rampname="Kraken" if (r.get("cpa","") or "").lower()==KRAKEN else "Crypto.com"
         if t=="VERKAUFS-Erlös (USDC)": setv(usd,"Market-Verkaufserlös · zählt · §Dossier B/Verkauf"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif t=="LP-COLLECT (Fills/Entnahme)": setv(usd,"LP-Fill-Erlös · zählt · §Dossier B/Fills"); r["l2"]=0 if pre else (r["brl"] or 0)
-        elif t=="LP-EINLAGE": setv(usd,"USDC-Seite LP-Einlage · Lesart strittig · §Dossier B/LP"); r["l1"]=0 if pre else (r["brl"] or 0)
+        elif t=="LP-EINLAGE": setv(usd,"USDC-Seite LP-Einlage · Äquiv. auf Token · Lesart strittig · §Dossier B/LP"); r["l1"]=0 if pre else (r["brl"] or 0)
         elif t=="OTC-VERKAUF (Erlös)": setv(usd,(r.pop("_pairnote","OTC"))+" · zählt (Veräußerung) · §Dossier B/OTC"); r["l2"]=0 if pre else (r["brl"] or 0)
         elif t=="KAUF-Zahlung (USDC)": setv(usd,"Kaufpreis (Anschaffung) · §Dossier B/Kauf")
         elif kr and r.get("dir")=="OUT":
@@ -412,7 +430,8 @@ for r in sorted(rowsL,key=lambda x:(x["ts"],x.get("li",0) if isinstance(x.get("l
     elif dr=="OUT":
         isDisp=("VERKAUF (Market)" in t) or ("OTC-VERKAUF (Token" in t) or t.startswith("PERMUTA (")
         if isDisp:
-            custo,erloes,gewinn=_disp(r["amt"],pxusd,d)
+            _pxe=r.get("otcPx") or pxusd  # OTC: effektiver Deal-Preis statt Marktpreis
+            custo,erloes,gewinn=_disp(r["amt"],_pxe,d)
             pt,_=ptax_of(d)
             r["custoUSD"]=round(custo,2)
             r["custo"]=round(custo*(pt or 0),2) if pt else None      # Anschaffungskosten BRL
@@ -429,6 +448,19 @@ for r in st["rows"].values():
         r["note"]=DE_TXT+((" · "+rest) if rest else "")
         r["l1"]=0;r["l2"]=0
 
+# ── Notes deduplizieren (Fix Append-Bug: verhindert unbegrenztes Note-Wachstum) ──
+def _dnote(s):
+    seen=set(); out=[]
+    for _p in (s or "").split(" · "):
+        if _p and _p not in seen:
+            seen.add(_p); out.append(_p)
+    return " · ".join(out)
+for _r in st["rows"].values():
+    if (_r.get("cpa") or "").lower() in DEADSET:
+        _r["typ"]="BURN (neutral)"; _r["l2"]=0
+        _r["note"]=(_r.get("note") or "")+" · kein Tausch, kein Erwerber · neutral · §Dossier B/Burn"
+    _r["note"]=_dnote(_r.get("note") or "")
+
 # ── Monatsaggregation + Ledger schreiben ──
 months={}
 for r in st["rows"].values():
@@ -440,7 +472,9 @@ for g in months.values():
     g["l2"]=round(g["l2"],2); g["l1"]=round(g["l1"],2); g["l1total"]=round(g["l2"]+g["l1"],2)
     g["ganho"]=round(g["ganho"],2); g["custo"]=round(g["custo"],2)  # realisierter Gewinn / Anschaffungskosten BRL
     g["darf"]=round(max(g["ganho"],0)*0.15,2) if g["l2"]>35000 else 0.0  # 15% GCAP nur wenn Monat >35k (L2)
-rows=sorted(st["rows"].values(),key=lambda r:r["ts"],reverse=True)
+rows=sorted([r for r in st["rows"].values()
+             if not (r["tok"]=="USDC" and (r["amt"] or 0)<0.005 and "TRANSFER VON" in (r["typ"] or ""))],
+            key=lambda r:r["ts"],reverse=True)
 json.dump({"v":1,"updated":datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
            "residenz":RESIDENZ,"limite":35000.0,"months":months,"rows":rows[:600]},open(LEDGER,"w"))
 json.dump(st,open(STATE,"w"))
